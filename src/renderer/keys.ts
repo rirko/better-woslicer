@@ -7,7 +7,7 @@
  * Preserved from the original woslicerIII:
  *  - Arrow keys  : move the cursor by grid (Left/Right) or by measure (Up/Down)
  *  - Z           : place / remove the cut line at the cursor
- *  - P / Enter   : preview the slice at the cursor
+ *  - P           : preview the slice at the cursor
  *  - O           : preview the previous slice
  *  - Q / W       : cycle the grid size down / up
  *  - M           : export all slices
@@ -26,10 +26,19 @@
  *    whole group on out-of-range or collision, and auto-selects the result.
  *  - Shift+ArrowLeft / ArrowRight : cursor by single tick
  *  - Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y : undo / redo
- *  - Space (waveform focus only): playing -> drop marker at playhead;
- *    stopped -> play / pause. Focused inputs, selects, textareas and buttons
- *    keep their native key behaviour (Space/Enter activate a button).
+ *  - Space : play / pause in every state (never drops a marker any more).
+ *  - Enter : place a break point WITHOUT touching the play state — playing:
+ *    marker at the tick computed back from the playhead sample; stopped:
+ *    marker at the cursor and the playhead sample synced to the final
+ *    position. The tick resolves through the Snap toggle + Grid density
+ *    (nearest grid tick); holding Alt bypasses snapping for that placement.
+ *    This repurposes the original's Enter preview; preview stays on P.
+ *  - [ / ] : monitor playback rate down / up through the frozen ladder
+ *    0.25x / 0.5x / 0.75x / 1.0x / 1.5x, clamped at the endpoints.
  *  - Esc : clear selection
+ *
+ * Focused inputs, selects, textareas and buttons keep their native key
+ * behaviour (Space/Enter activate a button).
  */
 
 import { MAX_TICKS, MEASURE_TICKS } from "../core/timebase.js";
@@ -61,7 +70,10 @@ export type ActionId =
   | "clear-markers"
   | "shift-all-minus"
   | "shift-all-plus"
-  | "play-pause-or-breakpoint"
+  | "play-pause"
+  | "place-breakpoint"
+  | "rate-down"
+  | "rate-up"
   | "cursor-left-tick"
   | "cursor-right-tick"
   | "cursor-left-grid"
@@ -87,6 +99,7 @@ export interface KeyEventLike {
   ctrlKey: boolean;
   metaKey: boolean;
   shiftKey: boolean;
+  altKey: boolean;
   key: string;
   preventDefault(): void;
 }
@@ -119,7 +132,7 @@ export function classifyTarget(target: unknown): FocusKind {
  *  - button: Space and Enter keep activating the button; other shortcuts stay
  *    available so a focused button never eats Z or the arrows.
  *  - other (waveform editor, page body): full shortcut set, including the
- *    Space play/pause + break-point behaviour.
+ *    Space play/pause and Enter break-point actions.
  */
 export function resolveAction(focus: FocusKind, event: KeyEventShape): ActionId | null {
   if (focus === "input" || focus === "select" || focus === "textarea") return null;
@@ -153,14 +166,21 @@ export function resolveAction(focus: FocusKind, event: KeyEventShape): ActionId 
 
   switch (key) {
     case " ":
-      return "play-pause-or-breakpoint";
+      return "play-pause";
+    case "Enter":
+    case ",":
+    case ".":
+      return "place-breakpoint";
     case "z":
       return "toggle-marker";
     case "p":
-    case "Enter":
       return "preview";
     case "o":
       return "preview-previous";
+    case "[":
+      return "rate-down";
+    case "]":
+      return "rate-up";
     case "q":
       return "grid-down";
     case "w":
@@ -211,7 +231,14 @@ export interface KeyActions {
   toggleMarkerAtCursor(): void;
   previewAtCursor(): void;
   previewPrevious(): void;
-  playPauseOrBreakPoint(): void;
+  playPause(): void;
+  /**
+   * Enter action. `bypassSnap` (Alt held) drops the marker at the exact
+   * position; otherwise the tick snaps to the current grid when Snap is on.
+   */
+  placeBreakpoint(bypassSnap?: boolean): void;
+  rateDown(): void;
+  rateUp(): void;
   exportAll(): void;
   exportSliceAtCursor(): void;
   bmseOut(): void;
@@ -228,6 +255,8 @@ export interface KeyActions {
   selectCut(): void;
   selectPaste(): void;
   quantizeSelection(): void;
+  /** Esc: cancels an in-progress paint/erase gesture, else clears selection. */
+  clearSelection(): void;
   measureCopy(): void;
   measureCut(): void;
   measurePaste(): void;
@@ -237,7 +266,13 @@ export interface KeyActions {
   zoomRefresh(): void;
 }
 
-const GRID_CYCLE = [4, 6, 8, 12, 16, 24, 32];
+/**
+ * Grid sizes cycled by Q / W, in divisions of one measure. Coarser than the
+ * original ladder: 2 = half-measure cell, 1 = the whole measure as one cell.
+ * The command-bar Grid select (index.html) must list the exact same values
+ * (tests/keys.test.ts keeps the two in sync).
+ */
+export const GRID_CYCLE = [1, 2, 4, 6, 8, 12, 16, 24, 32];
 
 export function handleKeyDown(store: Store, actions: KeyActions, e: KeyEventLike): void {
   const action = resolveAction(
@@ -322,11 +357,21 @@ export function handleKeyDown(store: Store, actions: KeyActions, e: KeyEventLike
     case "shift-all-plus":
       actions.shiftAll(+1);
       return;
-    case "play-pause-or-breakpoint":
-      actions.playPauseOrBreakPoint();
+    case "play-pause":
+      actions.playPause();
+      return;
+    case "place-breakpoint":
+      // Alt travels with the event: held = free placement, bypassing Snap.
+      actions.placeBreakpoint(e.altKey);
+      return;
+    case "rate-down":
+      actions.rateDown();
+      return;
+    case "rate-up":
+      actions.rateUp();
       return;
     case "clear-selection":
-      store.update({ selectedTicks: [], selectionStartTick: null, selectionEndTick: null });
+      actions.clearSelection();
       return;
     case "cursor-left-tick":
     case "cursor-right-tick":

@@ -4,8 +4,10 @@
  */
 
 import { MarkerDoc } from "../core/markers.js";
+import { DEFAULT_PLAYBACK_RATE } from "../core/rate.js";
 import { PeakCache } from "../core/peaks.js";
-import { MAX_TICKS } from "../core/timebase.js";
+import { resolveBreakpointTick } from "../core/timebase.js";
+import { BandAnalysis, BandName } from "../core/bands.js";
 
 export type Phase = "empty" | "parsing" | "ready";
 export type CueMode = "off" | "cowbell" | "triangle" | "metronome";
@@ -39,6 +41,11 @@ export interface ViewState {
   selectedTicks: number[];
   playing: boolean;
   playheadSample: number;
+  /**
+   * Monitor playback rate (0.25x .. 1.5x). Persists across pause/stop; never
+   * affects marker ticks, slice lengths or exports (those are source-time 1x).
+   */
+  playbackRate: number;
   followPlayhead: boolean;
   cueMode: CueMode;
   cueVolume: number;
@@ -48,6 +55,24 @@ export interface ViewState {
   useFfNumbering: boolean;
   measureClipboard: Uint8Array | null;
   exportLock: boolean;
+  /** Band overlay display toggle (session-only, never written into .wos). */
+  bandsVisible: boolean;
+  /** Lazily computed three-band analysis of the loaded source. */
+  bandAnalysis: BandAnalysis | null;
+  /** Band-detect panel parameters. */
+  bandDetectBands: Record<BandName, boolean>;
+  bandThresholdDb: number;
+  bandMinGapUnits: number;
+  /** Band detect: snap hits to the grid (off = exact onset tick). */
+  bandSnap: boolean;
+  /**
+   * Tap-calibration latency in ms (median tap minus beat). Enter break points
+   * placed during playback subtract this before resolving the tick.
+   */
+  tapOffsetMs: number;
+  /** Live estimate for the Detect button; null = not computed yet. */
+  bandEstimate: number | null;
+  bandBusy: boolean;
 }
 
 type Listener = () => void;
@@ -72,6 +97,7 @@ export class Store {
     selectedTicks: [],
     playing: false,
     playheadSample: 0,
+    playbackRate: DEFAULT_PLAYBACK_RATE,
     followPlayhead: true,
     cueMode: "off",
     cueVolume: 0.6,
@@ -81,6 +107,15 @@ export class Store {
     useFfNumbering: false,
     measureClipboard: null,
     exportLock: false,
+    bandsVisible: false,
+    bandAnalysis: null,
+    bandDetectBands: { low: true, mid: true, high: true },
+    bandThresholdDb: 6,
+    bandMinGapUnits: 1,
+    bandSnap: true,
+    tapOffsetMs: 0,
+    bandEstimate: null,
+    bandBusy: false,
   };
 
   subscribe(listener: Listener): () => void {
@@ -106,10 +141,9 @@ export class Store {
     return { from, to };
   }
 
+  /** Snap-aware tick: nearest grid multiple when Snap is on, never out of range. */
   snapTick(tick: number): number {
-    if (!this.state.snap) return Math.max(0, Math.min(MAX_TICKS - 1, Math.round(tick)));
-    const g = this.state.grid;
-    return Math.max(0, Math.min(MAX_TICKS - 1, Math.round(tick / g) * g));
+    return resolveBreakpointTick(tick, this.state.snap, this.state.grid, false);
   }
 
   zoomAt(anchorTick: number, factor: number): void {

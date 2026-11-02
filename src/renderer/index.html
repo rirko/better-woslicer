@@ -22,6 +22,8 @@
       <span class="beats-note">4/4</span>
       <label class="field-label" for="select-grid">Grid</label>
       <select id="select-grid" class="select">
+        <option value="1">1</option>
+        <option value="2">2</option>
         <option value="4">4</option>
         <option value="6">6</option>
         <option value="8" selected>8</option>
@@ -39,15 +41,27 @@
     </div>
     <div class="cluster grow"></div>
     <div class="cluster">
+      <button
+        id="btn-bands"
+        class="cmd-btn toggle bands-toggle"
+        aria-pressed="false"
+        title="Band overlay: Low / Mid / High envelopes (display only)"
+      >
+        <span class="swatch low"></span><span class="swatch mid"></span><span class="swatch high"></span><span class="bands-label">Bands</span>
+      </button>
       <button id="btn-zoom-out" class="cmd-btn" title="Zoom out (-)">&minus;</button>
       <button id="btn-zoom-in" class="cmd-btn" title="Zoom in (+)">+</button>
       <button id="btn-marker" class="cmd-btn" title="Toggle marker at cursor (Z)">Mark</button>
       <button id="btn-export" class="cmd-btn primary" title="Export all slices (Ctrl+Shift+E)">Export</button>
+      <select id="select-language" class="select lang-select" title="UI language">
+        <option value="en" selected>EN</option>
+        <option value="zh">中文</option>
+      </select>
     </div>
   </header>
 
   <section id="transport" class="transport">
-    <button id="btn-play" class="tr-btn" title="Play / pause (Space when stopped)">Play</button>
+    <button id="btn-play" class="tr-btn" title="Play / pause (Space)">Play</button>
     <button id="btn-stop" class="tr-btn" title="Stop">Stop</button>
     <div class="tr-readout mono" id="readout-position">M001&nbsp;&nbsp;00:00.000</div>
     <div class="cluster">
@@ -59,7 +73,19 @@
         <option value="metronome">Metronome</option>
       </select>
       <input id="input-cue-vol" class="vol-slider" type="range" min="0" max="100" value="60" title="Cue volume" />
+      <span id="rate-wrap" class="rate-wrap">
+        <label class="field-label" for="select-rate">Rate</label>
+        <select id="select-rate" class="select" title="Monitor playback rate ([ slow down / ] speed up); markers and exports stay at source time">
+          <option value="0.25">0.25&times;</option>
+          <option value="0.5">0.5&times;</option>
+          <option value="0.75">0.75&times;</option>
+          <option value="1" selected>1.0&times;</option>
+          <option value="1.5">1.5&times;</option>
+        </select>
+      </span>
       <button id="btn-follow" class="cmd-btn toggle on" title="Follow playhead">Follow</button>
+      <button id="btn-calibrate" class="cmd-btn" title="Tap calibration: 16 quarter-note clicks at the current BPM; press Enter on each beat to measure your latency">Calibrate</button>
+      <span id="tap-offset" class="tap-offset mono" title="Applied tap offset (Enter break points)"></span>
     </div>
     <div class="grow"></div>
     <div class="cluster">
@@ -88,6 +114,34 @@
         <p class="hint">Drop a WAV/OGG anywhere, or press Open.</p>
       </div>
       <div class="side-body hidden" id="tab-cuts">
+        <details id="band-detect" class="band-detect" open>
+          <summary>Band detect <span id="band-estimate" class="band-estimate mono"></span></summary>
+          <div class="band-chips">
+            <button class="band-chip on" data-band="low" aria-pressed="true">Low</button>
+            <button class="band-chip on" data-band="mid" aria-pressed="true">Mid</button>
+            <button class="band-chip on" data-band="high" aria-pressed="true">High</button>
+          </div>
+          <label class="band-field">
+            <span>Rise</span>
+            <input id="input-band-threshold" class="num-input small" type="number" step="0.5" min="1" max="24" value="6.0" />
+            <span>dB</span>
+          </label>
+          <label class="band-field">
+            <span>Min gap</span>
+            <select id="select-band-gap" class="select">
+              <option value="1" selected>1 grid</option>
+              <option value="2">2 grid</option>
+              <option value="4">4 grid</option>
+              <option value="8">8 grid</option>
+            </select>
+          </label>
+          <div id="band-scope" class="band-scope">Scope: whole track (no range selection)</div>
+          <label class="check-label band-snap">
+            <input id="check-band-snap" type="checkbox" checked />
+            Snap to grid (off = exact onset)
+          </label>
+          <button id="btn-band-detect" class="cmd-btn wide">Detect</button>
+        </details>
         <ul id="cut-list" class="cut-list"></ul>
       </div>
       <div class="side-body hidden" id="tab-output">
@@ -123,6 +177,28 @@
     <span id="status-main" class="status-main">Empty: drop a WAV/OGG file to begin</span>
     <span id="status-right" class="status-right mono"></span>
   </footer>
+
+  <div id="calibration-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Tap calibration</h2>
+      <p class="hint">
+        Continuous quarter-note clicks at <b id="calibration-bpm">120</b> BPM (no beat limit). Tap
+        <b>Enter</b>, <b>,</b> or <b>.</b> on every click — the median updates live. Press
+        <b>Finish</b> when it is stable; Apply subtracts it from Enter / , / . break points during playback.
+      </p>
+      <div class="calibration-progress mono">
+        <span>Beat <b id="calibration-beat">0</b></span>
+        <span>Taps <b id="calibration-taps">0</b></span>
+      </div>
+      <div id="calibration-result" class="calibration-result mono hidden"></div>
+      <div class="modal-actions">
+        <button id="btn-calibration-retry" class="cmd-btn">Restart</button>
+        <button id="btn-calibration-finish" class="cmd-btn">Finish</button>
+        <button id="btn-calibration-apply" class="cmd-btn primary hidden">Apply</button>
+        <button id="btn-calibration-close" class="cmd-btn">Close</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="renderer/app.js"></script>
 </body>

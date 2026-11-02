@@ -1,17 +1,23 @@
 /**
- * Mouse interactions on the timeline:
- *  - click: move cursor (snap-aware)
- *  - drag on empty area: box selection; hold Shift to ADD to the existing
- *    selection, hold Ctrl to TOGGLE the markers inside the box
- *  - drag on a selected marker / inside selection: move the whole selection
- *    with a group clamp (relative spacing can never break)
- *  - middle button: pan
- *  - wheel: horizontal scroll; Ctrl+wheel: zoom anchored at the mouse tick
- *  - ruler: click = seek cursor; wheel = zoom anchored
- *  - overview: click/drag = center viewport; scrollbar thumb drag
+ * Mouse interactions on the timeline (DEEPSEEK frozen spec):
+ *
+ *  - Left click / drag on empty space  : paint markers (single click = 1,
+ *    drag = one per grid cell crossed). Alt bypasses Snap; with Snap off the
+ *    paint is throttled to 2px so one sweep cannot create hundreds of points.
+ *  - Left press on a cut point (<=10px): move the selection group (Alt = 1
+ *    tick precision). Unselected marker: it becomes the selection first.
+ *  - Right press / sweep               : erase markers within an 8px brush.
+ *  - Shift/Ctrl + left drag            : box selection (Shift adds, Ctrl toggles).
+ *  - Middle drag                       : pan.
+ *  - Wheel                             : horizontal scroll; Ctrl+wheel zoom.
+ *
+ * Priority: Shift/Ctrl > marker hit > empty-space paint. A left press within
+ * 3px is "pending" (nothing is written) so a click never turns into a stroke.
+ * Paint and erase commit as ONE undo entry per gesture; Esc cancels and
+ * restores the pre-gesture bitmap.
  */
 
-import { MAX_TICKS, tickToSampleExport } from "../core/timebase.js";
+import { MAX_TICKS, resolveBreakpointTick, tickToSampleExport } from "../core/timebase.js";
 import { markerTicks } from "../core/wos.js";
 import { clampGroupDelta, normalizeSelection } from "../core/markers.js";
 import { Store } from "./store.js";
@@ -19,10 +25,29 @@ import { TimelineView } from "./waveform.js";
 
 type DragMode =
   | { kind: "none" }
+  | {
+      kind: "pendingPaint";
+      anchorX: number;
+      anchorY: number;
+      anchorTick: number;
+      before: Uint8Array;
+      painted: Set<number>;
+    }
+  | { kind: "paint"; lastTick: number; lastX: number; before: Uint8Array; painted: Set<number> }
+  | { kind: "erase"; before: Uint8Array; erased: number; lastX: number }
   | { kind: "box"; anchorTick: number; previousSelection: number[] }
   | { kind: "move"; anchorTick: number; originalTicks: number[] }
   | { kind: "pan"; anchorX: number; anchorScroll: number }
   | { kind: "thumb"; anchorX: number; anchorScroll: number; width: number };
+
+/** Mouse hit distance (px) for grabbing a cut-point marker. */
+const MARKER_HIT_PX = 10;
+/** Left-press travel (px) before a click becomes a paint stroke. */
+const PAINT_START_PX = 3;
+/** Right-button erase brush radius (px). */
+const ERASE_RADIUS_PX = 8;
+/** With Snap off, painting advances only every N px to avoid point spam. */
+const FREE_PAINT_MIN_PX = 2;
 
 export class Interactions {
   private drag: DragMode = { kind: "none" };
@@ -41,7 +66,6 @@ export class Interactions {
   ) {}
 
   attach(): void {
-    (window as unknown as { __attachRan: boolean }).__attachRan = true;
     this.waveWrap.addEventListener("mousedown", this.onWaveMouseDown);
     window.addEventListener("mousemove", this.onMouseMove);
     window.addEventListener("mouseup", this.onMouseUp);
@@ -70,32 +94,79 @@ export class Interactions {
     return Math.max(0, Math.min(MAX_TICKS - 1, Math.round(tick)));
   }
 
+  /** Grid-resolved tick for painting (Alt bypasses Snap). */
+  private paintTick(e: MouseEvent): number {
+    const s = this.store.state;
+    return resolveBreakpointTick(this.eventTick(e), s.snap, s.grid, e.altKey);
+  }
+
+  /** Nearest marker within MARKER_HIT_PX of the mouse, if any. */
+  private markerNear(e: MouseEvent): number | undefined {
+    const { scrollTick, pxPerTick } = this.viewMetrics();
+    const x = (this.eventTick(e) - scrollTick) * pxPerTick;
+    return markerTicks(this.store.state.doc.markers).find(
+      (t) => Math.abs((t - scrollTick) * pxPerTick - x) <= MARKER_HIT_PX
+    );
+  }
+
+  /** Writes one marker (no undo bookkeeping; the gesture commits the snapshot). */
+  private paintAt(tick: number, painted: Set<number>): boolean {
+    const doc = this.store.state.doc;
+    if (tick < 0 || tick >= MAX_TICKS) return false;
+    if (doc.markers[tick] === 1) return false;
+    doc.markers[tick] = 1;
+    painted.add(tick);
+    return true;
+  }
+
+  /** Erases markers within the brush radius; returns how many were removed. */
+  private eraseAt(e: MouseEvent): number {
+    const doc = this.store.state.doc;
+    const center = this.eventTick(e);
+    const radiusTicks = ERASE_RADIUS_PX / this.store.state.pxPerTick;
+    const hits = markerTicks(doc.markers).filter((t) => Math.abs(t - center) <= radiusTicks);
+    for (const t of hits) doc.markers[t] = 0;
+    return hits.length;
+  }
+
   private onWaveMouseDown = (e: MouseEvent): void => {
-    const w = window as unknown as { __mousedownCount?: number; __lastMouseDownBranch?: string };
-    w.__mousedownCount = (w.__mousedownCount ?? 0) + 1;
     this.waveWrap.focus();
-    const tick = this.eventTick(e);
     if (e.button === 1) {
       this.drag = { kind: "pan", anchorX: e.clientX, anchorScroll: this.store.state.scrollTick };
+      this.waveWrap.style.cursor = "grabbing";
       e.preventDefault();
       return;
     }
-    if (e.button !== 0) return;
 
     const s = this.store.state;
-    const { scrollTick, pxPerTick } = this.viewMetrics();
-    const x = (tick - scrollTick) * pxPerTick;
-    const ticks = markerTicks(s.doc.markers);
-    const nearMarker = ticks.find((t) => Math.abs((t - scrollTick) * pxPerTick - x) <= 4);
 
-    w.__lastMouseDownBranch = "probe";
-    if (nearMarker !== undefined && (s.selectedTicks.includes(nearMarker) || s.selectedTicks.length === 0)) {
-      w.__lastMouseDownBranch = "move:" + nearMarker;
-      // Start moving the selection (or the single marker under the mouse).
-      const original = s.selectedTicks.includes(nearMarker)
-        ? [...s.selectedTicks]
-        : [nearMarker];
-      this.drag = { kind: "move", anchorTick: tick, originalTicks: original };
+    // Right button: erase sweep (one undo per gesture).
+    if (e.button === 2) {
+      e.preventDefault();
+      this.drag = { kind: "erase", before: s.doc.snapshot(), erased: 0, lastX: e.clientX };
+      this.waveWrap.style.cursor = "no-drop";
+      this.drag.erased += this.eraseAt(e);
+      this.onDirty();
+      return;
+    }
+
+    if (e.button !== 0) return;
+
+    // Shift/Ctrl + left: box selection, exactly as before.
+    if (e.shiftKey || e.ctrlKey) {
+      const tick = this.clampedTick(this.eventTick(e));
+      this.drag = { kind: "box", anchorTick: tick, previousSelection: [...s.selectedTicks] };
+      this.store.update({ selectionStartTick: tick, selectionEndTick: tick, selectedTicks: [] });
+      this.store.setStatus("Box select (Shift = add, Ctrl = toggle)");
+      this.onDirty();
+      return;
+    }
+
+    // Left on a marker: move the selection group.
+    const nearMarker = this.markerNear(e);
+    if (nearMarker !== undefined) {
+      const original = s.selectedTicks.includes(nearMarker) ? [...s.selectedTicks] : [nearMarker];
+      this.drag = { kind: "move", anchorTick: this.eventTick(e), originalTicks: original };
       if (!s.selectedTicks.includes(nearMarker)) {
         this.store.update({ selectedTicks: original, selectionStartTick: null, selectionEndTick: null });
       }
@@ -104,25 +175,70 @@ export class Interactions {
       return;
     }
 
-    w.__lastMouseDownBranch = "box:" + this.clampedTick(tick);
+    // Left on empty space: pending paint (a click adds one, a drag paints).
+    const tick = this.paintTick(e);
     this.drag = {
-      kind: "box",
-      anchorTick: this.clampedTick(tick),
-      // Shift/Ctrl merge against the selection as it was when the drag began.
-      previousSelection: [...s.selectedTicks],
+      kind: "pendingPaint",
+      anchorX: e.clientX,
+      anchorY: e.clientY,
+      anchorTick: tick,
+      before: s.doc.snapshot(),
+      painted: new Set<number>(),
     };
-    this.store.update({ selectionStartTick: this.clampedTick(tick), selectionEndTick: this.clampedTick(tick), selectedTicks: [] });
-    this.store.setStatus("Box select (Shift = add, Ctrl = toggle)");
+    this.store.update({ cursorTick: tick });
     this.onDirty();
   };
 
   private onMouseMove = (e: MouseEvent): void => {
+    if (this.drag.kind === "none") this.updateHoverCursor(e);
     switch (this.drag.kind) {
       case "pan": {
         const dx = e.clientX - this.drag.anchorX;
         const scrollTick = Math.max(0, this.drag.anchorScroll - dx / this.store.state.pxPerTick);
         this.store.update({ scrollTick });
         this.onDirty();
+        break;
+      }
+      case "pendingPaint": {
+        const dx = e.clientX - this.drag.anchorX;
+        const dy = e.clientY - this.drag.anchorY;
+        if (Math.hypot(dx, dy) < PAINT_START_PX) break;
+        // Promote to a stroke: anchor + current position.
+        const before = this.drag.before;
+        const painted = this.drag.painted;
+        const doc = this.store.state.doc;
+        doc.markers = before.slice();
+        this.paintAt(this.drag.anchorTick, painted);
+        const tick = this.paintTick(e);
+        this.paintAt(tick, painted);
+        this.drag = { kind: "paint", lastTick: tick, lastX: e.clientX, before, painted };
+        this.store.update({ cursorTick: tick });
+        this.store.setStatus(`Painting markers (${painted.size})`);
+        this.onDirty();
+        break;
+      }
+      case "paint": {
+        const tick = this.paintTick(e);
+        if (tick === this.drag.lastTick) break;
+        const freehand = !this.store.state.snap;
+        if (freehand && Math.abs(e.clientX - this.drag.lastX) < FREE_PAINT_MIN_PX) break;
+        if (this.paintAt(tick, this.drag.painted)) {
+          this.store.update({ cursorTick: tick });
+          this.store.setStatus(`Painting markers (${this.drag.painted.size})`);
+          this.onDirty();
+        }
+        this.drag.lastTick = tick;
+        this.drag.lastX = e.clientX;
+        break;
+      }
+      case "erase": {
+        const erased = this.eraseAt(e);
+        if (erased > 0) {
+          this.drag.erased += erased;
+          this.store.setStatus(`Erasing markers (${this.drag.erased})`);
+          this.onDirty();
+        }
+        this.drag.lastX = e.clientX;
         break;
       }
       case "box": {
@@ -133,9 +249,8 @@ export class Interactions {
       }
       case "move": {
         const rawDelta = this.eventTick(e) - this.drag.anchorTick;
-        const requested = this.store.state.snap
-          ? Math.round(rawDelta / this.store.state.grid) * this.store.state.grid
-          : Math.round(rawDelta);
+        const s = this.store.state;
+        const requested = s.snap && !e.altKey ? Math.round(rawDelta / s.grid) * s.grid : Math.round(rawDelta);
         // Group clamp: one shared delta keeps relative spacing intact.
         const delta = clampGroupDelta(this.drag.originalTicks, requested);
         if (delta !== this.ghostDelta) {
@@ -158,59 +273,133 @@ export class Interactions {
     }
   };
 
+  /**
+   * Hover feedback: erase brush while the right button is held, ew-resize over
+   * a cut point, box crosshair with Shift/Ctrl, paint cursor otherwise.
+   */
+  private updateHoverCursor(e: MouseEvent): void {
+    const rect = this.waveWrap.getBoundingClientRect();
+    const inside =
+      e.clientX >= rect.left && e.clientX < rect.right && e.clientY >= rect.top && e.clientY < rect.bottom;
+    let cursor = "";
+    if (inside) {
+      if (this.markerNear(e) !== undefined) cursor = "ew-resize";
+      else if (e.shiftKey || e.ctrlKey) cursor = "crosshair";
+      else cursor = "copy";
+    }
+    if (this.waveWrap.style.cursor !== cursor) this.waveWrap.style.cursor = cursor;
+  }
+
   private onMouseUp = (e: MouseEvent): void => {
-    if (this.drag.kind === "box") {
-      const s = this.store.state;
-      if (s.selectionStartTick !== null && s.selectionEndTick !== null) {
-        const a = Math.min(s.selectionStartTick, s.selectionEndTick);
-        const b = Math.max(s.selectionStartTick, s.selectionEndTick);
-        const inside = markerTicks(s.doc.markers).filter((t) => t >= a && t <= b);
-        const previous = normalizeSelection(this.drag.previousSelection);
-        let selected: number[];
-        let mode: string;
-        if (e.shiftKey) {
-          selected = [...new Set([...previous, ...inside])].sort((x, y) => x - y);
-          mode = "add";
-        } else if (e.ctrlKey) {
-          const previousSet = new Set(previous);
-          const insideSet = new Set(inside);
-          selected = [
-            ...previous.filter((t) => !insideSet.has(t)),
-            ...inside.filter((t) => !previousSet.has(t)),
-          ].sort((x, y) => x - y);
-          mode = "toggle";
-        } else {
-          selected = inside;
-          mode = "replace";
-        }
-        this.store.update({ selectedTicks: selected });
-        this.store.setStatus(
-          selected.length
-            ? `Box select (${mode}): ${selected.length} marker(s) selected`
-            : `Box select (${mode}): no markers inside`
-        );
-      }
-    } else if (this.drag.kind === "move") {
-      const requestedDelta = this.ghostDelta;
-      this.ghostDelta = 0;
-      if (requestedDelta !== 0) {
+    switch (this.drag.kind) {
+      case "pendingPaint": {
         const doc = this.store.state.doc;
-        const applied = doc.moveSelection(this.drag.originalTicks, requestedDelta);
-        if (applied !== requestedDelta) {
-          this.store.setStatus(
-            `Move clamped to ${applied} tick(s) to keep the group on the timeline`
-          );
-        } else {
-          this.store.setStatus(`Moved ${this.drag.originalTicks.length} marker(s) by ${applied} ticks`);
-        }
-        this.store.update({
-          selectedTicks: normalizeSelection(this.drag.originalTicks.map((t) => t + applied)),
-        });
+        const painted = new Set<number>();
+        const changed = this.paintAt(this.drag.anchorTick, painted);
+        if (changed) doc.commitSnapshot(this.drag.before);
+        this.store.setStatus(
+          changed ? `Added marker at tick ${this.drag.anchorTick}` : `Marker already at tick ${this.drag.anchorTick}`
+        );
+        break;
       }
+      case "paint": {
+        const committed = this.store.state.doc.commitSnapshot(this.drag.before);
+        this.store.setStatus(
+          committed
+            ? `Painted ${this.drag.painted.size} marker(s)`
+            : "Paint gesture changed nothing"
+        );
+        break;
+      }
+      case "erase": {
+        const committed = this.store.state.doc.commitSnapshot(this.drag.before);
+        this.store.setStatus(
+          committed ? `Erased ${this.drag.erased} marker(s)` : "Erase gesture removed nothing"
+        );
+        break;
+      }
+      case "box": {
+        const s = this.store.state;
+        if (s.selectionStartTick !== null && s.selectionEndTick !== null) {
+          const a = Math.min(s.selectionStartTick, s.selectionEndTick);
+          const b = Math.max(s.selectionStartTick, s.selectionEndTick);
+          const inside = markerTicks(s.doc.markers).filter((t) => t >= a && t <= b);
+          const previous = normalizeSelection(this.drag.previousSelection);
+          let selected: number[];
+          let mode: string;
+          if (e.shiftKey) {
+            selected = [...new Set([...previous, ...inside])].sort((x, y) => x - y);
+            mode = "add";
+          } else if (e.ctrlKey) {
+            const previousSet = new Set(previous);
+            const insideSet = new Set(inside);
+            selected = [
+              ...previous.filter((t) => !insideSet.has(t)),
+              ...inside.filter((t) => !previousSet.has(t)),
+            ].sort((x, y) => x - y);
+            mode = "toggle";
+          } else {
+            selected = inside;
+            mode = "replace";
+          }
+          this.store.update({ selectedTicks: selected });
+          this.store.setStatus(
+            selected.length
+              ? `Box select (${mode}): ${selected.length} marker(s) selected`
+              : `Box select (${mode}): no markers inside`
+          );
+        }
+        break;
+      }
+      case "move": {
+        const requestedDelta = this.ghostDelta;
+        this.ghostDelta = 0;
+        if (requestedDelta !== 0) {
+          const doc = this.store.state.doc;
+          const applied = doc.moveSelection(this.drag.originalTicks, requestedDelta);
+          if (applied !== requestedDelta) {
+            this.store.setStatus(`Move clamped to ${applied} tick(s) to keep the group on the timeline`);
+          } else {
+            this.store.setStatus(`Moved ${this.drag.originalTicks.length} marker(s) by ${applied} ticks`);
+          }
+          this.store.update({
+            selectedTicks: normalizeSelection(this.drag.originalTicks.map((t) => t + applied)),
+          });
+        }
+        break;
+      }
+      default:
+        break;
     }
     this.drag = { kind: "none" };
+    this.waveWrap.style.cursor = "";
+    this.updateHoverCursor(e);
     this.onDirty();
   };
+
+  /**
+   * Esc: cancels an in-progress gesture, restoring the bitmap it started
+   * from. Returns true when a gesture was cancelled (so the caller knows not
+   * to also clear the selection).
+   */
+  cancelGesture(): boolean {
+    const drag = this.drag;
+    if (drag.kind === "pendingPaint" || drag.kind === "paint" || drag.kind === "erase") {
+      this.store.state.doc.restoreSnapshot(drag.before);
+      this.drag = { kind: "none" };
+      this.waveWrap.style.cursor = "";
+      this.onDirty();
+      return true;
+    }
+    if (drag.kind === "box" || drag.kind === "move" || drag.kind === "pan" || drag.kind === "thumb") {
+      this.drag = { kind: "none" };
+      this.ghostDelta = 0;
+      this.waveWrap.style.cursor = "";
+      this.onDirty();
+      return true;
+    }
+    return false;
+  }
 
   private onWaveWheel = (e: WheelEvent): void => {
     e.preventDefault();
@@ -281,5 +470,5 @@ export class Interactions {
   currentGhost(): { ticks: number[]; delta: number } | undefined {
     if (this.drag.kind !== "move" || this.ghostDelta === 0) return undefined;
     return { ticks: this.drag.originalTicks, delta: this.ghostDelta };
-  };
+  }
 }

@@ -187,6 +187,56 @@ export class MarkerDoc {
     return markerTicks(this.markers);
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Batch edits: paint strokes, erase sweeps, band detect               */
+  /* Each batch is ONE undo entry, never one per tick.                   */
+  /* ------------------------------------------------------------------ */
+
+  /** Snapshot for gesture-style edits (paint / erase); restore on cancel. */
+  snapshot(): Uint8Array {
+    return this.markers.slice();
+  }
+
+  restoreSnapshot(snapshot: Uint8Array): void {
+    if (snapshot.length !== MAX_TICKS) throw new RangeError(`snapshot must have ${MAX_TICKS} entries`);
+    this.markers = snapshot.slice();
+  }
+
+  /** Commits `before` as a single undo entry when the bitmap actually changed. */
+  commitSnapshot(before: Uint8Array): boolean {
+    if (before.length !== MAX_TICKS) throw new RangeError(`snapshot must have ${MAX_TICKS} entries`);
+    let changed = false;
+    for (let i = 0; i < MAX_TICKS; i++) {
+      if (this.markers[i] !== before[i]) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) return false;
+    this.undoStack.push(before.slice());
+    if (this.undoStack.length > 200) this.undoStack.shift();
+    this.redoStack.length = 0;
+    return true;
+  }
+
+  /** Adds many ticks in one undo step; returns how many were newly set. */
+  addTicks(ticks: readonly number[]): number {
+    const unique = normalizeSelection(ticks).filter((t) => this.markers[t] !== 1);
+    if (!unique.length) return 0;
+    this.pushUndo();
+    for (const t of unique) this.markers[t] = 1;
+    return unique.length;
+  }
+
+  /** Removes many ticks in one undo step; returns how many were removed. */
+  removeTicks(ticks: readonly number[]): number {
+    const unique = normalizeSelection(ticks).filter((t) => this.markers[t] === 1);
+    if (!unique.length) return 0;
+    this.pushUndo();
+    for (const t of unique) this.markers[t] = 0;
+    return unique.length;
+  }
+
   /**
    * Quantizes every marker to the nearest multiple of `grid` ticks.
    * Collisions after snapping collapse into one marker (first wins) unless

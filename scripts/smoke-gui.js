@@ -4,6 +4,10 @@
  *  - the app boots with the empty state,
  *  - loading a WAV buffer via the IPC bridge transitions to "Ready",
  *  - marker editing (Z), undo, BMSE clipboard out and WOS round-trip work,
+ *  - break-point snapping: Enter honours Snap/Grid, Alt bypasses it,
+ *  - playback follow-scroll repaints the paged view (scrollbar thumb moves),
+ *  - viewport widening (CDP device-metrics override) resizes and repaints
+ *    every canvas layer across the full new width,
  *  - waveform canvases have non-trivial content.
  *
  * Run: npm run build && node scripts/smoke-gui.js
@@ -38,7 +42,17 @@ async function main() {
   if (typeof electronBinary !== "string") {
     throw new Error("electron did not resolve to a binary path");
   }
-  const child = spawn(electronBinary, [".", `--remote-debugging-port=${PORT}`], {
+  const child = spawn(electronBinary, [
+    ".",
+    `--remote-debugging-port=${PORT}`,
+    // The smoke window can open behind other windows; without these flags
+    // Chromium throttles/parks requestAnimationFrame for occluded windows and
+    // the animation-dependent checks (follow-scroll, viewport self-check)
+    // fail nondeterministically even though the app is fine.
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows",
+  ], {
     cwd: path.join(__dirname, ".."),
     stdio: ["ignore", "ignore", "pipe"],
   });
@@ -66,8 +80,18 @@ async function main() {
 
     let seq = 0;
     const pending = new Map();
+    const pageExceptions = [];
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
+      if (msg.method === "Runtime.exceptionThrown") {
+        const details = msg.params && msg.params.exceptionDetails;
+        const text =
+          (details && details.exception && details.exception.description) ||
+          (details && details.text) ||
+          "unknown exception";
+        pageExceptions.push(text.split("\n").slice(0, 3).join(" | "));
+        return;
+      }
       if (msg.id && pending.has(msg.id)) {
         const { resolve, reject } = pending.get(msg.id);
         pending.delete(msg.id);
@@ -111,10 +135,12 @@ async function main() {
       await evaluate(`Object.keys(window.woslicer).join(',')`)
     );
 
-    // Build a small deterministic WAV (1s, 440Hz) in the page and load it via
+    // Build a small deterministic WAV (3s, 440Hz) in the page and load it via
     // a real drag-and-drop event (the same path a user file drop takes).
+    // 3s so the follow-scroll page check later has room to page at the
+    // default zoom (~1.9s of clip reaches the page point).
     await evaluate(`(async () => {
-      const sr = 48000, n = 48000;
+      const sr = 48000, n = 144000;
       const buf = new ArrayBuffer(44 + n * 4);
       const v = new DataView(buf);
       const ascii = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
@@ -123,7 +149,12 @@ async function main() {
       v.setUint32(24,sr,true); v.setUint32(28,sr*4,true); v.setUint16(32,4,true); v.setUint16(34,16,true);
       ascii(36,'data'); v.setUint32(40, n*4, true);
       for (let i = 0; i < n; i++) {
-        const s = Math.round(Math.sin(2*Math.PI*440*i/sr) * 20000);
+        const t = i / sr;
+        // 60 ms loud bursts every 0.5 s: gives the band detector real
+        // loudness rises (~17 dB) to find, while keeping the waveform solid.
+        const burst = t % 0.5 < 0.06;
+        const amp = burst ? 0.85 : 0.12;
+        const s = Math.round(Math.sin(2*Math.PI*440*t) * amp * 32767);
         v.setInt16(44+i*4, s, true); v.setInt16(46+i*4, Math.round(s*0.8), true);
       }
       const file = new File([buf], 'smoke.wav', { type: 'audio/wav' });
@@ -145,6 +176,12 @@ async function main() {
     }
     check("audio load (drag & drop) transitions to Ready", readySeen);
     check("source info filled", await evaluate(`document.getElementById('src-name').textContent === 'smoke'`));
+    // Export prefix follows the source name (used by every export path via
+    // store.baseName); it must no longer be the old "slice" default.
+    check(
+      "export prefix defaults to the source name, not 'slice'",
+      await evaluate(`document.getElementById('input-basename').value === 'smoke'`)
+    );
 
     // Place markers via the editing model (same path the Z key uses).
     await evaluate(`(function(){
@@ -183,7 +220,7 @@ async function main() {
       wrap.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 }));
       const rect = wrap.getBoundingClientRect();
       const y = rect.top + rect.height / 2;
-      const opts = (x) => ({ bubbles: true, clientX: Math.round(rect.left + x), clientY: y, button: 0 });
+      const opts = (x) => ({ bubbles: true, clientX: Math.round(rect.left + x), clientY: y, button: 0, shiftKey: true });
       wrap.dispatchEvent(new MouseEvent('mousedown', opts(100)));
       window.dispatchEvent(new MouseEvent('mousemove', opts(900)));
       window.dispatchEvent(new MouseEvent('mouseup', opts(900)));
@@ -234,7 +271,386 @@ async function main() {
     })()`);
     check("waveform canvas painted", painted > 1000, `opaque pixels=${painted}`);
 
+    // The overview must use the same tick axis as the main timeline: this 3 s
+    // file spans <1% of the 256-measure timeline at 120 BPM, so its far right
+    // must be background (the old audio-percentage overview stretched the file
+    // across the whole strip and desynced from the viewport rectangle).
+    const overviewTailWavePixels = await evaluate(`(function(){
+      const c = document.getElementById('overview-canvas');
+      const ctx = c.getContext('2d');
+      const x0 = Math.floor(c.width * 0.85);
+      const d = ctx.getImageData(x0, 0, c.width - x0, c.height).data;
+      let wave = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        if (g > 80 && g > r + 20 && g > b - 20) wave++;
+      }
+      return wave;
+    })()`);
+    check(
+      "overview uses the tick axis (no stretched file on the right)",
+      overviewTailWavePixels === 0,
+      `wave pixels=${overviewTailWavePixels}`
+    );
+
+    // --- Transport keys: Space play/pause, Enter break point, [ ] rate -----
+    // (Enter is NO LONGER preview: the earlier steps never pressed Space or
+    // Enter, so the rebinding does not affect anything above this point.)
+    const kd = (key, ctrl = false, shift = false, alt = false) =>
+      evaluate(
+        `(function(){ window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, ctrlKey: ${!!ctrl}, shiftKey: ${!!shift}, altKey: ${!!alt}, bubbles: true })); return true; })()`
+      );
+    const cutCountNow = () => evaluate(`document.querySelectorAll('#cut-list li').length`);
+    const statusNow = () => evaluate(`document.getElementById('status-main').textContent`);
+
+    const beforeTransport = await cutCountNow();
+    await kd(" ");
+    check("Space starts playback", (await statusNow()) === "Playing");
+    // Let the playhead advance into fresh territory (tick 0 already has a
+    // marker; ~300ms at 120bpm lands around tick 29, away from 0/192/384).
+    await waitMs(300);
+    await kd("Enter");
+    check(
+      "Enter during playback drops a break point at the playhead (+1 cut)",
+      (await cutCountNow()) === beforeTransport + 1,
+      `count=${await cutCountNow()}`
+    );
+    check(
+      "Enter left the transport playing (status = break point, not Paused)",
+      /Break point at tick/.test(await statusNow())
+    );
+    await kd(" ");
+    check(
+      "Space during playback pauses and adds NO marker",
+      (await statusNow()) === "Paused" && (await cutCountNow()) === beforeTransport + 1
+    );
+    await kd("ArrowDown"); // cursor to the next measure, away from all markers
+    await kd("Enter");
+    check(
+      "Enter while stopped places the marker at the cursor (+1 cut)",
+      (await cutCountNow()) === beforeTransport + 2 && /Break point at tick/.test(await statusNow()),
+      `count=${await cutCountNow()}`
+    );
+
+    // --- Break-point snapping (frozen spec): Snap defaults on, grid = 8 -----
+    // Move to a fresh grid line, nudge the cursor 3 ticks OFF the grid with
+    // Shift+ArrowRight, then Enter: the marker must land on the grid. Alt
+    // must bypass the snap and drop at the exact tick.
+    const beforeSnapChecks = await cutCountNow();
+    const statusTick = async () => {
+      const match = (await statusNow()).match(/tick (\d+)/);
+      return match ? Number(match[1]) : NaN;
+    };
+    await kd("ArrowDown"); // to a fresh measure (still on the grid)
+    await kd("ArrowRight", false, true);
+    await kd("ArrowRight", false, true);
+    await kd("ArrowRight", false, true); // cursor now 3 ticks off-grid
+    await kd("Enter");
+    const snappedTick = await statusTick();
+    check(
+      "Enter with Snap on lands on the nearest grid tick",
+      (await cutCountNow()) === beforeSnapChecks + 1 && snappedTick % 8 === 0,
+      `tick=${snappedTick} status=${await statusNow()}`
+    );
+    // The snapped Enter synced the cursor to the grid tick, so 3 nudges
+    // reach the same off-grid tick again.
+    await kd("ArrowRight", false, true);
+    await kd("ArrowRight", false, true);
+    await kd("ArrowRight", false, true);
+    await kd("Enter", false, true, true); // Alt held: bypass snapping
+    const bypassTick = await statusTick();
+    check(
+      "Alt+Enter bypasses Snap and drops at the exact (unsnapped) tick",
+      (await cutCountNow()) === beforeSnapChecks + 2 && bypassTick === snappedTick + 3 && bypassTick % 8 === 3,
+      `tick=${bypassTick} (snapped was ${snappedTick}) status=${await statusNow()}`
+    );
+    await kd("Enter", false, true, true); // same spot again: idempotent
+    check(
+      "Enter on an existing break point adds no cut and says so",
+      (await cutCountNow()) === beforeSnapChecks + 2 && (await statusNow()).includes(`already at tick ${bypassTick}`),
+      `count=${await cutCountNow()} status=${await statusNow()}`
+    );
+
+    await kd("[");
+    check("[ slows to 0.75x", (await evaluate(`document.getElementById('select-rate').value`)) === "0.75");
+    await kd("[");
+    const rateHalf = await evaluate(`document.getElementById('select-rate').value`);
+    const rateDot = await evaluate(`document.getElementById('rate-wrap').classList.contains('rate-active')`);
+    check("[ slows to 0.5x and the control highlights off-speed", rateHalf === "0.5" && rateDot === true);
+    for (let i = 0; i < 4; i++) await kd("]");
+    const rateMax = await evaluate(`document.getElementById('select-rate').value`);
+    check(
+      "] clamps at 1.5x with the endpoint hint",
+      rateMax === "1.5" && (await statusNow()).includes("Already fastest"),
+      `rate=${rateMax} status=${await statusNow()}`
+    );
+    await kd(" ");
+    await kd(" ");
+    check(
+      "rate survives a play/pause round-trip (still 1.5x)",
+      (await evaluate(`document.getElementById('select-rate').value`)) === "1.5"
+    );
+
+    // --- Tap calibration: continuous clicks, Enter / , / . taps -------------
+    const cutsBeforeCalibration = await cutCountNow();
+    await evaluate(`(function(){ document.getElementById('btn-calibrate').click(); return true; })()`);
+    const calibrationOpen = await evaluate(
+      `!document.getElementById('calibration-modal').classList.contains('hidden')`
+    );
+    for (const tapKey of ["Enter", ",", ".", "Enter"]) {
+      await kd(tapKey);
+      await waitMs(220);
+    }
+    const calibrationTaps = await evaluate(`document.getElementById('calibration-taps').textContent`);
+    check(
+      "calibration runs continuously and Enter / , / . are counted as taps without markers",
+      calibrationOpen && Number(calibrationTaps) >= 4 && (await cutCountNow()) === cutsBeforeCalibration,
+      `taps=${calibrationTaps}`
+    );
+    const liveResult = await evaluate(`document.getElementById('calibration-result').textContent`);
+    check(
+      "calibration shows live statistics before finishing",
+      /median/.test(liveResult),
+      liveResult
+    );
+    await evaluate(`(function(){ document.getElementById('btn-calibration-finish').click(); return true; })()`);
+    const calibrationResult = await evaluate(`document.getElementById('calibration-result').textContent`);
+    check(
+      "calibration finish reports a matched/median result",
+      /Matched|No taps matched|Final:/.test(calibrationResult),
+      calibrationResult
+    );
+    await evaluate(`(function(){ document.getElementById('btn-calibration-close').click(); return true; })()`);
+    check(
+      "calibration modal closes and leaves no calibration state behind",
+      await evaluate(`document.getElementById('calibration-modal').classList.contains('hidden')`)
+    );
+    // ',' and '.' outside calibration place break points. Clear first so both
+    // land on empty measures (an existing marker would make the placement
+    // idempotent and hide one of the two keys).
+    await kd("c");
+    const cutsBeforeKeys = await cutCountNow();
+    await kd(",");
+    await kd("ArrowRight");
+    await kd(".");
+    check(
+      "',' and '.' place break points outside calibration",
+      (await cutCountNow()) === cutsBeforeKeys + 2,
+      `count ${cutsBeforeKeys} -> ${await cutCountNow()}`
+    );
+
+    // --- UI language switch: EN <-> 中文 ------------------------------------
+    await evaluate(`(function(){
+      const s = document.getElementById('select-language');
+      s.value = 'zh';
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    const zhOpen = await evaluate(`document.getElementById('btn-open').textContent`);
+    check("language switch renders the Chinese UI", zhOpen === "打开", `btn-open=${zhOpen}`);
+    await evaluate(`(function(){
+      const s = document.getElementById('select-language');
+      s.value = 'en';
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    const enOpen = await evaluate(`document.getElementById('btn-open').textContent`);
+    check("language switch restores the English UI", enOpen === "Open", `btn-open=${enOpen}`);
+
+    // --- Playback follow-scroll repaint (paging) ---------------------------
+    // Regression: Transport.tick advanced store.scrollTick while playing, but
+    // the frame loop only repainted the overlay, so ruler/wave/overview and
+    // the scrollbar thumb stayed on the old page. The thumb's style.left is
+    // the DOM witness for the repaint path: stop re-anchors the playhead at
+    // sample 0, the selection tests' zoom-out is undone and the view scrolled
+    // back to tick 0, so while playing the ONLY way the thumb can move is a
+    // follow-scroll page (scrollTick change) flowing into updateScrollbar.
+    await evaluate(`(function(){ document.getElementById('btn-stop').click(); return true; })()`);
+    for (let i = 0; i < 4; i++) await kd("+"); // back to the default zoom
+    await evaluate(`(function(){
+      const wrap = document.getElementById('wave-wrap');
+      for (let i = 0; i < 10; i++) {
+        wrap.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120 }));
+      }
+      return true;
+    })()`); // scroll left, clamped at tick 0 -> no play-start resnap noise
+    const thumbLeftBefore = await evaluate(`document.getElementById('scrollbar-thumb').style.left`);
+    await kd(" "); // Space: play from sample 0 (follow playhead is on)
+    let thumbLeftAfter = thumbLeftBefore;
+    for (let i = 0; i < 60; i++) { // 50ms polls, 3s budget
+      await waitMs(50);
+      thumbLeftAfter = await evaluate(`document.getElementById('scrollbar-thumb').style.left`);
+      if (thumbLeftAfter !== thumbLeftBefore) break;
+    }
+    check(
+      "playback follow-scroll pages the view (scrollbar thumb moves)",
+      thumbLeftAfter !== thumbLeftBefore,
+      `left ${thumbLeftBefore} -> ${thumbLeftAfter}`
+    );
+    await kd(" "); // Space: pause playback again
+
+    // --- Mouse remap: left paints, right erases ----------------------------
+    await evaluate(`(function(){ document.getElementById('btn-stop').click(); return true; })()`);
+    await kd("c"); // clear all markers so the paint check starts from empty
+    const cuts = () => evaluate(`document.querySelectorAll('#cut-list li').length`);
+    const beforePaint = await cuts();
+    await evaluate(`(function(){
+      const wrap = document.getElementById('wave-wrap');
+      const rect = wrap.getBoundingClientRect();
+      const y = rect.top + rect.height * 0.3;
+      const ev = (type, x) => new MouseEvent(type, { bubbles: true, cancelable: true, clientX: Math.round(rect.left + x), clientY: y, button: 0 });
+      wrap.dispatchEvent(ev('mousedown', 300));
+      for (let x = 340; x <= 660; x += 40) window.dispatchEvent(ev('mousemove', x));
+      window.dispatchEvent(ev('mouseup', 660));
+      return true;
+    })()`);
+    const afterPaint = await cuts();
+    check("left drag paints markers", afterPaint >= beforePaint + 2, `count ${beforePaint} -> ${afterPaint}`);
+
+    await evaluate(`(function(){
+      const wrap = document.getElementById('wave-wrap');
+      const rect = wrap.getBoundingClientRect();
+      const y = rect.top + rect.height * 0.3;
+      const ev = (type, x) => new MouseEvent(type, { bubbles: true, cancelable: true, clientX: Math.round(rect.left + x), clientY: y, button: 2, buttons: 2 });
+      wrap.dispatchEvent(ev('mousedown', 300));
+      for (let x = 340; x <= 660; x += 40) window.dispatchEvent(ev('mousemove', x));
+      window.dispatchEvent(ev('mouseup', 660));
+      return true;
+    })()`);
+    const afterErase = await cuts();
+    check("right drag erases markers", afterErase < afterPaint, `count ${afterPaint} -> ${afterErase}`);
+
+    // --- Bands overlay ------------------------------------------------------
+    await evaluate(`(function(){ document.getElementById('btn-bands').click(); return true; })()`);
+    let bandPixels = { low: 0, mid: 0, high: 0 };
+    for (let i = 0; i < 60; i++) {
+      await waitMs(50);
+      bandPixels = await evaluate(`(function(){
+        const c = document.getElementById('wave-canvas');
+        const ctx = c.getContext('2d');
+        const d = ctx.getImageData(0, 0, c.width, Math.min(c.height, 400)).data;
+        let low = 0, mid = 0, high = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
+          if (a < 40) continue;
+          if (b > 170 && r > 110 && r < 235 && g < 185) low++;
+          if (g > 150 && r < 215 && b < 155) mid++;
+          if (r > 195 && b > 135 && g < 195) high++;
+        }
+        return { low, mid, high };
+      })()`);
+      if (bandPixels.low > 200 && bandPixels.mid > 200) break;
+    }
+    check(
+      "Bands overlay paints the Low/Mid/High envelopes",
+      bandPixels.low > 200 && bandPixels.mid > 200,
+      JSON.stringify(bandPixels)
+    );
+
+    // --- Band detect: adds cuts as ONE undo step ----------------------------
+    await evaluate(`(function(){ document.querySelector('.side-tab[data-tab="cuts"]').click(); return true; })()`);
+    await kd("Escape"); // whole-track scope (no blue range selection)
+    await kd("c"); // clear markers again for a clean detection baseline
+    await waitMs(150);
+    const beforeDetect = await cuts();
+    await evaluate(`(function(){ document.getElementById('btn-band-detect').click(); return true; })()`);
+    let detectStatus = "";
+    let afterDetect = beforeDetect;
+    for (let i = 0; i < 80; i++) {
+      await waitMs(100);
+      detectStatus = await statusNow();
+      afterDetect = await cuts();
+      if (/Band detect:/.test(detectStatus)) break;
+    }
+    check(
+      "Band detect adds markers from the loudness rises",
+      afterDetect > beforeDetect && /Band detect: \+\d+ cuts/.test(detectStatus),
+      `count ${beforeDetect} -> ${afterDetect} · ${detectStatus}`
+    );
+    await kd("z", true); // Ctrl+Z: the whole detection is one undo step
+    check(
+      "one undo reverts the whole band detection",
+      (await cuts()) === beforeDetect,
+      `count=${await cuts()}`
+    );
+
+    // --- Resize regression: a widened viewport must repaint every layer ----
+    // Regression: after the window grew, the canvases kept their previous
+    // painted width (right side black). Root cause: canvases sized themselves
+    // from their own clientWidth, which their inline style had pinned. The
+    // draw path must measure the live wave-wrap width each call, and the rAF
+    // loop must self-check the viewport every frame even if ResizeObserver
+    // misses the change (pure devicePixelRatio changes do not fire it).
+    const canvasSizes = `({
+      dpr: window.devicePixelRatio,
+      wrap: document.getElementById('wave-wrap').clientWidth,
+      ruler: { css: document.getElementById('ruler-canvas').clientWidth, buf: document.getElementById('ruler-canvas').width },
+      wave: { css: document.getElementById('wave-canvas').clientWidth, buf: document.getElementById('wave-canvas').width },
+      overview: { css: document.getElementById('overview-canvas').clientWidth, buf: document.getElementById('overview-canvas').width }
+    })`;
+    await send("Emulation.setDeviceMetricsOverride", {
+      width: 1900,
+      height: 900,
+      deviceScaleFactor: 0,
+      mobile: false,
+    });
+    const followDpr = (dpr) => (c) => Math.abs(c.css - dpr.wrap) <= 1 && Math.abs(c.buf - c.css * dpr.dpr) <= 2;
+    let wide = null;
+    for (let i = 0; i < 40; i++) {
+      // 50ms polls, 2s budget: enough frames for the rAF self-check path.
+      await waitMs(50);
+      wide = await evaluate(canvasSizes);
+      const follow = followDpr(wide);
+      if (wide.wrap > 1500 && follow(wide.ruler) && follow(wide.wave) && follow(wide.overview)) break;
+    }
+    const follow = followDpr(wide);
+    check(
+      "viewport widen 1440->1900: wave-wrap, ruler, wave and overview canvases all follow",
+      !!wide && wide.wrap > 1500 && follow(wide.ruler) && follow(wide.wave) && follow(wide.overview),
+      JSON.stringify(wide)
+    );
+    // Waveform fills the new width: sample the rightmost 10% of the buffer
+    // and require painted (non-transparent) pixels. A stale width either
+    // keeps the buffer small (getImageData out of range reads transparent
+    // black) or leaves the tail unpainted.
+    const tailPainted = await evaluate(`(function(){
+      const c = document.getElementById('wave-canvas');
+      const ctx = c.getContext('2d');
+      const x0 = c.width - Math.floor(c.width * 0.1);
+      const d = ctx.getImageData(x0, 0, c.width - x0, Math.min(c.height, 200)).data;
+      let non = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) non++;
+      return non;
+    })()`);
+    check("waveform repaints across the full widened width (tail 10% painted)", tailPainted > 1000, `opaque=${tailPainted}`);
+    // A pure devicePixelRatio change fires no element resize: the rAF
+    // self-check must catch it and resize the backing buffers.
+    await send("Emulation.setDeviceMetricsOverride", {
+      width: 1900,
+      height: 900,
+      deviceScaleFactor: 2,
+      mobile: false,
+    });
+    let dprWide = null;
+    for (let i = 0; i < 40; i++) {
+      await waitMs(50);
+      dprWide = await evaluate(canvasSizes);
+      const follow2 = followDpr(dprWide);
+      if (dprWide.dpr === 2 && follow2(dprWide.wave)) break;
+    }
+    check(
+      "devicePixelRatio change resizes the canvas buffers (rAF self-check path)",
+      !!dprWide && dprWide.dpr === 2 && Math.abs(dprWide.wave.buf - dprWide.wave.css * 2) <= 2,
+      JSON.stringify(dprWide)
+    );
+    await send("Emulation.clearDeviceMetricsOverride");
+    await waitMs(400);
+
     const failed = checks.filter((c) => !c.ok);
+    if (pageExceptions.length) {
+      console.log("PAGE EXCEPTIONS:");
+      for (const ex of pageExceptions.slice(0, 10)) console.log("  " + ex);
+    }
     console.log(failed.length ? `SMOKE FAILED: ${failed.length}/${checks.length}` : `SMOKE OK: ${checks.length}/${checks.length}`);
     ws.close();
     child.kill();

@@ -9,7 +9,13 @@ import { markerTicks } from "../core/wos.js";
 import { readWos, writeWos, WosFormatError } from "../core/wos.js";
 import { buildPeakCache } from "../core/peaks.js";
 import { detectEdges } from "../core/edge.js";
-import { MAX_TICKS, tickToSampleExport } from "../core/timebase.js";
+import { analyzeBands, BandAnalysis, BandName, BAND_NAMES } from "../core/bands.js";
+import { detectBandCuts } from "../core/banddetect.js";
+import { latencySamples } from "../core/calibration.js";
+import { TapCalibrator } from "./calibration.js";
+import { applyStaticTranslations, getLanguage, initLanguage, setLanguage, translateStatus, type Language } from "./i18n.js";
+import { MAX_TICKS, resolveBreakpointTick, sampleToTickNearest, tickToSampleExport } from "../core/timebase.js";
+import { DEFAULT_PLAYBACK_RATE, formatRate, stepPlaybackRate } from "../core/rate.js";
 import { Store } from "./store.js";
 import { TimelineView } from "./waveform.js";
 import { Transport } from "./transport.js";
@@ -18,6 +24,7 @@ import { handleKeyDown, KeyActions } from "./keys.js";
 
 const store = new Store();
 const transport = new Transport(store);
+const calibrator = new TapCalibrator(transport.getAudioContext());
 
 const el = <T extends HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -44,15 +51,53 @@ const interactions = new Interactions(
   (sample) => transport.seekSample(sample)
 );
 
-function redraw(): void {
+/* Scroll/zoom values the canvas layers were last drawn with. animate() compares
+   them on every playing frame: follow-scroll during playback is the only path
+   that moves scrollTick/pxPerTick without an explicit redraw(), and the frame
+   after they move must repaint every layer, not just the overlay. NaN starts
+   "dirty" so the first playing frame always paints. */
+let lastDrawnScrollTick = Number.NaN;
+let lastDrawnPxPerTick = Number.NaN;
+
+/* Viewport the canvas layers were last drawn with. animate() compares these
+   every frame as a cheap safety net: the ResizeObserver alone proved
+   unreliable (it misses pure devicePixelRatio changes and was observed to
+   leave the ruler/overview stale after viewport resizes), and a missed resize
+   paints the old width with black to its right. NaN starts "dirty". */
+let lastDrawnWidth = Number.NaN;
+let lastDrawnHeight = Number.NaN;
+let lastDrawnDpr = Number.NaN;
+
+function viewportChanged(): boolean {
+  const dpr = window.devicePixelRatio || 1;
+  return (
+    waveWrap.clientWidth !== lastDrawnWidth ||
+    waveWrap.clientHeight !== lastDrawnHeight ||
+    dpr !== lastDrawnDpr
+  );
+}
+
+/** Canvas layers + scrollbar: everything that depends on scroll/zoom geometry. */
+function redrawCanvases(): void {
   view.drawRuler();
   view.drawWave();
   view.drawOverlay(interactions.currentGhost());
   view.drawOverview();
   updateScrollbar();
+}
+
+function redraw(): void {
+  redrawCanvases();
+  lastDrawnScrollTick = store.state.scrollTick;
+  lastDrawnPxPerTick = store.state.pxPerTick;
+  lastDrawnWidth = waveWrap.clientWidth;
+  lastDrawnHeight = waveWrap.clientHeight;
+  lastDrawnDpr = window.devicePixelRatio || 1;
   updateReadout();
   updateCutList();
   updateCommandStates();
+  syncRateSelect();
+  updateBandPanel();
 }
 
 /** Enables/disables commands that require a selection or a source. */
@@ -128,20 +173,298 @@ function setStatus(text: string, isError = false): void {
   store.setStatus(text, isError);
 }
 
+/**
+ * [ / ] rate stepping: one notch of the frozen ladder per press, clamped at
+ * 0.25x / 1.5x with a status-bar hint (no dialog). Re-anchoring happens in
+ * transport.setRate so the playhead never jumps.
+ */
+function applyRateStep(direction: -1 | 1): void {
+  const step = stepPlaybackRate(store.state.playbackRate, direction);
+  transport.setRate(step.rate);
+  store.setStatus(
+    step.clamped
+      ? direction < 0
+        ? `Already slowest ${formatRate(step.rate)}`
+        : `Already fastest ${formatRate(step.rate)}`
+      : `Playback rate: ${formatRate(step.rate)}`
+  );
+  syncRateSelect();
+}
+
+/** Mirrors store.playbackRate into the transport select + highlight state. */
+function syncRateSelect(): void {
+  const select = el<HTMLSelectElement>("select-rate");
+  select.value = String(store.state.playbackRate);
+  const active = store.state.playbackRate !== DEFAULT_PLAYBACK_RATE;
+  select.classList.toggle("rate-active", active);
+  el<HTMLSpanElement>("rate-wrap").classList.toggle("rate-active", active);
+}
+
+/* ------------------------------------------------------------------ */
+/* Band overlay + band detect                                          */
+/* ------------------------------------------------------------------ */
+
+let bandEstimateTimer: ReturnType<typeof setTimeout> | null = null;
+let lastScopeKey = "";
+
+/** Lazily computes the three-band analysis; cached until the next load. */
+function ensureBandAnalysis(): Promise<BandAnalysis | null> {
+  const s = store.state;
+  if (!s.source) return Promise.resolve(null);
+  if (s.bandAnalysis) return Promise.resolve(s.bandAnalysis);
+  const source = s.source;
+  store.setStatus("Analyzing bands…");
+  return new Promise((resolve) => {
+    // Let the status paint before the synchronous filter pass starts.
+    setTimeout(() => {
+      const analysis = analyzeBands(source.data, source.sampleRate);
+      store.update({ bandAnalysis: analysis, bandEstimate: null });
+      resolve(analysis);
+    }, 30);
+  });
+}
+
+/** Detection range: the blue time range if one exists, else the whole track. */
+function bandRange(): { fromTick: number; toTick: number; hasRange: boolean } {
+  const s = store.state;
+  if (s.selectionStartTick !== null && s.selectionEndTick !== null) {
+    const a = Math.min(s.selectionStartTick, s.selectionEndTick);
+    const b = Math.max(s.selectionStartTick, s.selectionEndTick);
+    return { fromTick: a, toTick: b, hasRange: true };
+  }
+  return { fromTick: 0, toTick: MAX_TICKS - 1, hasRange: false };
+}
+
+function selectedBands(): BandName[] {
+  const s = store.state;
+  return BAND_NAMES.filter((b) => s.bandDetectBands[b]);
+}
+
+function runBandDetect(analysis: BandAnalysis) {
+  const s = store.state;
+  const range = bandRange();
+  return detectBandCuts({
+    analysis,
+    bands: selectedBands(),
+    thresholdDb: s.bandThresholdDb,
+    grid: s.grid,
+    minGapTicks: s.bandMinGapUnits * s.grid,
+    fromTick: range.fromTick,
+    toTick: range.toTick,
+    base: { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source!.sampleRate },
+    existing: new Set(markerTicks(s.doc.markers)),
+    snap: s.bandSnap,
+  });
+}
+
+/** Syncs the Band detect panel (scope line, estimate, chips, button state). */
+function updateBandPanel(): void {
+  const s = store.state;
+  const scope = el<HTMLDivElement>("band-scope");
+  const range = bandRange();
+  if (range.hasRange && s.source) {
+    const m0 = Math.floor(range.fromTick / 192) + 1;
+    const m1 = Math.floor(range.toTick / 192) + 1;
+    const seconds =
+      ((range.toTick - range.fromTick) * s.source.sampleRate * 5) / (4 * s.doc.bpm) / s.source.sampleRate;
+    scope.textContent =
+      getLanguage() === "zh"
+        ? `范围：选区 M${String(m0).padStart(3, "0")}–M${String(m1).padStart(3, "0")}（${seconds.toFixed(2)}s）·仅此范围`
+        : `Scope: selection M${String(m0).padStart(3, "0")}–M${String(m1).padStart(3, "0")} (${seconds.toFixed(2)}s) · only this range`;
+    scope.classList.add("active");
+  } else {
+    scope.textContent =
+      getLanguage() === "zh" ? "范围：整轨（未选择区域）" : "Scope: whole track (no range selection)";
+    scope.classList.remove("active");
+  }
+  const estimate = el<HTMLSpanElement>("band-estimate");
+  if (s.bandEstimate === null) estimate.textContent = "";
+  else if (s.bandEstimate > 999) estimate.textContent = "+999+";
+  else estimate.textContent = `+${s.bandEstimate}`;
+  const button = el<HTMLButtonElement>("btn-band-detect");
+  button.disabled = !s.source || s.bandBusy || selectedBands().length === 0;
+  button.textContent = s.bandBusy ? "Detecting…" : "Detect";
+  for (const chip of document.querySelectorAll<HTMLButtonElement>(".band-chip")) {
+    chip.classList.toggle("on", s.bandDetectBands[chip.dataset.band as BandName]);
+    chip.setAttribute("aria-pressed", String(s.bandDetectBands[chip.dataset.band as BandName]));
+  }
+}
+
+function scheduleBandEstimate(): void {
+  if (bandEstimateTimer) clearTimeout(bandEstimateTimer);
+  const s = store.state;
+  if (!s.source) {
+    store.update({ bandEstimate: null });
+    return;
+  }
+  bandEstimateTimer = setTimeout(() => {
+    bandEstimateTimer = null;
+    void ensureBandAnalysis().then((analysis) => {
+      if (!analysis) return;
+      const result = runBandDetect(analysis);
+      store.update({ bandEstimate: result.ticks.length });
+      updateBandPanel();
+    });
+  }, 150);
+}
+
+async function bandDetect(): Promise<void> {
+  const s = store.state;
+  if (!s.source) {
+    store.setStatus("Band detect needs a loaded source", true);
+    return;
+  }
+  if (!selectedBands().length) {
+    store.setStatus("Band detect: select at least one band", true);
+    return;
+  }
+  store.update({ bandBusy: true });
+  updateBandPanel();
+  store.setStatus("Detecting band onsets…");
+  try {
+    const analysis = await ensureBandAnalysis();
+    if (!analysis) return;
+    const threshold = store.state.bandThresholdDb;
+    const result = runBandDetect(analysis);
+    const added = store.state.doc.addTicks(result.ticks);
+    const range = bandRange();
+    const label = selectedBands()
+      .map((b) => b[0].toUpperCase() + b.slice(1))
+      .join("/");
+    if (added === 0) {
+      store.setStatus(`Band detect: 0 cuts · no rise ≥ +${threshold.toFixed(1)} dB`);
+    } else {
+      const parts = [`Band detect: +${added} cuts (${label} ≥ +${threshold.toFixed(1)} dB)`];
+      if (range.hasRange) parts.push("in selection");
+      parts.push("· 1 undo step");
+      const notes: string[] = [];
+      if (result.skippedGap) notes.push(`${result.skippedGap} skipped by min gap`);
+      if (result.existing) notes.push(`${result.existing} already existed`);
+      store.setStatus(parts.join(" ") + (notes.length ? ` · ${notes.join(" · ")}` : ""));
+    }
+    store.update({ bandEstimate: null });
+    redraw();
+  } finally {
+    store.update({ bandBusy: false });
+    updateBandPanel();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Tap calibration                                                     */
+/* ------------------------------------------------------------------ */
+
+let calibrationTimer: number | null = null;
+
+function syncTapOffsetDisplay(): void {
+  const ms = store.state.tapOffsetMs;
+  el<HTMLSpanElement>("tap-offset").textContent =
+    ms === 0 ? "" : `Offset ${ms > 0 ? "+" : ""}${ms} ms`;
+}
+
+function updateCalibrationUi(): void {
+  el<HTMLSpanElement>("calibration-beat").textContent = String(calibrator.elapsedBeats());
+  el<HTMLSpanElement>("calibration-taps").textContent = String(calibrator.tapCount());
+}
+
+/** Live statistics while the click train keeps running. */
+function renderLiveCalibration(): void {
+  const result = calibrator.currentResult();
+  const box = el<HTMLDivElement>("calibration-result");
+  box.dataset.median = String(result.medianMs);
+  box.dataset.matched = String(result.matched);
+  const apply = el<HTMLButtonElement>("btn-calibration-apply");
+  if (result.matched === 0) {
+    box.classList.add("hidden");
+    apply.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  const sign = result.medianMs >= 0 ? "+" : "";
+  box.textContent =
+    `Taps ${result.matched}/${result.total} matched · median ${sign}${result.medianMs.toFixed(1)} ms · ` +
+    `mean ${result.meanMs.toFixed(1)} ms · ±${result.stdMs.toFixed(1)} ms`;
+  apply.classList.remove("hidden");
+}
+
+function closeCalibration(): void {
+  calibrator.cancel();
+  if (calibrationTimer !== null) {
+    window.clearInterval(calibrationTimer);
+    calibrationTimer = null;
+  }
+  el<HTMLDivElement>("calibration-modal").classList.add("hidden");
+  store.setStatus("Calibration closed");
+}
+
+function finishCalibration(): void {
+  if (calibrationTimer !== null) {
+    window.clearInterval(calibrationTimer);
+    calibrationTimer = null;
+  }
+  if (!calibrator.isActive()) return;
+  const result = calibrator.finish();
+  const box = el<HTMLDivElement>("calibration-result");
+  box.classList.remove("hidden");
+  box.dataset.median = String(result.medianMs);
+  box.dataset.matched = String(result.matched);
+  if (result.matched === 0) {
+    box.textContent = `No taps matched (${result.total} tap(s) recorded) — restart and tap on the clicks.`;
+    el<HTMLButtonElement>("btn-calibration-apply").classList.add("hidden");
+  } else {
+    const sign = result.medianMs >= 0 ? "+" : "";
+    box.textContent =
+      `Final: ${result.matched}/${result.total} taps · median ${sign}${result.medianMs.toFixed(1)} ms · ` +
+      `mean ${result.meanMs.toFixed(1)} ms · ±${result.stdMs.toFixed(1)} ms`;
+    el<HTMLButtonElement>("btn-calibration-apply").classList.remove("hidden");
+  }
+  updateCalibrationUi();
+  store.setStatus("Tap calibration finished — Apply or Restart");
+}
+
+function startCalibration(): void {
+  if (!store.state.source) {
+    store.setStatus("Load a source first: calibration runs on the audio clock", true);
+    return;
+  }
+  transport.stop();
+  el<HTMLDivElement>("calibration-modal").classList.remove("hidden");
+  el<HTMLSpanElement>("calibration-bpm").textContent = store.state.doc.bpm.toFixed(2);
+  el<HTMLDivElement>("calibration-result").classList.add("hidden");
+  el<HTMLButtonElement>("btn-calibration-apply").classList.add("hidden");
+  void transport.getAudioContext().resume();
+  // Continuous mode: clicks run until Finish/Close; the timer keeps the
+  // 2-second look-ahead scheduler fed and refreshes the live statistics.
+  calibrator.start(store.state.doc.bpm);
+  updateCalibrationUi();
+  if (calibrationTimer !== null) window.clearInterval(calibrationTimer);
+  calibrationTimer = window.setInterval(() => {
+    calibrator.ensureScheduled();
+    updateCalibrationUi();
+    renderLiveCalibration();
+  }, 50);
+  store.setStatus("Tap calibration: tap Enter / , / . on the clicks — Finish when stable");
+}
+
 // Single render path for the status bar: every store.setStatus (from actions,
 // interactions, transport) flows through the subscription into the DOM.
 let lastRenderedStatus = "";
-let lastRenderedError: boolean | null = null;
-store.subscribe(() => {
+let lastRenderedError: boolean | null = null;store.subscribe(() => {
   const s = store.state;
   if (s.statusText !== lastRenderedStatus || s.isError !== lastRenderedError) {
     lastRenderedStatus = s.statusText;
     lastRenderedError = s.isError;
     const bar = el<HTMLElement>("status-bar");
     bar.classList.toggle("error", s.isError);
-    el<HTMLSpanElement>("status-main").textContent = s.statusText;
+    el<HTMLSpanElement>("status-main").textContent = translateStatus(s.statusText);
   }
   updateCommandStates();
+  // A change of the blue time range re-scopes the band-detect estimate.
+  const scopeKey = `${s.selectionStartTick}:${s.selectionEndTick}`;
+  if (scopeKey !== lastScopeKey) {
+    lastScopeKey = scopeKey;
+    if (s.source) scheduleBandEstimate();
+  }
 });
 
 /* ------------------------------------------------------------------ */
@@ -190,6 +513,9 @@ function applyLoadedAudio(info: {
     return out;
   });
   const peaks = buildPeakCache(data);
+  // Export prefix follows the source name (the .wos/BMSE/wav writers all take
+  // store.baseName); the old default "slice" only applies before any load.
+  const baseName = info.name.replace(/[^\w.-]/g, "_") || "slice";
   store.update({
     phase: "ready",
     source: {
@@ -203,8 +529,11 @@ function applyLoadedAudio(info: {
     },
     peaks,
     playheadSample: 0,
+    baseName,
+    bandAnalysis: null,
+    bandEstimate: null,
   });
-  el<HTMLInputElement>("input-basename").value = info.name.replace(/[^\w.-]/g, "_");
+  el<HTMLInputElement>("input-basename").value = baseName;
   el<HTMLDivElement>("empty-hint").classList.add("hidden");
   el<HTMLSpanElement>("src-name").textContent = info.name;
   el<HTMLSpanElement>("src-format").textContent = `PCM 16-bit internal · ${info.channels}ch`;
@@ -439,25 +768,63 @@ const actions: KeyActions = {
     transport.previewSlice(true);
     redraw();
   },
-  playPauseOrBreakPoint(): void {
-    if (transport.isPlaying()) {
-      // Break point: drop a marker at the current playhead position.
-      const s = store.state;
-      const tick = Math.max(
-        0,
-        Math.min(
-          MAX_TICKS - 1,
-          Math.round((s.playheadSample * 4 * s.doc.bpm) / (s.source!.sampleRate * 5) - s.doc.shift)
-        )
-      );
-      store.update({ cursorTick: tick });
-      store.state.doc.setMarker(tick, true);
-      store.setStatus(`Break point at tick ${tick}`);
-    } else {
-      transport.togglePlayPause();
-      store.setStatus(transport.isPlaying() ? "Playing" : "Paused");
-    }
+  // Space: play/pause in every state. Never places a marker.
+  playPause(): void {
+    if (calibrator.isActive()) return; // calibration owns playback while open
+    transport.togglePlayPause();
+    store.setStatus(transport.isPlaying() ? "Playing" : "Paused");
     redraw();
+  },
+  /**
+   * Enter: break point without touching the play state. Playing -> marker at
+   * the tick computed back from the playhead sample; stopped -> marker at the
+   * cursor and the cursor + playhead sample synced to the final position.
+   * Both branches resolve through resolveBreakpointTick: with Snap on the
+   * marker aligns to the current grid; holding Alt (bypassSnap) drops it at
+   * the exact position instead.
+   */
+  placeBreakpoint(bypassSnap = false): void {
+    // While the calibration modal is open, Enter is a tap, never a marker.
+    if (calibrator.isActive()) {
+      calibrator.tap();
+      updateCalibrationUi();
+      return;
+    }
+    const s = store.state;
+    if (!s.source) {
+      store.setStatus("Load a source before placing a break point", true);
+      return;
+    }
+    const base = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate };
+    // Tap calibration: the measured latency is subtracted so a marker lands on
+    // the sound the user reacted to, not on where the transport had already
+    // advanced to. Only playback placement is affected (stopped = cursor).
+    const compensation = transport.isPlaying()
+      ? latencySamples(s.tapOffsetMs, s.source.sampleRate)
+      : 0;
+    const rawTick = transport.isPlaying()
+      ? sampleToTickNearest(Math.max(0, transport.currentSample() - compensation), base)
+      : s.cursorTick;
+    const tick = resolveBreakpointTick(rawTick, s.snap, s.grid, bypassSnap);
+    if (transport.isPlaying()) store.update({ cursorTick: tick });
+    // Stopped: the cursor follows the resolved tick too, so it keeps pointing
+    // at the marker when snapping moved it off the raw cursor position.
+    else
+      store.update({
+        cursorTick: tick,
+        playheadSample: Math.min(s.source.length, tickToSampleExport(tick, base)),
+      });
+    // resolveBreakpointTick never returns an out-of-range tick, so a false
+    // return from setMarker means this tick already holds the marker.
+    if (s.doc.setMarker(tick, true)) store.setStatus(`Break point at tick ${tick}`);
+    else store.setStatus(`Break point already at tick ${tick}`);
+    redraw();
+  },
+  rateDown(): void {
+    applyRateStep(-1);
+  },
+  rateUp(): void {
+    applyRateStep(1);
   },
   exportAll,
   exportSliceAtCursor,
@@ -505,8 +872,7 @@ const actions: KeyActions = {
     if (!s.selectedTicks.length) {
       store.setStatus("Quantize disabled: select markers first (box-select or click)", true);
       return;
-    }
-    if (!s.doc.quantizeSelection(s.selectedTicks, s.grid)) {
+    }    if (!s.doc.quantizeSelection(s.selectedTicks, s.grid)) {
       store.setStatus("Selected markers already on grid");
       return;
     }
@@ -519,6 +885,21 @@ const actions: KeyActions = {
     ];
     store.update({ selectedTicks: snapped });
     store.setStatus(`Quantized selected marker(s) to grid ${s.grid}`);
+    redraw();
+  },
+  clearSelection(): void {
+    // Esc closes the calibration modal first, then cancels gestures, then
+    // clears the selection.
+    if (!el<HTMLDivElement>("calibration-modal").classList.contains("hidden")) {
+      closeCalibration();
+      return;
+    }
+    if (interactions.cancelGesture()) {
+      store.setStatus("Gesture cancelled");
+      redraw();
+      return;
+    }
+    store.update({ selectedTicks: [], selectionStartTick: null, selectionEndTick: null });
     redraw();
   },
   measureCopy(): void {
@@ -588,9 +969,96 @@ function wireDom(): void {
   });
   el<HTMLSelectElement>("select-grid").addEventListener("change", (e) => {
     store.update({ grid: Number((e.target as HTMLSelectElement).value) });
+    // Grid affects both the snap target and the min-gap of band detection.
+    scheduleBandEstimate();
   });
 
-  el<HTMLButtonElement>("btn-play").addEventListener("click", () => actions.playPauseOrBreakPoint());
+  // Band overlay: display-only toggle, analysis computed lazily on first use.
+  el<HTMLButtonElement>("btn-bands").addEventListener("click", (e) => {
+    const next = !store.state.bandsVisible;
+    store.update({ bandsVisible: next });
+    const button = e.currentTarget as HTMLButtonElement;
+    button.classList.toggle("on", next);
+    button.setAttribute("aria-pressed", String(next));
+    if (next) {
+      void ensureBandAnalysis().then((analysis) => {
+        store.setStatus(
+          analysis ? "Band overlay on (Low/Mid/High)" : "Band overlay needs a loaded source",
+          !analysis
+        );
+        redraw();
+      });
+    } else {
+      store.setStatus("Band overlay off");
+      redraw();
+    }
+  });
+
+  for (const chip of document.querySelectorAll<HTMLButtonElement>(".band-chip")) {
+    chip.addEventListener("click", () => {
+      const band = chip.dataset.band as BandName;
+      const current = store.state.bandDetectBands;
+      const next = { ...current, [band]: !current[band] };
+      if (!next.low && !next.mid && !next.high) {
+        store.setStatus("Band detect: keep at least one band selected", true);
+        return;
+      }
+      store.update({ bandDetectBands: next });
+      updateBandPanel();
+      scheduleBandEstimate();
+    });
+  }
+  el<HTMLInputElement>("input-band-threshold").addEventListener("change", (e) => {
+    const input = e.target as HTMLInputElement;
+    const raw = readNumericInput(input, store.state.bandThresholdDb);
+    const value = Math.max(1, Math.min(24, Math.round(raw * 2) / 2));
+    store.update({ bandThresholdDb: value });
+    input.value = value.toFixed(1);
+    updateBandPanel();
+    scheduleBandEstimate();
+  });
+  el<HTMLSelectElement>("select-band-gap").addEventListener("change", (e) => {
+    store.update({ bandMinGapUnits: Number((e.target as HTMLSelectElement).value) });
+    updateBandPanel();
+    scheduleBandEstimate();
+  });
+  el<HTMLInputElement>("check-band-snap").addEventListener("change", (e) => {
+    store.update({ bandSnap: (e.target as HTMLInputElement).checked });
+    updateBandPanel();
+    scheduleBandEstimate();
+  });
+  el<HTMLButtonElement>("btn-band-detect").addEventListener("click", () => void bandDetect());
+
+  // Tap calibration modal.
+  el<HTMLButtonElement>("btn-calibrate").addEventListener("click", () => startCalibration());
+  el<HTMLButtonElement>("btn-calibration-retry").addEventListener("click", () => startCalibration());
+  el<HTMLButtonElement>("btn-calibration-finish").addEventListener("click", () => finishCalibration());
+  el<HTMLButtonElement>("btn-calibration-close").addEventListener("click", () => closeCalibration());
+  el<HTMLButtonElement>("btn-calibration-apply").addEventListener("click", () => {
+    const box = el<HTMLDivElement>("calibration-result");
+    const median = Number(box.dataset.median ?? "0");
+    const matched = Number(box.dataset.matched ?? "0");
+    if (!Number.isFinite(median) || matched === 0) return;
+    store.update({ tapOffsetMs: Math.round(median) });
+    syncTapOffsetDisplay();
+    store.setStatus(
+      `Tap offset applied: ${median >= 0 ? "+" : ""}${median.toFixed(1)} ms — Enter break points are compensated`
+    );
+  });
+
+  // UI language (EN / 中文), persisted in localStorage.
+  const languageSelect = el<HTMLSelectElement>("select-language");
+  languageSelect.value = getLanguage();
+  languageSelect.addEventListener("change", (e) => {
+    const lang = (e.target as HTMLSelectElement).value as Language;
+    setLanguage(lang);
+    el<HTMLSpanElement>("status-main").textContent = translateStatus(store.state.statusText);
+    updateBandPanel();
+  });
+
+  // Play button toggles playback ONLY — the break point moved to Enter, so a
+  // click during playback must never drop a marker.
+  el<HTMLButtonElement>("btn-play").addEventListener("click", () => actions.playPause());
   el<HTMLButtonElement>("btn-stop").addEventListener("click", () => {
     transport.stop();
     store.update({ playheadSample: 0 });
@@ -611,6 +1079,12 @@ function wireDom(): void {
     const v = Number((e.target as HTMLInputElement).value) / 100;
     store.update({ cueVolume: v });
     transport.setCueVolume(v);
+  });
+  el<HTMLSelectElement>("select-rate").addEventListener("change", (e) => {
+    const rate = Number((e.target as HTMLSelectElement).value);
+    transport.setRate(rate);
+    store.setStatus(`Playback rate: ${formatRate(rate)}`);
+    syncRateSelect();
   });
 
   el<HTMLInputElement>("input-bpm").addEventListener("change", (e) => {
@@ -769,11 +1243,28 @@ function wireDom(): void {
   });
 }
 
-/* Playhead animation + status sync loop. */
+/* Playhead animation + status sync loop. The viewport self-check runs on EVERY
+   frame (cheap: three reads already-laid-out properties): when the canvas
+   viewport moved on since the last paint the whole view repaints, so a resize
+   the ResizeObserver missed can never leave the old width on screen. While
+   scroll/zoom are otherwise unchanged this stays on the cheap overlay+readout
+   path; the frame after follow-scroll (or a zoom) moves scrollTick/pxPerTick
+   repaints ruler, waveform, overview and the scrollbar so the paged view is
+   visible with no stall. updateCutList is deliberately NOT called from the
+   playing branch: it rebuilds the DOM list on every call and markers cannot
+   change from scrolling. */
 function animate(): void {
   const s = store.state;
-  if (s.playing) {
-    view.drawOverlay(interactions.currentGhost());
+  if (viewportChanged()) {
+    redraw();
+  } else if (s.playing) {
+    if (s.scrollTick !== lastDrawnScrollTick || s.pxPerTick !== lastDrawnPxPerTick) {
+      redrawCanvases();
+      lastDrawnScrollTick = s.scrollTick;
+      lastDrawnPxPerTick = s.pxPerTick;
+    } else {
+      view.drawOverlay(interactions.currentGhost());
+    }
     updateReadout();
   }
   requestAnimationFrame(animate);
@@ -781,9 +1272,12 @@ function animate(): void {
 
 window.addEventListener("DOMContentLoaded", () => {
   try {
+    initLanguage();
+    applyStaticTranslations();
     wireDom();
     interactions.attach();
     transport.setCueVolume(store.state.cueVolume);
+    syncTapOffsetDisplay();
     redraw();
     animate();
   } catch (err) {

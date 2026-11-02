@@ -8,6 +8,7 @@ import { markerTicks } from "../core/wos.js";
 import { renderSlice } from "../core/slicer.js";
 import { sliceIndexAtOrBefore } from "../core/markers.js";
 import { tickToSampleExport, TimeBase } from "../core/timebase.js";
+import { PLAYBACK_RATES, DEFAULT_PLAYBACK_RATE } from "../core/rate.js";
 import { findCueCrossing } from "../core/cuecursor.js";
 import { CueSynth } from "./cue.js";
 import { Store } from "./store.js";
@@ -30,6 +31,11 @@ export class Transport {
 
   setCueVolume(v: number): void {
     this.cue.setVolume(v);
+  }
+
+  /** Shared AudioContext (tap calibration must use the same audio clock). */
+  getAudioContext(): AudioContext {
+    return this.ctx;
   }
 
   /** Rebuilds the playback AudioBuffer after (re)loading a source. */
@@ -65,6 +71,9 @@ export class Transport {
     void this.ctx.resume();
     const node = this.ctx.createBufferSource();
     node.buffer = this.playBuffer;
+    // Monitor rate from the store: it survives pause/stop, so every new node
+    // must pick it up (the rate is only applied to whole-track playback).
+    node.playbackRate.value = s.playbackRate;
     node.connect(this.ctx.destination);
     const offsetSamples = s.playheadSample;
     const when = 0;
@@ -127,8 +136,30 @@ export class Transport {
   currentSample(): number {
     const s = this.store.state;
     if (!s.playing || !s.source) return s.playheadSample;
-    const elapsed = (this.ctx.currentTime - this.startedAt) * s.source.sampleRate;
+    // Rate-aware anchor: startOffset + (now - startedAt) * rate * sampleRate.
+    // setRate() re-anchors both variables at every rate change, so this stays
+    // continuous across switches and the playhead never jumps.
+    const elapsed = (this.ctx.currentTime - this.startedAt) * s.playbackRate * s.source.sampleRate;
     return Math.min(s.source.length, this.startOffset + elapsed);
+  }
+
+  /**
+   * Sets the monitor rate. While playing, the playhead anchor is recomputed
+   * FIRST (startOffset = current sample, startedAt = now, both under the old
+   * rate) and only then does the store rate change; the running node's
+   * playbackRate is updated in place instead of restarting, so there is no
+   * audio glitch and the displayed position does not jump.
+   */
+  setRate(rate: number): void {
+    const s = this.store.state;
+    const valid = PLAYBACK_RATES.includes(rate);
+    const next = valid ? rate : DEFAULT_PLAYBACK_RATE;
+    if (s.playing && s.source && next !== s.playbackRate) {
+      this.startOffset = this.currentSample();
+      this.startedAt = this.ctx.currentTime;
+      if (this.playNode) this.playNode.playbackRate.value = next;
+    }
+    this.store.update({ playbackRate: next });
   }
 
   /** Preview: render the slice at/before the cursor with the export DSP. */
@@ -164,7 +195,11 @@ export class Transport {
     this.store.setStatus(`Preview slice ${String(index).padStart(3, "0")} (tick ${ticks[index]})`);
   }
 
-  /** Plays an already-rendered slice (int16 channels). */
+  /**
+   * Plays an already-rendered slice (int16 channels). Deliberately does NOT
+   * apply the monitor rate: slice preview (P / O) is auditioning the exported
+   * result and stays at 1x, independent of the whole-track playback rate.
+   */
   playRendered(channelsData: Int16Array[], sampleRate: number): void {
     this.stop();
     void this.ctx.resume();

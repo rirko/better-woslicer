@@ -8,7 +8,7 @@
  *  - all IPC handlers validate their arguments before touching the filesystem
  */
 
-import { app, BrowserWindow, ClipboardItem, clipboard, dialog, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, ClipboardItem, clipboard, dialog, ipcMain, Menu, nativeTheme } from "electron";
 import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
@@ -29,6 +29,14 @@ import { BMSE_CLIPBOARD_FORMAT_NAME, bmseBufferToText, bmseTextToBuffer } from "
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
+  // Dark window chrome: the default frame follows the (light) system theme
+  // and showed a white title strip. Forcing the dark native theme turns the
+  // title bar, the File/Edit/View/Help menu bar and the window controls dark.
+  // titleBarStyle "hidden" + titleBarOverlay was evaluated and rejected: on
+  // Windows it removes the native menu bar entirely, and none of
+  // setMenuBarVisibility(true), autoHideMenuBar: false or setMenu() bring it
+  // back — which broke the "native menus stay visible and usable" rule.
+  nativeTheme.themeSource = "dark";
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,

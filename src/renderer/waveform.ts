@@ -8,7 +8,9 @@
 
 import { markerTicks } from "../core/wos.js";
 import { MEASURE_TICKS, MAX_TICKS, tickToSampleExport } from "../core/timebase.js";
-import { peakRange } from "../core/peaks.js";
+import { peakRange, PeakCache } from "../core/peaks.js";
+import { BAND_DRAW_MIN_ABS } from "../core/bands.js";
+import { gridLineTicks, measureLabelStep } from "../core/gridlines.js";
 import { Store } from "./store.js";
 
 export const RULER_HEIGHT = 28;
@@ -29,6 +31,12 @@ const COLORS = {
   accent: "#F2B24C",
   cue: "#58C7E8",
   danger: "#FF6B6B",
+  /* Band overlay palette (frozen spec: violet / green / pink). */
+  bandLow: "rgba(177, 140, 255, 0.85)",
+  bandMid: "rgba(168, 212, 106, 0.75)",
+  bandHigh: "rgba(240, 143, 180, 0.85)",
+  waveDim: "rgba(95, 167, 157, 0.35)",
+  waveBrightDim: "rgba(143, 227, 214, 0.35)",
 };
 
 function setupCanvas(canvas: HTMLCanvasElement, cssWidth: number, cssHeight: number): CanvasRenderingContext2D {
@@ -60,46 +68,54 @@ export class TimelineView {
     return scrollTick + x / pxPerTick;
   }
 
+  /**
+   * Live viewport width, measured every draw. Deliberately NOT taken from
+   * each canvas's own clientWidth: setupCanvas pins that with an inline
+   * style, so a canvas measuring itself would stay at its previous size
+   * after a window resize (the "right side stays black" bug). Ruler, wave,
+   * overlay and overview all span the same column as the wave wrap.
+   */
+  private viewportWidth(): number {
+    return (this.wave.parentElement as HTMLElement).clientWidth;
+  }
+
   drawRuler(): void {
-    const width = this.ruler.clientWidth;
+    const width = this.viewportWidth();
     const ctx = setupCanvas(this.ruler, width, RULER_HEIGHT);
-    const { scrollTick, pxPerTick } = this.store.state;
+    const s = this.store.state;
+    const { scrollTick, pxPerTick } = s;
     ctx.fillStyle = COLORS.panel;
     ctx.fillRect(0, 0, width, RULER_HEIGHT);
 
-    // Choose a tick spacing that yields >= 60px between labels.
-    const candidates = [1, 2, 4, 8, 12, 16, 24, 32, 48, 96, 192, 384, 768, 1536, 3072, 6144, 12288, 24576];
-    let spacing = candidates[candidates.length - 1];
-    for (const c of candidates) {
-      if (c * pxPerTick >= 60) {
-        spacing = c;
-        break;
-      }
-    }
-
     ctx.font = "10px Consolas, monospace";
     ctx.textBaseline = "middle";
-    const first = Math.floor(scrollTick / spacing) * spacing;
-    for (let tick = first; tick <= scrollTick + width / pxPerTick; tick += spacing) {
-      if (tick < 0 || tick > MAX_TICKS) continue;
-      const x = this.tickToX(tick, scrollTick, pxPerTick);
-      const isMeasure = tick % MEASURE_TICKS === 0;
-      ctx.strokeStyle = isMeasure ? COLORS.text2 : COLORS.text3;
+
+    // Ruler lines are exactly the grid/snap positions (shared gridLineTicks):
+    // grid multiples, measure lines highlighted; below 2px per cell only the
+    // measure lines remain. Labels may skip measures (interval doubling) but
+    // never leave the real measure positions.
+    const labelStep = measureLabelStep(pxPerTick * MEASURE_TICKS);
+    const toTick = scrollTick + width / pxPerTick;
+    for (const line of gridLineTicks(scrollTick, toTick, s.grid, pxPerTick)) {
+      const x = this.tickToX(line.tick, scrollTick, pxPerTick);
+      ctx.strokeStyle = line.isMeasure ? COLORS.text2 : COLORS.text3;
       ctx.beginPath();
-      ctx.moveTo(x + 0.5, isMeasure ? 10 : 18);
+      ctx.moveTo(x + 0.5, line.isMeasure ? 10 : 18);
       ctx.lineTo(x + 0.5, RULER_HEIGHT);
       ctx.stroke();
-      if (isMeasure) {
-        ctx.fillStyle = COLORS.text2;
-        ctx.fillText(String(Math.floor(tick / MEASURE_TICKS) + 1).padStart(3, "0"), x + 3, 12);
+      if (line.isMeasure) {
+        const measure = line.tick / MEASURE_TICKS;
+        if (measure % labelStep === 0) {
+          ctx.fillStyle = COLORS.text2;
+          ctx.fillText(String(measure + 1).padStart(3, "0"), x + 3, 12);
+        }
       }
     }
   }
 
   drawWave(): void {
-    const wrap = this.wave.parentElement as HTMLElement;
-    const width = wrap.clientWidth;
-    const height = wrap.clientHeight;
+    const width = this.viewportWidth();
+    const height = (this.wave.parentElement as HTMLElement).clientHeight;
     const ctx = setupCanvas(this.wave, width, height);
     const s = this.store.state;
     ctx.fillStyle = COLORS.app;
@@ -136,26 +152,17 @@ export class TimelineView {
       ctx.lineTo(width, mid + 0.5);
       ctx.stroke();
 
-      // Grid lines per measure / grid division.
-      const measureStart = Math.floor(fromTick / MEASURE_TICKS) * MEASURE_TICKS;
-      for (let tick = measureStart; tick <= toTick + MEASURE_TICKS; tick += MEASURE_TICKS) {
-        if (tick < 0 || tick > MAX_TICKS) continue;
-        const x = this.tickToX(tick, scrollTick, pxPerTick);
-        ctx.strokeStyle = COLORS.surface2;
+      // Grid lines: the exact same tick set the ruler draws and the snap
+      // resolves to — grid multiples only, collapsing to measure-only below
+      // 2px per cell. Ruler, grid and snap therefore stay pixel-identical
+      // at every zoom.
+      for (const line of gridLineTicks(fromTick, toTick, s.grid, pxPerTick)) {
+        const x = this.tickToX(line.tick, scrollTick, pxPerTick);
+        ctx.strokeStyle = line.isMeasure ? COLORS.surface2 : COLORS.surface1;
         ctx.beginPath();
         ctx.moveTo(x + 0.5, laneTop);
         ctx.lineTo(x + 0.5, laneTop + laneHeight);
         ctx.stroke();
-        if (pxPerTick * s.grid > 14) {
-          for (let g = s.grid; g < MEASURE_TICKS; g += s.grid) {
-            const gx = this.tickToX(tick + g, scrollTick, pxPerTick);
-            ctx.strokeStyle = COLORS.surface1;
-            ctx.beginPath();
-            ctx.moveTo(gx + 0.5, laneTop);
-            ctx.lineTo(gx + 0.5, laneTop + laneHeight);
-            ctx.stroke();
-          }
-        }
       }
 
       // Waveform from the peak cache (never rescans the source).
@@ -163,16 +170,36 @@ export class TimelineView {
       // the waveform stays aligned with markers at any BPM/shift.
       const step = Math.max(1, Math.round(1 / pxPerTick));
       const timeBase = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate };
-      ctx.fillStyle = c === 0 ? COLORS.wave : COLORS.waveBright;
+      const bandsOn = s.bandsVisible && s.bandAnalysis !== null;
+      ctx.fillStyle = bandsOn
+        ? c === 0
+          ? COLORS.waveDim
+          : COLORS.waveBrightDim
+        : c === 0
+          ? COLORS.wave
+          : COLORS.waveBright;
       for (let x = 0; x < width; x += step) {
         const t0 = this.xToTick(x, scrollTick, pxPerTick);
         const t1 = this.xToTick(x + step, scrollTick, pxPerTick);
         const f0 = tickToSampleExport(Math.floor(t0), timeBase);
         const f1 = tickToSampleExport(Math.max(Math.floor(t0) + 1, Math.ceil(t1)), timeBase);
+        // Outside the source: draw nothing (otherwise the 1px minimum-height
+        // fill paints a fake zero line past the end of the audio).
+        if (f1 <= 0 || f0 >= s.source.length) continue;
         const range = peakRange(s.peaks, s.source.length, f0, Math.max(f0 + 1, f1));
         const yMin = mid - (range.max / 32768) * half;
         const yMax = mid - (range.min / 32768) * half;
         ctx.fillRect(x, yMin, Math.max(1, step), Math.max(1, yMax - yMin));
+      }
+
+      // Band overlay: envelope polylines for low / mid / high, drawn in the
+      // same lane (never a separate track). Marker/selection/playhead stay on
+      // top because this block runs before those layers.
+      if (bandsOn) {
+        const analysis = s.bandAnalysis!;
+        this.drawBandEnvelope(ctx, analysis.low.peaks[c], COLORS.bandLow, 1, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, step);
+        this.drawBandEnvelope(ctx, analysis.mid.peaks[c], COLORS.bandMid, 1, [4, 2], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, step);
+        this.drawBandEnvelope(ctx, analysis.high.peaks[c], COLORS.bandHigh, 1.25, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, step);
       }
     }
 
@@ -209,11 +236,59 @@ export class TimelineView {
     }
   }
 
+  /**
+   * One band's envelope: two polylines (upper + lower) over the lane, with
+   * gaps where the band sits below -60 dBFS so three bands never merge into a
+   * single blob on the zero line.
+   */
+  private drawBandEnvelope(
+    ctx: CanvasRenderingContext2D,
+    peaks: PeakCache,
+    color: string,
+    lineWidth: number,
+    dash: number[],
+    width: number,
+    mid: number,
+    half: number,
+    scrollTick: number,
+    pxPerTick: number,
+    timeBase: { bpm: number; shift: number; sampleRate: number },
+    sourceLength: number,
+    step: number
+  ): void {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.setLineDash(dash);
+    for (const upper of [true, false]) {
+      ctx.beginPath();
+      let drawing = false;
+      for (let x = 0; x <= width; x += step) {
+        const t0 = this.xToTick(x, scrollTick, pxPerTick);
+        const t1 = this.xToTick(x + step, scrollTick, pxPerTick);
+        const f0 = tickToSampleExport(Math.floor(t0), timeBase);
+        const f1 = tickToSampleExport(Math.max(Math.floor(t0) + 1, Math.ceil(t1)), timeBase);
+        const range = peakRange(peaks, sourceLength, f0, Math.max(f0 + 1, f1));
+        const loud = Math.max(Math.abs(range.min), Math.abs(range.max)) >= BAND_DRAW_MIN_ABS;
+        if (!loud) {
+          drawing = false;
+          continue;
+        }
+        const value = upper ? range.max : range.min;
+        const y = mid - (value / 32768) * half;
+        if (drawing) ctx.lineTo(x, y);
+        else {
+          ctx.moveTo(x, y);
+          drawing = true;
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
   /** Animated overlay: playhead, in-progress box selection, ghost previews. */
-  drawOverlay(ghost?: { ticks: number[]; delta: number }): void {
-    const wrap = this.overlay.parentElement as HTMLElement;
-    const width = wrap.clientWidth;
-    const height = wrap.clientHeight;
+  drawOverlay(ghost?: { ticks: number[]; delta: number }): void {    const width = this.viewportWidth();
+    const height = (this.overlay.parentElement as HTMLElement).clientHeight;
     const ctx = setupCanvas(this.overlay, width, height);
     const s = this.store.state;
     ctx.clearRect(0, 0, width, height);
@@ -252,23 +327,31 @@ export class TimelineView {
   }
 
   drawOverview(): void {
-    const width = this.overview.clientWidth;
+    const width = this.viewportWidth();
     const ctx = setupCanvas(this.overview, width, OVERVIEW_HEIGHT);
     const s = this.store.state;
     ctx.fillStyle = COLORS.panel;
     ctx.fillRect(0, 0, width, OVERVIEW_HEIGHT);
     if (!s.source || !s.peaks) return;
 
+    // The overview uses the SAME axis as the main timeline: ticks 0..MAX, not
+    // audio 0..length. Drawing it in audio percentages used to stretch the
+    // file across the full strip, so the viewport rectangle (which is in tick
+    // space) pointed at the wrong audio — "the preview does not match".
     const pxPerTickOverview = width / MAX_TICKS;
     const lanes = s.source.channels;
     const laneHeight = OVERVIEW_HEIGHT / lanes;
+    const timeBase = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate };
     for (let c = 0; c < lanes; c++) {
       const mid = c * laneHeight + laneHeight / 2;
       const half = laneHeight / 2 - 2;
       ctx.fillStyle = COLORS.wave;
       for (let x = 0; x < width; x += 2) {
-        const f0 = (x / width) * s.source.length;
-        const f1 = ((x + 2) / width) * s.source.length;
+        const t0 = (x / width) * MAX_TICKS;
+        const t1 = ((x + 2) / width) * MAX_TICKS;
+        const f0 = tickToSampleExport(Math.floor(t0), timeBase);
+        const f1 = tickToSampleExport(Math.max(Math.floor(t0) + 1, Math.ceil(t1)), timeBase);
+        if (f1 <= 0 || f0 >= s.source.length) continue;
         const range = peakRange(s.peaks, s.source.length, f0, Math.max(f0 + 1, f1));
         const yMin = mid - (range.max / 32768) * half;
         const yMax = mid - (range.min / 32768) * half;
@@ -276,9 +359,9 @@ export class TimelineView {
       }
     }
 
-    // Viewport indicator.
-    const viewX = this.store.state.scrollTick * pxPerTickOverview;
-    const viewW = (this.wave.clientWidth / this.store.state.pxPerTick) * pxPerTickOverview;
+    // Viewport indicator (tick space — now the same space as the waveform).
+    const viewX = s.scrollTick * pxPerTickOverview;
+    const viewW = (width / s.pxPerTick) * pxPerTickOverview;
     ctx.fillStyle = "rgba(242, 178, 76, 0.18)";
     ctx.fillRect(viewX, 0, Math.max(2, viewW), OVERVIEW_HEIGHT);
     ctx.strokeStyle = COLORS.accent;

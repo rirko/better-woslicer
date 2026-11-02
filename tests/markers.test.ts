@@ -9,10 +9,10 @@ function docWith(ticks: number[]): MarkerDoc {
   return doc;
 }
 
-test("setting a marker twice is idempotent (Space break-point de-duplication)", () => {
+test("setting a marker twice is idempotent (Enter break-point de-duplication)", () => {
   const doc = new MarkerDoc();
   assert.ok(doc.setMarker(384, true));
-  assert.ok(!doc.setMarker(384, true)); // second Space at same playhead: no change
+  assert.ok(!doc.setMarker(384, true)); // second Enter at the same position: no change
   assert.deepEqual(doc.ticks(), [384]);
 });
 
@@ -138,6 +138,56 @@ test("a new edit clears the redo stack", () => {
   assert.deepEqual(doc.ticks(), [2]);
 });
 
+test("addTicks batches into ONE undo step (paint / band detect)", () => {
+  const doc = new MarkerDoc();
+  assert.equal(doc.addTicks([10, 20, 30]), 3);
+  assert.deepEqual(doc.ticks(), [10, 20, 30]);
+  assert.ok(doc.undo());
+  assert.deepEqual(doc.ticks(), [], "one undo removes the whole batch");
+  assert.ok(doc.redo());
+  assert.deepEqual(doc.ticks(), [10, 20, 30]);
+});
+
+test("addTicks only counts newly set ticks and never pushes an empty undo", () => {
+  const doc = docWith([10]);
+  assert.equal(doc.addTicks([10, 20]), 1);
+  assert.equal(doc.addTicks([20]), 0);
+  assert.deepEqual(doc.ticks(), [10, 20]);
+  doc.undo();
+  assert.deepEqual(doc.ticks(), [10]);
+});
+
+test("removeTicks batches into ONE undo step (right-button erase)", () => {
+  const doc = docWith([5, 15, 25, 40]);
+  assert.equal(doc.removeTicks([5, 15, 25]), 3);
+  assert.deepEqual(doc.ticks(), [40]);
+  assert.ok(doc.undo());
+  assert.deepEqual(doc.ticks(), [5, 15, 25, 40]);
+});
+
+test("commitSnapshot pushes only when the bitmap actually changed", () => {
+  const doc = new MarkerDoc();
+  const before = doc.snapshot();
+  assert.equal(doc.commitSnapshot(before), false, "no change -> no undo entry");
+  assert.ok(!doc.canUndo());
+
+  doc.markers[7] = 1;
+  assert.equal(doc.commitSnapshot(before), true);
+  assert.deepEqual(doc.ticks(), [7]);
+  assert.ok(doc.undo());
+  assert.deepEqual(doc.ticks(), []);
+});
+
+test("restoreSnapshot reverts a cancelled gesture without touching undo", () => {
+  const doc = docWith([100]);
+  const before = doc.snapshot();
+  doc.markers[200] = 1;
+  doc.markers[100] = 0;
+  doc.restoreSnapshot(before);
+  assert.deepEqual(doc.ticks(), [100]);
+  assert.ok(!doc.canUndo(), "cancelling a gesture must not add an undo step");
+});
+
 test("shiftAll moves the whole map (7/8 semantics) and drops out-of-range markers", () => {
   const doc = docWith([0, 100, MAX_TICKS - 1]);
   doc.shiftAll(1);
@@ -147,7 +197,7 @@ test("shiftAll moves the whole map (7/8 semantics) and drops out-of-range marker
   assert.deepEqual(doc.ticks(), [99]);
 });
 
-test("sliceIndexAtOrBefore finds the slice under the cursor (P/Enter preview)", () => {
+test("sliceIndexAtOrBefore finds the slice under the cursor (P preview)", () => {
   const ticks = [384, 408, 7944];
   assert.equal(sliceIndexAtOrBefore(ticks, 500), 1);
   assert.equal(sliceIndexAtOrBefore(ticks, 384), 0);

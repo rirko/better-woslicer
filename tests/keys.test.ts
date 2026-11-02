@@ -1,11 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveAction, type FocusKind } from "../src/renderer/keys.js";
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
+import { GRID_CYCLE, resolveAction, handleKeyDown, KeyActions, FocusKind } from "../src/renderer/keys.js";
+import { Store } from "../src/renderer/store.js";
 
 const WAVE: FocusKind = "other";
 
-test("Space maps to play/pause or break-point ONLY on the waveform focus", () => {
-  assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: " " }), "play-pause-or-breakpoint");
+test("Space maps to play/pause ONLY on the waveform focus (never a break point)", () => {
+  assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: " " }), "play-pause");
   // Focused form fields and buttons keep native Space behaviour.
   assert.equal(resolveAction("input", { ctrl: false, shift: false, key: " " }), null);
   assert.equal(resolveAction("select", { ctrl: false, shift: false, key: " " }), null);
@@ -13,14 +16,28 @@ test("Space maps to play/pause or break-point ONLY on the waveform focus", () =>
   assert.equal(resolveAction("button", { ctrl: false, shift: false, key: " " }), null);
 });
 
-test("Enter on a focused button activates the button, on the waveform it previews", () => {
+test("Enter places a break point on the waveform, activates a focused button", () => {
+  assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: "Enter" }), "place-breakpoint");
   assert.equal(resolveAction("button", { ctrl: false, shift: false, key: "Enter" }), null);
-  assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: "Enter" }), "preview");
+  assert.equal(resolveAction("input", { ctrl: false, shift: false, key: "Enter" }), null);
+});
+
+test("P keeps the slice preview role taken over from the old Enter binding", () => {
+  assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: "p" }), "preview");
+  assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: "o" }), "preview-previous");
+});
+
+test("[ / ] step the monitor rate down / up on the waveform focus", () => {
+  assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: "[" }), "rate-down");
+  assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: "]" }), "rate-up");
+  // Rate keys stay keyboard shortcuts, not native typing: fields ignore them.
+  assert.equal(resolveAction("input", { ctrl: false, shift: false, key: "[" }), null);
+  assert.equal(resolveAction("input", { ctrl: false, shift: false, key: "]" }), null);
 });
 
 test("form fields swallow every shortcut (typing 'z' must not place a marker)", () => {
   for (const focus of ["input", "select", "textarea"] as const) {
-    for (const key of ["z", "ArrowLeft", " ", "c", "7"]) {
+    for (const key of ["z", "ArrowLeft", " ", "Enter", "c", "7", "["]) {
       assert.equal(resolveAction(focus, { ctrl: false, shift: false, key }), null, `${focus} "${key}"`);
     }
     assert.equal(resolveAction(focus, { ctrl: true, shift: false, key: "c" }), null, `${focus} Ctrl+C`);
@@ -74,4 +91,101 @@ test("Ctrl+X/C/V map to the selection model; Ctrl+F stays the measure alias", ()
 test("unhandled keys return null even with modifiers", () => {
   assert.equal(resolveAction(WAVE, { ctrl: true, shift: true, key: "q" }), null);
   assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key: "F5" }), null);
+});
+
+test("Enter forwards altKey to placeBreakpoint; focus gating unchanged", () => {
+  const bypassCalls: boolean[] = [];
+  const actions = {
+    placeBreakpoint(bypassSnap: boolean): void {
+      bypassCalls.push(bypassSnap);
+    },
+  } as unknown as KeyActions;
+
+  const press = (target: unknown, altKey: boolean): void =>
+    handleKeyDown(new Store(), actions, {
+      target,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      altKey,
+      key: "Enter",
+      preventDefault() {},
+    });
+
+  press(null, false); // waveform focus, no Alt -> snap applies
+  press(null, true); // Alt held -> bypass flag travels with the event
+  assert.deepEqual(bypassCalls, [false, true]);
+
+  // Gating untouched: a focused input still swallows Enter entirely.
+  press({ tagName: "INPUT" }, true);
+  assert.deepEqual(bypassCalls, [false, true]);
+});
+
+test("grid cycle includes the coarse half-measure and whole-measure steps first", () => {
+  assert.deepEqual(GRID_CYCLE, [1, 2, 4, 6, 8, 12, 16, 24, 32]);
+});
+
+test("Q steps grid down through 4 -> 2 -> 1 and clamps at the whole measure", () => {
+  const store = new Store();
+  store.update({ grid: 4 });
+  const actions = {} as unknown as KeyActions;
+  const press = (key: string): void =>
+    handleKeyDown(store, actions, {
+      target: null,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      key,
+      preventDefault() {},
+    });
+  press("q");
+  assert.equal(store.state.grid, 2);
+  press("q");
+  assert.equal(store.state.grid, 1);
+  press("q");
+  assert.equal(store.state.grid, 1, "Q must clamp at the whole-measure cell");
+});
+
+test("W steps grid up from 1 through 2 -> 4 and the ladder stays ordered", () => {
+  const store = new Store();
+  store.update({ grid: 1 });
+  const actions = {} as unknown as KeyActions;
+  const press = (key: string): void =>
+    handleKeyDown(store, actions, {
+      target: null,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      key,
+      preventDefault() {},
+    });
+  press("w");
+  assert.equal(store.state.grid, 2);
+  press("w");
+  assert.equal(store.state.grid, 4);
+  for (let i = 0; i < 100; i++) press("w");
+  assert.equal(store.state.grid, 32, "W must clamp at the finest cell");
+  for (let i = 0; i < 100; i++) press("q");
+  assert.equal(store.state.grid, 1, "Q reaches the whole measure from anywhere");
+});
+
+test("the command-bar Grid select lists exactly GRID_CYCLE in order", () => {
+  const html = readFileSync(
+    path.join(__dirname, "..", "..", "src", "renderer", "index.html"),
+    "utf8"
+  );
+  const block = html.match(/<select id="select-grid"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(block, "select-grid not found in index.html");
+  const values = [...block[1].matchAll(/<option value="(\d+)"/g)].map((m) => Number(m[1]));
+  assert.deepEqual(values, GRID_CYCLE);
+});
+
+test("',' and '.' place break points just like Enter", () => {
+  for (const key of [",", "."]) {
+    assert.equal(resolveAction(WAVE, { ctrl: false, shift: false, key }), "place-breakpoint", key);
+  }
+  // Form fields still swallow them (typing a comma must never place a marker).
+  assert.equal(resolveAction("input", { ctrl: false, shift: false, key: "," }), null);
 });

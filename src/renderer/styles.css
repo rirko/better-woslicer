@@ -15,6 +15,9 @@
   --playhead: #f5f7fa;
   --cue: #58c7e8;
   --danger: #ff6b6b;
+  --band-low: #b18cff;
+  --band-mid: #a8d46a;
+  --band-high: #f08fb4;
   --radius-s: 4px;
   --radius-m: 6px;
   --radius-l: 8px;
@@ -102,6 +105,118 @@ body {
   box-shadow: inset 0 0 0 1px var(--accent);
   color: var(--accent);
 }
+
+/* ---------- band overlay toggle + band detect panel ---------- */
+.bands-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.bands-toggle .swatch {
+  width: 6px;
+  height: 12px;
+  border-radius: 1px;
+  opacity: 0.55;
+}
+.bands-toggle .swatch.low {
+  background: var(--band-low);
+}
+.bands-toggle .swatch.mid {
+  background: var(--band-mid);
+}
+.bands-toggle .swatch.high {
+  background: var(--band-high);
+}
+.bands-toggle.on .swatch {
+  opacity: 1;
+}
+.bands-toggle .bands-label {
+  margin-left: 2px;
+}
+
+.band-detect {
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius-m);
+  padding: 6px 8px;
+  margin-bottom: 10px;
+  background: var(--surface-1);
+}
+.band-detect summary {
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 12px;
+  padding: 2px 0;
+  list-style: none;
+}
+.band-detect summary::-webkit-details-marker {
+  display: none;
+}
+.band-detect summary::before {
+  content: "\25B8  ";
+  color: var(--text-3);
+}
+.band-detect[open] summary::before {
+  content: "\25BE  ";
+}
+.band-estimate {
+  color: var(--accent);
+  margin-left: 6px;
+}
+.band-chips {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 6px;
+}
+.band-chip {
+  flex: 1;
+  height: 26px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius-s);
+  font: inherit;
+  cursor: pointer;
+}
+.band-chip.on[data-band="low"] {
+  color: var(--band-low);
+  border-color: var(--band-low);
+}
+.band-chip.on[data-band="mid"] {
+  color: var(--band-mid);
+  border-color: var(--band-mid);
+}
+.band-chip.on[data-band="high"] {
+  color: var(--band-high);
+  border-color: var(--band-high);
+}
+.band-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  margin: 4px 0;
+}
+.band-field .select {
+  flex: 1;
+  height: 26px;
+}
+.band-scope {
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 6px 0;
+  padding-left: 6px;
+  border-left: 2px solid var(--surface-3);
+}
+.band-scope.active {
+  color: var(--selection);
+  border-left-color: var(--selection);
+}
+.band-snap {
+  margin: 2px 0 8px;
+  color: var(--text-3);
+  font-size: 11px;
+}
 .cmd-btn.danger {
   color: var(--danger);
   border-color: var(--danger);
@@ -173,6 +288,26 @@ body {
 .vol-slider {
   width: 90px;
   accent-color: var(--cue);
+}
+/* Monitor rate select (reuses .select sizing). Off-speed rates get accent
+   text AND a leading dot so the state is not signalled by colour alone. */
+.rate-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.rate-wrap::before {
+  content: "";
+  width: 6px;
+}
+.rate-wrap.rate-active::before {
+  content: "\25CF";
+  font-size: 8px;
+  color: var(--accent);
+}
+.rate-wrap.rate-active .select {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .check-label {
   display: flex;
@@ -367,4 +502,72 @@ body {
 .status-right {
   margin-left: auto;
   color: var(--text-3);
+}
+
+/* ---------- tap calibration ---------- */
+.tap-offset {
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal-backdrop.hidden {
+  display: none;
+}
+.modal {
+  width: 480px;
+  max-width: 90vw;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius-l);
+  padding: 24px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+.modal h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+}
+.modal .hint {
+  color: var(--text-3);
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+.calibration-progress {
+  display: flex;
+  gap: 24px;
+  font-size: 16px;
+  color: var(--text-1);
+  margin: 16px 0;
+}
+.calibration-result {
+  color: var(--text-1);
+  background: #0b0d0f;
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.calibration-result.hidden {
+  display: none;
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* UI language select */
+.lang-select {
+  width: 64px;
+  height: 28px;
+  padding: 0 4px;
 }
