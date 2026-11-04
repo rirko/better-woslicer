@@ -1,6 +1,6 @@
 # woslicer-electron
 
-[English](README.md) · **中文**
+[English](README.md) · **中文** · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 基于 wosderge 的 woslicerIII 开发的离线 BMS 音频切片工具，使用 Electron 和 TypeScript。
 

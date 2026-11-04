@@ -1,6 +1,6 @@
 # woslicer-electron
 
-**English** · [中文](README.zh-CN.md)
+**English** · [中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 An offline Electron/TypeScript audio slicer for BMS, based on wosderge's woslicerIII.
 

@@ -76,7 +76,11 @@ if (platform === "darwin") {
 fs.rmSync(path.join(resources, "default_app.asar"), { force: true });
 const app = path.join(resources, "app");
 fs.mkdirSync(app, { recursive: true });
-for (const item of ["dist/src", "dist/renderer", "LICENSE", "NOTICE", "README.md", "README.zh-CN.md", "CHANGELOG.md", "CHANGELOG.zh-CN.md"]) {
+for (const item of [
+  "dist/src", "dist/renderer", "LICENSE", "NOTICE",
+  "README.md", "README.zh-CN.md", "README.ja.md", "README.ko.md",
+  "CHANGELOG.md", "CHANGELOG.zh-CN.md",
+]) {
   fs.cpSync(path.join(root, item), path.join(app, item), { recursive: true });
 }
 // Resolve the installed production dependency closure, including nested dependencies.
