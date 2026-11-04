@@ -16,7 +16,8 @@
     "test:ui": "node scripts/test-ui.js",
     "package": "node scripts/package-app.js",
     "test:ui:packaged": "node scripts/test-ui.js --packaged",
-    "check:version": "node scripts/check-version.js"
+    "check:version": "node scripts/check-version.js",
+    "test:ui:harness": "node --test scripts/ui-process.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

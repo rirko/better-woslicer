@@ -19,7 +19,8 @@ const fs = require("fs");
 const path = require("path");
 const { PRELOADED_API_KEYS } = require("../dist/src/main/channels.js");
 
-const PORT = 9223;
+const { createSession, removeSession, stopChild } = require("./ui-process.js");
+let debugPort;
 const profileName = process.env.SMOKE_PROFILE || "low";
 const profiles = {
   low: { width: 1280, height: 720, deviceScaleFactor: 1 },
@@ -29,16 +30,24 @@ if (!profiles[profileName]) throw new Error("Unknown SMOKE_PROFILE: " + profileN
 const profile = profiles[profileName];
 const artifactDir = path.resolve("test-artifacts", (process.env.SMOKE_PACKAGED === "1" ? "packaged-" : "") + profileName);
 fs.mkdirSync(artifactDir, { recursive: true });
+const ownSession = !process.env.SMOKE_RUN_DIR;
+const session = process.env.SMOKE_RUN_DIR || createSession(profileName);
+const userData = path.join(session, "user-data");
+const fixturePath = path.join(session, "roundtrip.wos");
+fs.mkdirSync(userData, { recursive: true });
 
 function httpJson(urlPath) {
   return new Promise((resolve, reject) => {
-    http
-      .get({ host: "127.0.0.1", port: PORT, path: urlPath }, (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => resolve(JSON.parse(data)));
-      })
-      .on("error", reject);
+    const request = http.get({ host: "127.0.0.1", port: debugPort, path: urlPath }, res => {
+      let data = "";
+      res.on("data", chunk => { data += chunk; });
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); } catch (error) { reject(error); }
+      });
+      res.on("error", reject);
+    });
+    request.setTimeout(1000, () => request.destroy(new Error("DevTools HTTP timeout")));
+    request.on("error", reject);
   });
 }
 
@@ -54,9 +63,10 @@ async function main() {
   }
   const child = spawn(electronBinary, [
     ...(process.env.SMOKE_APP ? [] : ["."]),
-    "--force-device-scale-factor=1",
+    `--force-device-scale-factor=${profile.deviceScaleFactor}`,
+    `--user-data-dir=${userData}`,
     "--remote-debugging-address=127.0.0.1",
-    `--remote-debugging-port=${PORT}`,
+    "--remote-debugging-port=0",
     // The smoke window can open behind other windows; without these flags
     // Chromium throttles/parks requestAnimationFrame for occluded windows and
     // the animation-dependent checks (follow-scroll, viewport self-check)
@@ -66,19 +76,27 @@ async function main() {
     "--disable-backgrounding-occluded-windows",
   ], {
     cwd: path.join(__dirname, ".."),
+    detached: process.platform !== "win32",
+    env: { ...process.env, WOSLICER_SMOKE_USER_DATA: userData, WOSLICER_SMOKE_PROFILE: profileName },
     stdio: ["ignore", "ignore", "pipe"],
   });
-  // Each profile has a hard 30-second budget, including CDP connection time.
+  process.send?.({ type: "electron-started", pid: child.pid });
+  let launchError;
+  child.on("error", error => { launchError = error; });
+  let cleanupPromise;
+  const cleanup = () => cleanupPromise ||= (async () => {
+    clearTimeout(watchdog);
+    ws?.close();
+    await stopChild(child);
+    process.send?.({ type: "electron-stopped" });
+    fs.writeFileSync(path.join(artifactDir, "electron-stderr.log"), stderr);
+    if (ownSession) removeSession(session);
+  })();
+  // The parent also enforces this budget and owns cleanup if this harness hangs.
   const watchdog = setTimeout(() => {
     console.error("SMOKE TIMEOUT: " + profileName + " exceeded 30000 ms");
-    child.kill();
-    process.exit(1);
+    cleanup().finally(() => process.exit(1));
   }, 30000);
-  child.on("error", (error) => {
-    console.error("SMOKE LAUNCH ERROR:", error.message);
-    clearTimeout(watchdog);
-    process.exit(1);
-  });
   let stderr = "";
   let send;
   let ws;
@@ -90,12 +108,20 @@ async function main() {
     ]);
     fs.writeFileSync(path.join(artifactDir, "failure.png"), Buffer.from(shot.data, "base64"));
   };
-  child.stderr.on("data", (c) => (stderr += c));
+  child.stderr.on("data", chunk => {
+    stderr += chunk;
+    // Port 0 is allocated atomically by Chromium; only trust this child's stderr.
+    const match = stderr.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//);
+    if (match) debugPort = Number(match[1]);
+  });
 
   try {
     let targets = null;
     for (let i = 0; i < 40; i++) {
       await waitMs(500);
+      if (launchError) throw launchError;
+      if (child.exitCode !== null || child.signalCode !== null) throw new Error("Electron exited before exposing DevTools");
+      if (!debugPort) continue;
       try {
         targets = await httpJson("/json/list");
         if (targets.some((t) => t.type === "page" && t.url.includes("index.html"))) break;
@@ -103,8 +129,9 @@ async function main() {
         // not up yet
       }
     }
-    if (!targets) throw new Error("app did not expose a debugging target");
-    const page = targets.find((t) => t.type === "page");
+    const page = targets?.find(t => t.type === "page" && t.url.includes("index.html"));
+    if (!page) throw new Error("app did not expose a debugging target");
+    console.log("SESSION:", JSON.stringify({ profile: profileName, pid: child.pid, userData, debugPort }));
     ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((res, rej) => {
       ws.onopen = res;
@@ -152,6 +179,10 @@ async function main() {
     };
 
     await send("Runtime.enable");
+    const nativeDisplay = await evaluate(`({width: innerWidth, height: innerHeight, dpr: devicePixelRatio})`);
+    const nativeWindow = JSON.parse(fs.readFileSync(path.join(userData, "native-window.json"), "utf8"));
+    fs.writeFileSync(path.join(artifactDir, "native-window.json"), JSON.stringify({ ...nativeWindow, renderer: nativeDisplay, debugPort }, null, 2));
+    // Viewport emulation is separate from the launch-time native UI scale.
     await send("Emulation.setDeviceMetricsOverride", { ...profile, mobile: false });
     console.log("DISPLAY PROFILE:", profileName, JSON.stringify(profile));
     await waitMs(1500);
@@ -162,6 +193,12 @@ async function main() {
       console.log(`${ok ? "PASS" : "FAIL"} ${name}${extra ? " — " + extra : ""}`);
     };
 
+    check("native window uses the requested scale before viewport emulation",
+      Math.abs(nativeDisplay.dpr - profile.deviceScaleFactor) <= 1e-6 &&
+      Math.abs(nativeWindow.scaleFactor - profile.deviceScaleFactor) <= 1e-6 && nativeWindow.menuVisible,
+      JSON.stringify({ rendererDpr: nativeDisplay.dpr, ...nativeWindow }));
+    check("browser profile is isolated and starts without saved preferences",
+      nativeWindow.userData === userData && await evaluate("localStorage.length === 0"));
     const actualDisplay = await evaluate(`({width: innerWidth, height: innerHeight, dpr: devicePixelRatio})`);
     check("requested display profile is active",
       actualDisplay.width === profile.width && actualDisplay.height === profile.height &&
@@ -301,8 +338,8 @@ async function main() {
       v.setFloat64(0, 185, true); v.setFloat64(8, -1, true);
       v.setInt32(16, 0, true); v.setInt32(20, -48, true);
       bytes[24] = 0x80;
-      await window.woslicer.writeWosFile('${path.join(__dirname, "..", "tmp-smoke.wos").replace(/\\/g, "\\\\")}', bytes);
-      const back = await window.woslicer.readWosFile('${path.join(__dirname, "..", "tmp-smoke.wos").replace(/\\/g, "\\\\")}');
+      await window.woslicer.writeWosFile('${fixturePath.replace(/\\/g, "\\\\")}', bytes);
+      const back = await window.woslicer.readWosFile('${fixturePath.replace(/\\/g, "\\\\")}');
       return back.byteLength === 6168 && back[24] === 0x80;
     })()`);
     check("WOS file bridge round-trip", wosRoundTrip === true);
@@ -704,21 +741,15 @@ async function main() {
     }
     console.log(failed.length ? `SMOKE FAILED: ${failed.length}/${checks.length}` : `SMOKE OK: ${checks.length}/${checks.length}`);
     if (failed.length) await saveScreenshot().catch((error) => console.error(error.message));
-    ws.close();
-    clearTimeout(watchdog);
-    child.kill();
-    fs.existsSync(path.join(__dirname, "..", "tmp-smoke.wos")) &&
-      fs.unlinkSync(path.join(__dirname, "..", "tmp-smoke.wos"));
+    await cleanup();
     process.exit(failed.length ? 1 : 0);
   } catch (err) {
     console.error("SMOKE ERROR:", err.message || err);
     await saveScreenshot().catch(() => {});
-    clearTimeout(watchdog);
-    ws?.close();
     if (stderr) console.error("electron stderr:", stderr.slice(0, 2000));
-    child.kill();
+    await cleanup();
     process.exit(1);
   }
 }
 
-main();
+main().catch(error => { console.error("SMOKE FATAL:", error); process.exitCode = 1; });

@@ -8,7 +8,7 @@
  *  - all IPC handlers validate their arguments before touching the filesystem
  */
 
-import { app, BrowserWindow, ClipboardItem, clipboard, dialog, ipcMain, Menu, nativeTheme } from "electron";
+import { app, BrowserWindow, ClipboardItem, clipboard, dialog, ipcMain, Menu, nativeTheme, screen } from "electron";
 import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
@@ -29,6 +29,29 @@ import { isLanguage, languageFromLocale, type Language } from "../core/language.
 import { MENU_STRINGS, menuTemplate } from "./menu-i18n.js";
 import { readBuildInfo, formatBuildDetails } from "./build-info.js";
 
+// Test-only paths are accepted only with explicit loopback debugging enabled.
+// Normal launches never read/write these fixtures or alter the user's profile.
+function configureSmokeEnvironment() {
+  const userData = process.env.WOSLICER_SMOKE_USER_DATA;
+  if (userData === undefined) return undefined;
+  const profile = process.env.WOSLICER_SMOKE_PROFILE;
+  if (!path.isAbsolute(userData) || (profile !== "low" && profile !== "high") ||
+      app.commandLine.getSwitchValue("remote-debugging-port") !== "0" ||
+      app.commandLine.getSwitchValue("remote-debugging-address") !== "127.0.0.1") {
+    throw new Error("Invalid isolated smoke-test configuration");
+  }
+  const dimensions = profile === "low"
+    ? { width: 1280, height: 720, scaleFactor: 1 }
+    : { width: 1920, height: 1080, scaleFactor: 2 };
+  if (app.commandLine.getSwitchValue("force-device-scale-factor") !== String(dimensions.scaleFactor)) {
+    throw new Error("Smoke-test native scale does not match its profile");
+  }
+  fsSync.mkdirSync(path.join(userData, "session"), { recursive: true });
+  app.setPath("userData", userData);
+  app.setPath("sessionData", path.join(userData, "session"));
+  return { userData, ...dimensions };
+}
+const smokeEnvironment = configureSmokeEnvironment();
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
@@ -41,8 +64,9 @@ function createWindow(): void {
   // back — which broke the "native menus stay visible and usable" rule.
   nativeTheme.themeSource = "dark";
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: smokeEnvironment?.width ?? 1440,
+    height: smokeEnvironment?.height ?? 900,
+    useContentSize: smokeEnvironment !== undefined,
     minWidth: 960,
     minHeight: 600,
     backgroundColor: "#0E1013",
@@ -58,6 +82,16 @@ function createWindow(): void {
       spellcheck: false,
     },
   });
+
+  if (smokeEnvironment) {
+    fsSync.writeFileSync(path.join(smokeEnvironment.userData, "native-window.json"), JSON.stringify({
+      userData: app.getPath("userData"),
+      scaleFactor: screen.getDisplayMatching(mainWindow.getBounds()).scaleFactor,
+      bounds: mainWindow.getBounds(),
+      contentBounds: mainWindow.getContentBounds(),
+      menuVisible: mainWindow.isMenuBarVisible(),
+    }, null, 2));
+  }
 
   // Block navigation and popups entirely (single-page tool).
   mainWindow.webContents.on("will-navigate", (event) => event.preventDefault());
