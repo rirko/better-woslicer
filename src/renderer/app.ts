@@ -86,6 +86,12 @@ let lastDrawnDpr = Number.NaN;
    the grid" report. NaN starts "dirty" so the first change always repaints. */
 let lastDrawnGrid = Number.NaN;
 
+/* Cursor tick the overlay was last drawn with. keys.ts moves the cursor by
+   mutating the store directly (no renderer dependency), so this subscription is
+   the only place that repaints those moves — without it the arrows moved an
+   invisible caret and the readout stayed frozen, i.e. they "did nothing". */
+let lastDrawnCursorTick = Number.NaN;
+
 function viewportChanged(): boolean {
   const dpr = window.devicePixelRatio || 1;
   return (
@@ -484,6 +490,21 @@ let lastRenderedError: boolean | null = null;store.subscribe(() => {
   if (s.grid !== lastDrawnGrid) {
     lastDrawnGrid = s.grid;
     redrawCanvases();
+  }
+  // Cursor moves (arrow keys, Shift+arrows, cut-list clicks) repaint the
+  // overlay cursor line, the readout and the active cut-list row. Paging keeps
+  // the keyboard cursor reachable: repeated arrow presses used to walk it off
+  // screen, which read as a dead key even after the repaint was fixed.
+  if (s.cursorTick !== lastDrawnCursorTick) {
+    lastDrawnCursorTick = s.cursorTick;
+    const viewTicks = s.pxPerTick > 0 ? waveWrap.clientWidth / s.pxPerTick : 0;
+    // Never fight the playhead follow-scroll while playing.
+    if (!s.playing && viewTicks > 0 && (s.cursorTick < s.scrollTick || s.cursorTick > s.scrollTick + viewTicks)) {
+      store.update({
+        scrollTick: Math.max(0, Math.min(MAX_TICKS - viewTicks, s.cursorTick - viewTicks * 0.1)),
+      });
+    }
+    redraw();
   }
   // A change of the blue time range re-scopes the band-detect estimate.
   const scopeKey = `${s.selectionStartTick}:${s.selectionEndTick}`;

@@ -324,6 +324,21 @@ export class TimelineView {
         ctx.fill();
       }
     }
+
+    // Cursor: the editing position the arrow keys, Z, Enter and P operate on.
+    // Drawn as a dashed amber line on the overlay so it never reads as the
+    // solid white playhead; without it a cursor move changed nothing on screen.
+    const cursorX = this.tickToX(s.cursorTick, scrollTick, pxPerTick);
+    if (cursorX >= -2 && cursorX <= width + 2) {
+      ctx.save();
+      ctx.strokeStyle = COLORS.accent;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(cursorX + 0.5, 0);
+      ctx.lineTo(cursorX + 0.5, height);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   drawOverview(): void {
