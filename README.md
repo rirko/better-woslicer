@@ -246,6 +246,12 @@ allowlisted functions (`tests/ipc-security.test.ts` asserts the surface).
   every state and Enter to place break points (preview stays on P/O), and adds
   the 0.25×–1.5× monitor rate (the original had no variable-speed playback).
 
+- **UI languages**: English, 中文, 日本語 and 한국어 cover the chrome, the status
+  messages and the native File/Edit/View/Help menu. The choice persists across
+  restarts (localStorage + IPC to the main process). Technical field labels
+  (BPM, Grid, Shift, Fade ms, Gate dB) stay untranslated on purpose so they
+  read identically in every language.
+
 - **24-bit output**: the original always exports 16-bit PCM and stores audio
   internally as int16; so does this project. 24-bit sources are converted
   lossily at load (top 16 bits), exactly like the original.

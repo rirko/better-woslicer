@@ -25,6 +25,8 @@ import { decodeOgg } from "../core/ogg.js";
 import { renderSlice } from "../core/slicer.js";
 import { TimeBase, tickToSampleExport } from "../core/timebase.js";
 import { BMSE_CLIPBOARD_FORMAT_NAME, bmseBufferToText, bmseTextToBuffer } from "../core/bmse.js";
+import { isLanguage, languageFromLocale, type Language } from "../core/language.js";
+import { MENU_STRINGS, menuTemplate } from "./menu-i18n.js";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -173,6 +175,15 @@ function parseExportAllRequest(input: unknown): ExportAllRequest {
 }
 
 function registerIpcHandlers(): void {
+  // The renderer owns the persisted UI language; the native menu follows it.
+  // Unknown values are rejected so a bad renderer cannot blank the menu.
+  ipcMain.handle(CHANNELS.setLanguage, (_event, lang: unknown) => {
+    if (!isLanguage(lang)) throw new Error("unsupported UI language: " + String(lang));
+    if (lang === uiLanguage) return;
+    uiLanguage = lang;
+    rebuildMenu();
+  });
+
   ipcMain.handle(CHANNELS.openFileDialog, async () => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -367,68 +378,33 @@ interface AppMenuAction {
   (action: string): void;
 }
 
-function buildMenu(send: AppMenuAction): void {
-  const template: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: "File",
-      submenu: [
-        { label: "Open WAV/OGG...", accelerator: "CmdOrCtrl+O", click: () => send("open-audio") },
-        { label: "Open .wos...", accelerator: "CmdOrCtrl+Shift+O", click: () => send("open-wos") },
-        { label: "Save .wos...", accelerator: "CmdOrCtrl+S", click: () => send("save-wos") },
-        { type: "separator" },
-        { label: "Export slice WAV...", accelerator: "CmdOrCtrl+E", click: () => send("export-slice") },
-        { label: "Export all slices...", accelerator: "CmdOrCtrl+Shift+E", click: () => send("export-all") },
-        { type: "separator" },
-        { label: "Exit", role: "quit" },
-      ],
-    },
-    {
-      label: "Edit",
-      submenu: [
-        { label: "Undo", accelerator: "CmdOrCtrl+Z", click: () => send("undo") },
-        { label: "Redo", accelerator: "CmdOrCtrl+Shift+Z", click: () => send("redo") },
-        { type: "separator" },
-        { label: "Copy selected markers", accelerator: "CmdOrCtrl+C", click: () => send("copy-selection") },
-        { label: "Cut selected markers", accelerator: "CmdOrCtrl+X", click: () => send("cut-selection") },
-        { label: "Paste selected markers", accelerator: "CmdOrCtrl+V", click: () => send("paste-selection") },
-        { label: "Quantize selected markers", click: () => send("quantize") },
-        { type: "separator" },
-        // Legacy compatibility aliases (original woslicerIII measure model).
-        { label: "Copy measure (legacy)", click: () => send("measure-copy") },
-        { label: "Cut measure (legacy)", click: () => send("measure-cut") },
-        { label: "Paste measure (legacy, Ctrl+F)", click: () => send("measure-paste") },
-        { type: "separator" },
-        { label: "Clear all markers", click: () => send("clear-markers") },
-      ],
-    },
-    {
-      label: "View",
-      submenu: [
-        { label: "Zoom in", accelerator: "CmdOrCtrl+=", click: () => send("zoom-in") },
-        { label: "Zoom out", accelerator: "CmdOrCtrl+-", click: () => send("zoom-out") },
-      ],
-    },
-    {
-      label: "Help",
-      submenu: [
-        {
-          label: "About",
-          click: (): void => {
-            void dialog.showMessageBox({
-              type: "info",
-              title: "woslicer-electron",
-              message: "woslicer-electron 0.1.0",
-              detail:
-                "Electron + TypeScript reimplementation of woslicerIII.\n" +
-                "Slice DSP and .wos format are byte-compatible with the original.",
-            });
-          },
-        },
-      ],
-    },
-  ];
+/** UI language of the native menu; the renderer is the source of truth. */
+let uiLanguage: Language = "en";
+
+const sendMenuAction: AppMenuAction = (action) => {
+  mainWindow?.webContents.send(CHANNELS.menuAction, action);
+};
+
+function showAboutDialog(): void {
+  const t = MENU_STRINGS[uiLanguage];
+  void dialog.showMessageBox({
+    type: "info",
+    title: "woslicer-electron",
+    message: t.aboutMessage,
+    detail: t.aboutDetail,
+  });
+}
+
+/**
+ * (Re)builds the native application menu in the active UI language. Runs on
+ * boot and again on every language change pushed from the renderer, so the
+ * File/Edit/View/Help bar never lags behind the window.
+ */
+function rebuildMenu(): void {
+  const template = menuTemplate(uiLanguage, { send: sendMenuAction, showAbout: showAboutDialog });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
 
 // Defensive: block navigation from any web contents created in this app.
 app.on("web-contents-created", (_event, contents) => {
@@ -436,8 +412,11 @@ app.on("web-contents-created", (_event, contents) => {
 });
 
 void app.whenReady().then(() => {
+  // First menu paint follows the OS locale; the renderer then pushes the
+  // persisted choice, so a restart keeps the user's language.
+  uiLanguage = languageFromLocale(app.getLocale());
   registerIpcHandlers();
-  buildMenu((action) => mainWindow?.webContents.send(CHANNELS.menuAction, action));
+  rebuildMenu();
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

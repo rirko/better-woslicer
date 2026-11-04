@@ -11,6 +11,7 @@ import {
   MEASURE_TICKS,
 } from "../src/core/timebase.js";
 import { Store } from "../src/renderer/store.js";
+import { gridStepTicks } from "../src/core/gridlines.js";
 
 const BASE_120: TimeBase = { bpm: 120, shift: 0, sampleRate: 48000 };
 const BASE_185: TimeBase = { bpm: 185, shift: -1, sampleRate: 48000 };
@@ -124,11 +125,26 @@ test("Store.snapTick stays consistent with resolveBreakpointTick(bypass=false)",
   for (const tick of [0, 3, 8, 13, 100, MAX_TICKS - 1]) {
     for (const snap of [true, false]) {
       store.update({ snap });
+      // The store resolves its DENSITY to a tick step before delegating.
       assert.equal(
         store.snapTick(tick),
-        resolveBreakpointTick(tick, snap, store.state.grid, false),
+        resolveBreakpointTick(tick, snap, gridStepTicks(store.state.grid), false),
         `tick=${tick} snap=${snap}`
       );
     }
   }
+});
+
+test("Store.snapTick snaps to the drawn cell, not to a density number of ticks", () => {
+  const store = new Store();
+  // Grid 2 = half measure = 96 ticks. Snapping to 2 ticks put markers 48x
+  // finer than the ruler showed.
+  store.update({ snap: true, grid: 2 });
+  assert.equal(store.snapTick(100), 96);
+  assert.equal(store.snapTick(40), 0);
+  assert.equal(store.snapTick(96), 96);
+  // Grid 8 = 24 ticks per cell (the default).
+  store.update({ grid: 8 });
+  assert.equal(store.snapTick(30), 24);
+  assert.equal(store.snapTick(12), 24);
 });

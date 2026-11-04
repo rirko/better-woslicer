@@ -73,7 +73,7 @@ npm start
 - 24-bit / 32-bit / float 输入在载入时按原版语义转 16-bit 内部表示（24-bit 取高 16 位）。
 - OGG 解码使用 WASM Vorbis 解码器（原版为 `OggVorbis.dll`）。
 - 自动边缘检测（Edge detect）为近似实现，无原版 oracle。
-- 语言切换目前覆盖界面静态文案与常见状态提示；原生菜单（File/Edit/View/Help）仍为英文。
+- 语言切换覆盖界面静态文案、常见状态提示与原生菜单（File/Edit/View/Help），支持 EN / 中文 / 日本語 / 한국어，选择会跨重启保留；BPM、Grid、Shift、Fade ms、Gate dB 等技术字段刻意保持原文。
 - 敲击校准偏移为会话内设置，不写入 `.wos`。
 
 ## 开发与测试

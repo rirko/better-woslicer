@@ -38,6 +38,8 @@ export interface WoslicerApi {
   }): Promise<{ written: string[] }>;
   writeBmseClipboard(text: string): Promise<void>;
   readBmseClipboard(): Promise<string>;
+  /** Mirrors the UI language into the main process (native menu labels). */
+  setLanguage(lang: string): Promise<void>;
   onMenuAction(handler: (action: string) => void): () => void;
   onStateChanged(handler: (state: { hasSource: boolean; sourcePath: string | null }) => void): () => void;
 }

@@ -22,6 +22,7 @@ export const CHANNELS = {
   readClipboard: "clipboard:read-bmse",
   menuAction: "menu:action",
   stateChanged: "app:state",
+  setLanguage: "app:set-language",
 } as const;
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS];
@@ -44,6 +45,7 @@ export const PRELOADED_API_KEYS = [
   "onMenuAction",
   "onStateChanged",
   "platform",
+  "setLanguage",
 ] as const;
 
 export type PreloadedApiKey = (typeof PRELOADED_API_KEYS)[number];

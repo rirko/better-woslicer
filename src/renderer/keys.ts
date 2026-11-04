@@ -41,6 +41,7 @@
  * behaviour (Space/Enter activate a button).
  */
 
+import { GRID_DENSITIES, gridStepTicks } from "../core/gridlines.js";
 import { MAX_TICKS, MEASURE_TICKS } from "../core/timebase.js";
 import { Store } from "./store.js";
 
@@ -272,7 +273,7 @@ export interface KeyActions {
  * The command-bar Grid select (index.html) must list the exact same values
  * (tests/keys.test.ts keeps the two in sync).
  */
-export const GRID_CYCLE = [1, 2, 4, 6, 8, 12, 16, 24, 32];
+export const GRID_CYCLE: readonly number[] = [...GRID_DENSITIES];
 
 export function handleKeyDown(store: Store, actions: KeyActions, e: KeyEventLike): void {
   const action = resolveAction(
@@ -378,7 +379,8 @@ export function handleKeyDown(store: Store, actions: KeyActions, e: KeyEventLike
     case "cursor-left-grid":
     case "cursor-right-grid": {
       const dir = action.endsWith("left") ? -1 : 1;
-      const step = action.endsWith("tick") ? 1 : s.grid;
+      // state.grid is cells per measure; a grid step is the cell width in ticks.
+      const step = action.endsWith("tick") ? 1 : Math.max(1, gridStepTicks(s.grid));
       store.update({ cursorTick: Math.max(0, Math.min(MAX_TICKS - 1, s.cursorTick + dir * step)) });
       return;
     }
@@ -404,6 +406,6 @@ function cycleGrid(store: Store, dir: number): void {
   const next = GRID_CYCLE[nextIndex];
   if (next !== current) {
     store.update({ grid: next });
-    store.setStatus(`Grid: ${next} ticks`);
+    store.setStatus(`Grid: ${next} per measure`);
   }
 }

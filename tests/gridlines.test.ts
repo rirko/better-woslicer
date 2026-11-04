@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  GRID_DENSITIES,
   GRID_LINE_MIN_PX,
   MEASURE_LABEL_MIN_PX,
   gridLineTicks,
+  gridStepTicks,
   measureLabelStep,
 } from "../src/core/gridlines.js";
 import { MAX_TICKS, MEASURE_TICKS } from "../src/core/timebase.js";
@@ -81,4 +83,51 @@ test("measure label interval doubles until the label fits, starting at 1", () =>
   assert.equal(measureLabelStep(3.84), 16);
   // Degenerate input must not loop forever.
   assert.equal(measureLabelStep(0), 1);
+});
+test("gridStepTicks maps the UI DENSITY (cells per measure) to ticks", () => {
+  assert.deepEqual([...GRID_DENSITIES], [1, 2, 4, 6, 8, 12, 16, 24, 32]);
+  assert.equal(gridStepTicks(1), MEASURE_TICKS); // whole measure per cell
+  assert.equal(gridStepTicks(2), 96); // half measure
+  assert.equal(gridStepTicks(4), 48);
+  assert.equal(gridStepTicks(6), 32);
+  assert.equal(gridStepTicks(8), 24);
+  assert.equal(gridStepTicks(12), 16);
+  assert.equal(gridStepTicks(16), 12);
+  assert.equal(gridStepTicks(24), 8);
+  assert.equal(gridStepTicks(32), 6);
+  // Every ladder value divides the measure, so measures ride the grid series.
+  for (const density of GRID_DENSITIES) {
+    assert.equal(MEASURE_TICKS % gridStepTicks(density), 0, 'density ' + density + ' skews the measure');
+  }
+  // Unusable densities collapse to 0 so callers fall back to the raw tick.
+  assert.equal(gridStepTicks(0), 0);
+  assert.equal(gridStepTicks(-4), 0);
+  assert.equal(gridStepTicks(Number.NaN), 0);
+  assert.equal(gridStepTicks(Number.POSITIVE_INFINITY), 0);
+});
+
+test("each density draws exactly that many cells per measure", () => {
+  // The ruler and the grid share this line set: at density N there must be
+  // exactly N cells in one measure. Reading the density as ticks drew 96
+  // lines per measure at density 2 instead of 2.
+  for (const density of GRID_DENSITIES) {
+    const step = gridStepTicks(density);
+    const lines = gridLineTicks(0, MEASURE_TICKS, step, 10);
+    // [0, MEASURE_TICKS) is one measure -> exactly `density` cells.
+    const inside = lines.filter((l) => l.tick < MEASURE_TICKS);
+    assert.equal(inside.length, density, 'density ' + density + ' drew ' + inside.length + ' lines');
+  }
+});
+
+test("density 2 puts a line on the half measure, not every 2 ticks", () => {
+  const step = gridStepTicks(2);
+  const lines = gridLineTicks(0, MEASURE_TICKS * 2, step, 4);
+  assert.deepEqual(
+    lines.map((l) => l.tick),
+    [0, 96, 192, 288, 384]
+  );
+  assert.deepEqual(
+    lines.filter((l) => l.isMeasure).map((l) => l.tick),
+    [0, 192, 384]
+  );
 });

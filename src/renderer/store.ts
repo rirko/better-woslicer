@@ -3,6 +3,7 @@
  * subscribe via a simple listener list. No framework.
  */
 
+import { gridStepTicks } from "../core/gridlines.js";
 import { MarkerDoc } from "../core/markers.js";
 import { DEFAULT_PLAYBACK_RATE } from "../core/rate.js";
 import { PeakCache } from "../core/peaks.js";
@@ -141,9 +142,14 @@ export class Store {
     return { from, to };
   }
 
-  /** Snap-aware tick: nearest grid multiple when Snap is on, never out of range. */
+  /**
+   * Snap-aware tick: nearest grid multiple when Snap is on, never out of range.
+   * state.grid is a DENSITY (cells per measure), so it is converted to the
+   * cell width in ticks first — snapping to raw state.grid would snap every
+   * N ticks and disagree with the drawn grid by a factor of the measure width.
+   */
   snapTick(tick: number): number {
-    return resolveBreakpointTick(tick, this.state.snap, this.state.grid, false);
+    return resolveBreakpointTick(tick, this.state.snap, gridStepTicks(this.state.grid), false);
   }
 
   zoomAt(anchorTick: number, factor: number): void {

@@ -17,6 +17,7 @@
  * restores the pre-gesture bitmap.
  */
 
+import { gridStepTicks } from "../core/gridlines.js";
 import { MAX_TICKS, resolveBreakpointTick, tickToSampleExport } from "../core/timebase.js";
 import { markerTicks } from "../core/wos.js";
 import { clampGroupDelta, normalizeSelection } from "../core/markers.js";
@@ -97,7 +98,7 @@ export class Interactions {
   /** Grid-resolved tick for painting (Alt bypasses Snap). */
   private paintTick(e: MouseEvent): number {
     const s = this.store.state;
-    return resolveBreakpointTick(this.eventTick(e), s.snap, s.grid, e.altKey);
+    return resolveBreakpointTick(this.eventTick(e), s.snap, gridStepTicks(s.grid), e.altKey);
   }
 
   /** Nearest marker within MARKER_HIT_PX of the mouse, if any. */
@@ -250,7 +251,9 @@ export class Interactions {
       case "move": {
         const rawDelta = this.eventTick(e) - this.drag.anchorTick;
         const s = this.store.state;
-        const requested = s.snap && !e.altKey ? Math.round(rawDelta / s.grid) * s.grid : Math.round(rawDelta);
+        const cell = gridStepTicks(s.grid);
+        const requested =
+          s.snap && !e.altKey && cell > 0 ? Math.round(rawDelta / cell) * cell : Math.round(rawDelta);
         // Group clamp: one shared delta keeps relative spacing intact.
         const delta = clampGroupDelta(this.drag.originalTicks, requested);
         if (delta !== this.ghostDelta) {

@@ -37,6 +37,9 @@ const api = {
     ipcRenderer.invoke(CHANNELS.writeClipboard, text),
   readBmseClipboard: (): Promise<string> => ipcRenderer.invoke(CHANNELS.readClipboard),
 
+  setLanguage: (lang: string): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setLanguage, String(lang)),
+
   onMenuAction: (handler: (action: string) => void): (() => void) => {
     const wrapped = (_event: unknown, action: string): void => handler(String(action));
     ipcRenderer.on(CHANNELS.menuAction, wrapped);

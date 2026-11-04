@@ -13,7 +13,18 @@ import { analyzeBands, BandAnalysis, BandName, BAND_NAMES } from "../core/bands.
 import { detectBandCuts } from "../core/banddetect.js";
 import { latencySamples } from "../core/calibration.js";
 import { TapCalibrator } from "./calibration.js";
-import { applyStaticTranslations, getLanguage, initLanguage, setLanguage, translateStatus, type Language } from "./i18n.js";
+import {
+  applyStaticTranslations,
+  bandScopeRange,
+  bandScopeWhole,
+  getLanguage,
+  initLanguage,
+  setLanguage,
+  translateStatus,
+  tr,
+  type Language,
+} from "./i18n.js";
+import { gridStepTicks } from "../core/gridlines.js";
 import { MAX_TICKS, resolveBreakpointTick, sampleToTickNearest, tickToSampleExport } from "../core/timebase.js";
 import { DEFAULT_PLAYBACK_RATE, formatRate, stepPlaybackRate } from "../core/rate.js";
 import { Store } from "./store.js";
@@ -68,6 +79,13 @@ let lastDrawnWidth = Number.NaN;
 let lastDrawnHeight = Number.NaN;
 let lastDrawnDpr = Number.NaN;
 
+/* Grid density the canvas layers were last drawn with. The frame loop only
+   repaints on viewport/scroll/zoom changes, so a Grid select or Q/W change
+   would otherwise leave the ruler and the waveform showing the PREVIOUS cell
+   width while snapping already used the new one — the "ruler does not match
+   the grid" report. NaN starts "dirty" so the first change always repaints. */
+let lastDrawnGrid = Number.NaN;
+
 function viewportChanged(): boolean {
   const dpr = window.devicePixelRatio || 1;
   return (
@@ -93,6 +111,7 @@ function redraw(): void {
   lastDrawnWidth = waveWrap.clientWidth;
   lastDrawnHeight = waveWrap.clientHeight;
   lastDrawnDpr = window.devicePixelRatio || 1;
+  lastDrawnGrid = store.state.grid;
   updateReadout();
   updateCutList();
   updateCommandStates();
@@ -247,8 +266,9 @@ function runBandDetect(analysis: BandAnalysis) {
     analysis,
     bands: selectedBands(),
     thresholdDb: s.bandThresholdDb,
-    grid: s.grid,
-    minGapTicks: s.bandMinGapUnits * s.grid,
+    // state.grid is a density (cells per measure); detectBandCuts wants ticks.
+    grid: gridStepTicks(s.grid),
+    minGapTicks: s.bandMinGapUnits * gridStepTicks(s.grid),
     fromTick: range.fromTick,
     toTick: range.toTick,
     base: { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source!.sampleRate },
@@ -267,14 +287,14 @@ function updateBandPanel(): void {
     const m1 = Math.floor(range.toTick / 192) + 1;
     const seconds =
       ((range.toTick - range.fromTick) * s.source.sampleRate * 5) / (4 * s.doc.bpm) / s.source.sampleRate;
-    scope.textContent =
-      getLanguage() === "zh"
-        ? `范围：选区 M${String(m0).padStart(3, "0")}–M${String(m1).padStart(3, "0")}（${seconds.toFixed(2)}s）·仅此范围`
-        : `Scope: selection M${String(m0).padStart(3, "0")}–M${String(m1).padStart(3, "0")} (${seconds.toFixed(2)}s) · only this range`;
+    scope.textContent = bandScopeRange(
+      String(m0).padStart(3, "0"),
+      String(m1).padStart(3, "0"),
+      seconds.toFixed(2)
+    );
     scope.classList.add("active");
   } else {
-    scope.textContent =
-      getLanguage() === "zh" ? "范围：整轨（未选择区域）" : "Scope: whole track (no range selection)";
+    scope.textContent = bandScopeWhole();
     scope.classList.remove("active");
   }
   const estimate = el<HTMLSpanElement>("band-estimate");
@@ -283,7 +303,7 @@ function updateBandPanel(): void {
   else estimate.textContent = `+${s.bandEstimate}`;
   const button = el<HTMLButtonElement>("btn-band-detect");
   button.disabled = !s.source || s.bandBusy || selectedBands().length === 0;
-  button.textContent = s.bandBusy ? "Detecting…" : "Detect";
+  button.textContent = tr(s.bandBusy ? "Detecting…" : "Detect");
   for (const chip of document.querySelectorAll<HTMLButtonElement>(".band-chip")) {
     chip.classList.toggle("on", s.bandDetectBands[chip.dataset.band as BandName]);
     chip.setAttribute("aria-pressed", String(s.bandDetectBands[chip.dataset.band as BandName]));
@@ -459,6 +479,12 @@ let lastRenderedError: boolean | null = null;store.subscribe(() => {
     el<HTMLSpanElement>("status-main").textContent = translateStatus(s.statusText);
   }
   updateCommandStates();
+  // Grid density changes the drawn line set AND the snap targets: repaint the
+  // canvas layers so the ruler can never show a grid the clicks no longer use.
+  if (s.grid !== lastDrawnGrid) {
+    lastDrawnGrid = s.grid;
+    redrawCanvases();
+  }
   // A change of the blue time range re-scopes the band-detect estimate.
   const scopeKey = `${s.selectionStartTick}:${s.selectionEndTick}`;
   if (scopeKey !== lastScopeKey) {
@@ -805,7 +831,7 @@ const actions: KeyActions = {
     const rawTick = transport.isPlaying()
       ? sampleToTickNearest(Math.max(0, transport.currentSample() - compensation), base)
       : s.cursorTick;
-    const tick = resolveBreakpointTick(rawTick, s.snap, s.grid, bypassSnap);
+    const tick = resolveBreakpointTick(rawTick, s.snap, gridStepTicks(s.grid), bypassSnap);
     if (transport.isPlaying()) store.update({ cursorTick: tick });
     // Stopped: the cursor follows the resolved tick too, so it keeps pointing
     // at the marker when snapping moved it off the raw cursor position.
@@ -872,14 +898,17 @@ const actions: KeyActions = {
     if (!s.selectedTicks.length) {
       store.setStatus("Quantize disabled: select markers first (box-select or click)", true);
       return;
-    }    if (!s.doc.quantizeSelection(s.selectedTicks, s.grid)) {
+    }
+    // state.grid is a density (cells per measure); the doc works in ticks.
+    const cell = gridStepTicks(s.grid);
+    if (!s.doc.quantizeSelection(s.selectedTicks, cell)) {
       store.setStatus("Selected markers already on grid");
       return;
     }
     const snapped = [
       ...new Set(
         s.selectedTicks
-          .map((t) => Math.max(0, Math.min(MAX_TICKS - 1, Math.round(t / s.grid) * s.grid)))
+          .map((t) => Math.max(0, Math.min(MAX_TICKS - 1, Math.round(t / cell) * cell)))
           .filter((t) => s.doc.markers[t] === 1)
       ),
     ];
@@ -1052,6 +1081,10 @@ function wireDom(): void {
   languageSelect.addEventListener("change", (e) => {
     const lang = (e.target as HTMLSelectElement).value as Language;
     setLanguage(lang);
+    // Keep the native menu bar in step with the renderer chrome.
+    void api()
+      .setLanguage(lang)
+      .catch(() => undefined);
     el<HTMLSpanElement>("status-main").textContent = translateStatus(store.state.statusText);
     updateBandPanel();
   });
@@ -1274,6 +1307,11 @@ window.addEventListener("DOMContentLoaded", () => {
   try {
     initLanguage();
     applyStaticTranslations();
+    // The main process starts the menu in the OS locale; this makes the
+    // persisted choice authoritative on every launch.
+    void api()
+      .setLanguage(getLanguage())
+      .catch(() => undefined);
     wireDom();
     interactions.attach();
     transport.setCueVolume(store.state.cueVolume);

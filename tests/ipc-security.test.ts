@@ -26,6 +26,7 @@ test("preload API surface stays exactly on the documented allowlist", () => {
     "readBmseClipboard",
     "readWosFile",
     "saveWosDialog",
+    "setLanguage",
     "writeBmseClipboard",
     "writeWosFile",
   ]);

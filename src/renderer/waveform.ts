@@ -10,7 +10,7 @@ import { markerTicks } from "../core/wos.js";
 import { MEASURE_TICKS, MAX_TICKS, tickToSampleExport } from "../core/timebase.js";
 import { peakRange, PeakCache } from "../core/peaks.js";
 import { BAND_DRAW_MIN_ABS } from "../core/bands.js";
-import { gridLineTicks, measureLabelStep } from "../core/gridlines.js";
+import { gridLineTicks, gridStepTicks, measureLabelStep } from "../core/gridlines.js";
 import { Store } from "./store.js";
 
 export const RULER_HEIGHT = 28;
@@ -96,7 +96,7 @@ export class TimelineView {
     // never leave the real measure positions.
     const labelStep = measureLabelStep(pxPerTick * MEASURE_TICKS);
     const toTick = scrollTick + width / pxPerTick;
-    for (const line of gridLineTicks(scrollTick, toTick, s.grid, pxPerTick)) {
+    for (const line of gridLineTicks(scrollTick, toTick, gridStepTicks(s.grid), pxPerTick)) {
       const x = this.tickToX(line.tick, scrollTick, pxPerTick);
       ctx.strokeStyle = line.isMeasure ? COLORS.text2 : COLORS.text3;
       ctx.beginPath();
@@ -156,7 +156,7 @@ export class TimelineView {
       // resolves to — grid multiples only, collapsing to measure-only below
       // 2px per cell. Ruler, grid and snap therefore stay pixel-identical
       // at every zoom.
-      for (const line of gridLineTicks(fromTick, toTick, s.grid, pxPerTick)) {
+      for (const line of gridLineTicks(fromTick, toTick, gridStepTicks(s.grid), pxPerTick)) {
         const x = this.tickToX(line.tick, scrollTick, pxPerTick);
         ctx.strokeStyle = line.isMeasure ? COLORS.surface2 : COLORS.surface1;
         ctx.beginPath();
