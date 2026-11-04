@@ -378,7 +378,10 @@ export function handleKeyDown(store: Store, actions: KeyActions, e: KeyEventLike
     case "cursor-right-tick":
     case "cursor-left-grid":
     case "cursor-right-grid": {
-      const dir = action.endsWith("left") ? -1 : 1;
+      // Action ids are cursor-left-grid / cursor-right-grid / ...-tick, so the
+      // direction is the second segment: matching the suffix ("left") never
+      // fired and every arrow moved the cursor RIGHT.
+      const dir = action.startsWith("cursor-left") ? -1 : 1;
       // state.grid is cells per measure; a grid step is the cell width in ticks.
       const step = action.endsWith("tick") ? 1 : Math.max(1, gridStepTicks(s.grid));
       store.update({ cursorTick: Math.max(0, Math.min(MAX_TICKS - 1, s.cursorTick + dir * step)) });

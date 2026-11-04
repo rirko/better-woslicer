@@ -189,3 +189,46 @@ test("',' and '.' place break points just like Enter", () => {
   // Form fields still swallow them (typing a comma must never place a marker).
   assert.equal(resolveAction("input", { ctrl: false, shift: false, key: "," }), null);
 });
+test("arrow keys move the cursor in BOTH directions: grid steps, one-tick and measures", () => {
+  const store = new Store();
+  store.update({ grid: 8, cursorTick: 240 });
+  const actions = {} as unknown as KeyActions;
+  const press = (key: string, shift = false): void =>
+    handleKeyDown(store, actions, {
+      target: null,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: shift,
+      altKey: false,
+      key,
+      preventDefault() {},
+    });
+
+  press("ArrowLeft");
+  assert.equal(store.state.cursorTick, 216, "grid step must go LEFT");
+  press("ArrowRight");
+  assert.equal(store.state.cursorTick, 240, "and back RIGHT");
+  press("ArrowLeft", true);
+  assert.equal(store.state.cursorTick, 239, "Shift steps exactly one tick LEFT");
+  press("ArrowRight", true);
+  assert.equal(store.state.cursorTick, 240);
+  press("ArrowDown");
+  assert.equal(store.state.cursorTick, 432, "one measure DOWN");
+  press("ArrowUp");
+  assert.equal(store.state.cursorTick, 240, "one measure UP");
+
+  // Both ends clamp instead of wrapping or going negative.
+  store.update({ cursorTick: 10 });
+  press("ArrowLeft");
+  assert.equal(store.state.cursorTick, 0);
+  press("ArrowLeft", true);
+  assert.equal(store.state.cursorTick, 0);
+  press("ArrowUp");
+  assert.equal(store.state.cursorTick, 0);
+  store.update({ cursorTick: 49146 });
+  press("ArrowRight");
+  assert.equal(store.state.cursorTick, 49151);
+  press("ArrowDown");
+  assert.equal(store.state.cursorTick, 49151);
+});
+
