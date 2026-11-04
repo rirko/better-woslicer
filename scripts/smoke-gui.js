@@ -291,6 +291,15 @@ async function main() {
     check("undo via Ctrl+Z", await evaluate(`document.querySelectorAll('#cut-list li').length === 2`));
 
     // --- Selection copy/paste (Ctrl+C -> cursor move -> Ctrl+V) -----------
+    // Placing the markers above paged the view (the cursor follows the keys);
+    // clamp the cursor back to tick 0 so the drag below starts from a known
+    // scroll position instead of depending on how far the view had paged.
+    await evaluate(`(function(){
+      const key = (k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      key('ArrowUp');
+      key('ArrowUp');
+      return true;
+    })()`);
     // Zoom out so all three markers fit on screen, then box-select them with
     // synthetic mouse events, copy, move the cursor and paste.
     await evaluate(`(function(){
@@ -315,8 +324,12 @@ async function main() {
     check("box select finds the marker in range", /1 marker\(s\) selected/.test(selected), selected);
     await evaluate(`(function(){
       const kd = (key, ctrl) => window.dispatchEvent(new KeyboardEvent('keydown', { key, ctrlKey: !!ctrl, bubbles: true }));
+      // The drag above started from the tick-0 clamp, so step the cursor back to
+      // the post-undo position (384) the paste below expects.
+      kd('ArrowDown');
+      kd('ArrowDown');
       kd('c', true);        // Ctrl+C: copy selection as relative group
-      kd('ArrowDown');      // cursor remains at 384 after undo, then moves to 576
+      kd('ArrowDown');      // cursor 384 -> 576
       kd('v', true);        // Ctrl+V: paste the selected marker at tick 576
       return true;
     })()`);
@@ -474,6 +487,54 @@ async function main() {
       "rate survives a play/pause round-trip (still 1.5x)",
       (await evaluate(`document.getElementById('select-rate').value`)) === "1.5"
     );
+
+    // --- Slice preview (P): a retrigger replaces the previous preview ---------
+    // Preview nodes are independent of the whole-track node, so the only way to
+    // observe them from the renderer is to track every source that starts and
+    // stops. Pressing P twice must leave exactly one sounding source: a second
+    // P press that layered a new node on top of the still-playing one would
+    // show two (the original bug: no replay, just stacking).
+    await evaluate(`(function(){
+      if (window.__soundingSources) return true;
+      window.__soundingSources = new Set();
+      const proto = AudioBufferSourceNode.prototype;
+      const start = proto.start;
+      const stop = proto.stop;
+      proto.start = function (...args) {
+        window.__soundingSources.add(this);
+        this.addEventListener('ended', () => window.__soundingSources.delete(this));
+        return start.apply(this, args);
+      };
+      proto.stop = function (...args) {
+        window.__soundingSources.delete(this);
+        return stop.apply(this, args);
+      };
+      return true;
+    })()`);
+    const soundingNow = () => evaluate(`window.__soundingSources.size`);
+    const cutsBeforePreview = await cutCountNow();
+    // The transport tests above left the cursor past the 3 s source; step back
+    // two measures so the slice at the cursor is real audio again.
+    await kd("ArrowUp");
+    await kd("ArrowUp");
+    await kd("p");
+    await waitMs(150);
+    const afterFirstPreview = await soundingNow();
+    await kd("p");
+    await waitMs(150);
+    const afterSecondPreview = await soundingNow();
+    check(
+      "P retriggers the slice preview instead of layering it",
+      afterFirstPreview === 1 && afterSecondPreview === 1 && (await cutCountNow()) === cutsBeforePreview &&
+        /Preview slice/.test(await statusNow()),
+      `first P=${afterFirstPreview}, second P=${afterSecondPreview} soundings, status=${await statusNow()}`
+    );
+    // Stop the leftover preview so the audio clock stays clean for calibration.
+    await evaluate(`(function(){
+      for (const node of [...window.__soundingSources]) { try { node.stop(); } catch {} }
+      window.__soundingSources.clear();
+      return true;
+    })()`);
 
     // --- Tap calibration: continuous clicks, Enter / , / . taps -------------
     const cutsBeforeCalibration = await cutCountNow();
@@ -732,6 +793,66 @@ async function main() {
     );
     await send("Emulation.clearDeviceMetricsOverride");
     await waitMs(400);
+
+    // --- Cursor keys must repaint the view, not just mutate the store --------
+    // Regression: keys.ts moved store.cursorTick directly and nothing repainted,
+    // so the readout froze on the old position and the cut list kept its old
+    // highlight — the arrow keys looked dead. (The cursor line itself is drawn
+    // by the overlay; canvas readback is unreliable under the display-profile
+    // emulation above, so this check watches the two DOM witnesses instead.)
+    await kd("c"); // clear markers so only OUR marker can be the active row
+    await kd("ArrowUp");
+    await kd("ArrowUp");
+    await kd("ArrowUp"); // clamp the cursor back to tick 0
+    await kd("z"); // park one marker exactly on the cursor -> its row is active
+    await waitMs(100);
+    const activeBefore = await evaluate(`document.querySelectorAll('#cut-list li.active').length`);
+    await kd("ArrowRight");
+    await waitMs(150);
+    const activeAfter = await evaluate(`document.querySelectorAll('#cut-list li.active').length`);
+    // The measure readout must follow a one-measure cursor move as well.
+    const measureText = () => evaluate(`document.getElementById('readout-position').textContent.trim().slice(0, 4)`);
+    const measureBefore = await measureText();
+    await kd("ArrowDown");
+    await waitMs(150);
+    const measureAfter = await measureText();
+    check(
+      "arrow keys repaint the cursor (cut-list highlight and readout follow it)",
+      activeBefore === 1 && activeAfter === 0 && measureBefore !== measureAfter,
+      `active ${activeBefore} -> ${activeAfter}, measure ${measureBefore} -> ${measureAfter}`
+    );
+
+    // --- All four cursor keys, their Shift variants and clamping ------------
+    // Enter reports the exact tick it used ("Break point at tick N"), so it
+    // doubles as a cursor readout: place a marker, read the tick, undo it. Snap
+    // is off so the reported tick is the raw cursor, not the nearest grid line.
+    await evaluate(`(function(){ document.getElementById('btn-snap').click(); return true; })()`);
+    await kd("c"); // one marker at a time keeps the Enter probe unambiguous
+    const tickAtCursor = async () => {
+      await kd("Enter");
+      const status = await statusNow();
+      if (!/already at tick/.test(status)) await kd("z", true); // undo the probe marker
+      const match = status.match(/tick (\d+)/);
+      return match ? Number(match[1]) : NaN;
+    };
+    const startTick = await tickAtCursor(); // 216 from the moves above
+    await kd("ArrowDown");
+    const downTick = await tickAtCursor();
+    await kd("ArrowUp");
+    const upTick = await tickAtCursor();
+    await kd("ArrowRight", false, true); // Shift: exactly one tick
+    const oneTickRight = await tickAtCursor();
+    await kd("ArrowLeft", false, true);
+    const oneTickBack = await tickAtCursor();
+    await kd("ArrowLeft"); // grid step (8 cells per measure -> 24 ticks)
+    const leftTick = await tickAtCursor();
+    check(
+      "ArrowUp/Down step one measure, Shift+ArrowLeft/Right step one tick",
+      downTick === startTick + 192 && upTick === startTick && oneTickRight === startTick + 1 &&
+        oneTickBack === startTick && leftTick === startTick - 24,
+      `start=${startTick} down=${downTick} up=${upTick} shiftRight=${oneTickRight} ` +
+        `shiftBack=${oneTickBack} left=${leftTick}`
+    );
 
     check("renderer has no uncaught exceptions", pageExceptions.length === 0, pageExceptions.join(" | "));
     const failed = checks.filter((c) => !c.ok);
