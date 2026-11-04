@@ -34,7 +34,6 @@ export interface MenuStrings {
   zoomOut: string;
   help: string;
   about: string;
-  aboutMessage: string;
   aboutDetail: string;
 }
 
@@ -63,7 +62,6 @@ export const MENU_STRINGS: Record<Language, MenuStrings> = {
     zoomOut: "Zoom out",
     help: "Help",
     about: "About",
-    aboutMessage: "woslicer-electron 0.1.0",
     aboutDetail:
       "Electron + TypeScript reimplementation of woslicerIII.\n" +
       "Slice DSP and .wos format are byte-compatible with the original.",
@@ -92,7 +90,6 @@ export const MENU_STRINGS: Record<Language, MenuStrings> = {
     zoomOut: "缩小",
     help: "帮助",
     about: "关于",
-    aboutMessage: "woslicer-electron 0.1.0",
     aboutDetail:
       "woslicerIII 的 Electron + TypeScript 重写版。\n" +
       "切片 DSP 与 .wos 格式与原版字节兼容。",
@@ -121,7 +118,6 @@ export const MENU_STRINGS: Record<Language, MenuStrings> = {
     zoomOut: "縮小",
     help: "ヘルプ",
     about: "バージョン情報",
-    aboutMessage: "woslicer-electron 0.1.0",
     aboutDetail:
       "woslicerIII の Electron + TypeScript 実装。\n" +
       "スライス DSP と .wos 形式はオリジナルとバイト互換です。",
@@ -150,7 +146,6 @@ export const MENU_STRINGS: Record<Language, MenuStrings> = {
     zoomOut: "축소",
     help: "도움말",
     about: "정보",
-    aboutMessage: "woslicer-electron 0.1.0",
     aboutDetail:
       "woslicerIII의 Electron + TypeScript 재구현입니다.\n" +
       "슬라이스 DSP와 .wos 형식은 원본과 바이트 호환입니다.",

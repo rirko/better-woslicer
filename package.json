@@ -1,25 +1,32 @@
 {
   "name": "woslicer-electron",
   "productName": "woslicer-electron",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Electron + TypeScript reimplementation of woslicerIII (BMS wav slicer), byte-compatible with the original .wos format and slicer DSP",
   "main": "dist/src/main/main.js",
   "private": true,
   "scripts": {
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
-    "build:main": "tsc -p tsconfig.main.json && node scripts/bundle-preload.js",
+    "build:main": "tsc -p tsconfig.main.json && node scripts/bundle-preload.js && node scripts/write-build-info.js",
     "build:renderer": "tsc -p tsconfig.renderer.json && node scripts/copy-renderer-assets.js",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "npm run check:version && npm run build:main && npm run build:renderer",
     "test": "npm run build:main && node --test dist/tests/*.test.js",
     "test:oracle": "npm run build:main && node --test dist/tests/oracle.test.js",
-    "start": "npm run build && electron ."
+    "start": "npm run build && electron .",
+    "test:ui": "node scripts/test-ui.js",
+    "package": "node scripts/package-app.js",
+    "test:ui:packaged": "node scripts/test-ui.js --packaged",
+    "check:version": "node scripts/check-version.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "7zip-bin": "5.2.0",
     "electron": "^45.1.0",
+    "resedit": "3.1.0",
     "typescript": "^5.7.0"
   },
   "dependencies": {
     "@wasm-audio-decoders/ogg-vorbis": "^0.1.20"
-  }
+  },
+  "license": "SEE LICENSE IN NOTICE"
 }

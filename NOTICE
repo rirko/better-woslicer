@@ -1,0 +1,13 @@
+Licensing and attribution
+
+LICENSE contains the MIT license for material the woslicer-electron contributors have the right to license. It does not relicense third-party material or grant rights held by the original author.
+
+woslicer II/III was created by wosderge. This project includes implementation work derived from analysis of the original program, notably the slice DSP and related compatibility logic. Authorization for those portions remains subject to the original rightsholder; adding MIT does not establish that the entire application is available under MIT alone.
+
+The supplied original readme states:
+【権利】金銭が絡まない＋作者の明示　を条件に二次使用を許可します。
+(Secondary use is permitted on condition that no money is involved and the author is identified.)
+
+Electron and other bundled dependencies retain their own licenses and notices.
+
+MIT text source: https://raw.githubusercontent.com/spdx/license-list-data/main/json/details/MIT.json

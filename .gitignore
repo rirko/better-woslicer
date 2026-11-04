@@ -3,3 +3,4 @@ dist/
 release/
 tmp-smoke.wos
 *.log
+test-artifacts/

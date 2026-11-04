@@ -17,8 +17,18 @@ const { spawn } = require("child_process");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { PRELOADED_API_KEYS } = require("../dist/src/main/channels.js");
 
 const PORT = 9223;
+const profileName = process.env.SMOKE_PROFILE || "low";
+const profiles = {
+  low: { width: 1280, height: 720, deviceScaleFactor: 1 },
+  high: { width: 1920, height: 1080, deviceScaleFactor: 2 },
+};
+if (!profiles[profileName]) throw new Error("Unknown SMOKE_PROFILE: " + profileName);
+const profile = profiles[profileName];
+const artifactDir = path.resolve("test-artifacts", (process.env.SMOKE_PACKAGED === "1" ? "packaged-" : "") + profileName);
+fs.mkdirSync(artifactDir, { recursive: true });
 
 function httpJson(urlPath) {
   return new Promise((resolve, reject) => {
@@ -38,12 +48,14 @@ async function waitMs(ms) {
 
 async function main() {
   // Requiring electron from Node yields the path to the electron binary.
-  const electronBinary = require("electron");
+  const electronBinary = process.env.SMOKE_APP || require("electron");
   if (typeof electronBinary !== "string") {
     throw new Error("electron did not resolve to a binary path");
   }
   const child = spawn(electronBinary, [
-    ".",
+    ...(process.env.SMOKE_APP ? [] : ["."]),
+    "--force-device-scale-factor=1",
+    "--remote-debugging-address=127.0.0.1",
     `--remote-debugging-port=${PORT}`,
     // The smoke window can open behind other windows; without these flags
     // Chromium throttles/parks requestAnimationFrame for occluded windows and
@@ -56,7 +68,28 @@ async function main() {
     cwd: path.join(__dirname, ".."),
     stdio: ["ignore", "ignore", "pipe"],
   });
+  // Each profile has a hard 30-second budget, including CDP connection time.
+  const watchdog = setTimeout(() => {
+    console.error("SMOKE TIMEOUT: " + profileName + " exceeded 30000 ms");
+    child.kill();
+    process.exit(1);
+  }, 30000);
+  child.on("error", (error) => {
+    console.error("SMOKE LAUNCH ERROR:", error.message);
+    clearTimeout(watchdog);
+    process.exit(1);
+  });
   let stderr = "";
+  let send;
+  let ws;
+  const saveScreenshot = async () => {
+    if (!send) return;
+    const shot = await Promise.race([
+      send("Page.captureScreenshot", { format: "png" }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Screenshot timeout")), 1000)),
+    ]);
+    fs.writeFileSync(path.join(artifactDir, "failure.png"), Buffer.from(shot.data, "base64"));
+  };
   child.stderr.on("data", (c) => (stderr += c));
 
   try {
@@ -72,7 +105,7 @@ async function main() {
     }
     if (!targets) throw new Error("app did not expose a debugging target");
     const page = targets.find((t) => t.type === "page");
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((res, rej) => {
       ws.onopen = res;
       ws.onerror = rej;
@@ -99,7 +132,7 @@ async function main() {
         else resolve(msg.result);
       }
     };
-    const send = (method, params = {}) =>
+    send = (method, params = {}) =>
       new Promise((resolve, reject) => {
         const id = ++seq;
         pending.set(id, { resolve, reject });
@@ -119,6 +152,8 @@ async function main() {
     };
 
     await send("Runtime.enable");
+    await send("Emulation.setDeviceMetricsOverride", { ...profile, mobile: false });
+    console.log("DISPLAY PROFILE:", profileName, JSON.stringify(profile));
     await waitMs(1500);
 
     const checks = [];
@@ -127,12 +162,18 @@ async function main() {
       console.log(`${ok ? "PASS" : "FAIL"} ${name}${extra ? " — " + extra : ""}`);
     };
 
+    const actualDisplay = await evaluate(`({width: innerWidth, height: innerHeight, dpr: devicePixelRatio})`);
+    check("requested display profile is active",
+      actualDisplay.width === profile.width && actualDisplay.height === profile.height &&
+        Math.abs(actualDisplay.dpr - profile.deviceScaleFactor) <= 1e-6,
+      JSON.stringify(actualDisplay));
     check("empty state status", await evaluate(`document.getElementById('status-main').textContent.includes('Empty')`));
     check("preload bridge present", await evaluate(`typeof window.woslicer === 'object' && window.woslicer !== null`));
+    const bridgeKeys = await evaluate(`Object.keys(window.woslicer).sort()`);
     check(
-      "bridge key count matches allowlist",
-      await evaluate(`Object.keys(window.woslicer).length === 16`),
-      await evaluate(`Object.keys(window.woslicer).join(',')`)
+      "bridge keys match the documented allowlist",
+      JSON.stringify(bridgeKeys) === JSON.stringify([...PRELOADED_API_KEYS].sort()),
+      bridgeKeys.join(',')
     );
 
     // Build a small deterministic WAV (3s, 440Hz) in the page and load it via
@@ -189,18 +230,24 @@ async function main() {
       canvas.parentElement.focus();
       return true;
     })()`);
-    // Simulate keydown Z at cursor 0, then move cursor and press Z again.
+    // Place cuts one measure apart using the UI density (cells per measure).
+    // This also catches treating density as a raw tick step again.
     await evaluate(`(function(){
-      function key(k, opts){ document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); }
+      function key(k){ document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); }
+      const cellsPerMeasure = Number(document.getElementById('select-grid').value);
+      if (!Number.isInteger(cellsPerMeasure) || cellsPerMeasure <= 0) throw new Error('Invalid grid density');
       key('z');
-      for (let i = 0; i < 24; i++) { key('ArrowRight'); }
+      for (let i = 0; i < cellsPerMeasure; i++) { key('ArrowRight'); }
       key('z');
-      for (let i = 0; i < 24; i++) { key('ArrowRight'); }
+      for (let i = 0; i < cellsPerMeasure; i++) { key('ArrowRight'); }
       key('z');
       return true;
     })()`);
     const cutCount = await evaluate(`document.querySelectorAll('#cut-list li').length`);
-    check("Z key places markers (cut list populated)", cutCount === 3, `count=${cutCount}`);
+    const cutTimes = await evaluate(`Array.from(document.querySelectorAll('#cut-list .cut-time'), el => el.textContent)`);
+    check("Z key places markers one measure apart at 120 BPM",
+      cutCount === 3 && JSON.stringify(cutTimes) === JSON.stringify(["0.000s", "2.000s", "4.000s"]),
+      JSON.stringify(cutTimes));
 
     // Undo the third marker with real Ctrl+Z (plain z would toggle it back).
     await evaluate(`(function(){ window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); return true; })()`);
@@ -227,13 +274,13 @@ async function main() {
       return true;
     })()`);
     const selected = await evaluate(`document.getElementById('status-main').textContent`);
-    // After the undo only markers 0 and 192 remain; the box [90..386] holds one.
+    // After undo, markers 0 and 192 remain. The scrolled box encloses 192.
     check("box select finds the marker in range", /1 marker\(s\) selected/.test(selected), selected);
     await evaluate(`(function(){
       const kd = (key, ctrl) => window.dispatchEvent(new KeyboardEvent('keydown', { key, ctrlKey: !!ctrl, bubbles: true }));
       kd('c', true);        // Ctrl+C: copy selection as relative group
-      kd('ArrowDown');      // cursor down one measure (192 -> 384)
-      kd('v', true);        // Ctrl+V: paste at cursor (384, 576)
+      kd('ArrowDown');      // cursor remains at 384 after undo, then moves to 576
+      kd('v', true);        // Ctrl+V: paste the selected marker at tick 576
       return true;
     })()`);
     const afterPaste = await evaluate(`document.querySelectorAll('#cut-list li').length`);
@@ -589,7 +636,7 @@ async function main() {
       overview: { css: document.getElementById('overview-canvas').clientWidth, buf: document.getElementById('overview-canvas').width }
     })`;
     await send("Emulation.setDeviceMetricsOverride", {
-      width: 1900,
+      width: 2300,
       height: 900,
       deviceScaleFactor: 0,
       mobile: false,
@@ -605,7 +652,7 @@ async function main() {
     }
     const follow = followDpr(wide);
     check(
-      "viewport widen 1440->1900: wave-wrap, ruler, wave and overview canvases all follow",
+      "viewport widens to 2300: wave-wrap, ruler, wave and overview canvases all follow",
       !!wide && wide.wrap > 1500 && follow(wide.ruler) && follow(wide.wave) && follow(wide.overview),
       JSON.stringify(wide)
     );
@@ -626,39 +673,48 @@ async function main() {
     // A pure devicePixelRatio change fires no element resize: the rAF
     // self-check must catch it and resize the backing buffers.
     await send("Emulation.setDeviceMetricsOverride", {
-      width: 1900,
+      width: 2300,
       height: 900,
       deviceScaleFactor: 2,
       mobile: false,
     });
+    // CDP/Chromium may report 2 as 2.0000000596 on fractional desktop scaling.
+    const matchesTargetDpr = (value) => Math.abs(value - 2) <= 1e-6;
     let dprWide = null;
     for (let i = 0; i < 40; i++) {
       await waitMs(50);
       dprWide = await evaluate(canvasSizes);
       const follow2 = followDpr(dprWide);
-      if (dprWide.dpr === 2 && follow2(dprWide.wave)) break;
+      if (matchesTargetDpr(dprWide.dpr) && follow2(dprWide.ruler) && follow2(dprWide.wave) && follow2(dprWide.overview)) break;
     }
     check(
       "devicePixelRatio change resizes the canvas buffers (rAF self-check path)",
-      !!dprWide && dprWide.dpr === 2 && Math.abs(dprWide.wave.buf - dprWide.wave.css * 2) <= 2,
+      !!dprWide && matchesTargetDpr(dprWide.dpr) &&
+        [dprWide.ruler, dprWide.wave, dprWide.overview].every(followDpr(dprWide)),
       JSON.stringify(dprWide)
     );
     await send("Emulation.clearDeviceMetricsOverride");
     await waitMs(400);
 
+    check("renderer has no uncaught exceptions", pageExceptions.length === 0, pageExceptions.join(" | "));
     const failed = checks.filter((c) => !c.ok);
     if (pageExceptions.length) {
       console.log("PAGE EXCEPTIONS:");
       for (const ex of pageExceptions.slice(0, 10)) console.log("  " + ex);
     }
     console.log(failed.length ? `SMOKE FAILED: ${failed.length}/${checks.length}` : `SMOKE OK: ${checks.length}/${checks.length}`);
+    if (failed.length) await saveScreenshot().catch((error) => console.error(error.message));
     ws.close();
+    clearTimeout(watchdog);
     child.kill();
     fs.existsSync(path.join(__dirname, "..", "tmp-smoke.wos")) &&
       fs.unlinkSync(path.join(__dirname, "..", "tmp-smoke.wos"));
     process.exit(failed.length ? 1 : 0);
   } catch (err) {
     console.error("SMOKE ERROR:", err.message || err);
+    await saveScreenshot().catch(() => {});
+    clearTimeout(watchdog);
+    ws?.close();
     if (stderr) console.error("electron stderr:", stderr.slice(0, 2000));
     child.kill();
     process.exit(1);

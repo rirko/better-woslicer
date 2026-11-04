@@ -27,6 +27,7 @@ import { TimeBase, tickToSampleExport } from "../core/timebase.js";
 import { BMSE_CLIPBOARD_FORMAT_NAME, bmseBufferToText, bmseTextToBuffer } from "../core/bmse.js";
 import { isLanguage, languageFromLocale, type Language } from "../core/language.js";
 import { MENU_STRINGS, menuTemplate } from "./menu-i18n.js";
+import { readBuildInfo, formatBuildDetails } from "./build-info.js";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -390,8 +391,8 @@ function showAboutDialog(): void {
   void dialog.showMessageBox({
     type: "info",
     title: "woslicer-electron",
-    message: t.aboutMessage,
-    detail: t.aboutDetail,
+    message: `${app.getName()} ${app.getVersion()}`,
+    detail: `${formatBuildDetails(readBuildInfo(), uiLanguage)}\n\n${t.aboutDetail}`,
   });
 }
 
