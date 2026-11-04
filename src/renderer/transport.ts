@@ -18,6 +18,8 @@ export class Transport {
   private cue: CueSynth;
   private playBuffer: AudioBuffer | null = null;
   private playNode: AudioBufferSourceNode | null = null;
+  /** Last slice-preview node (P / O); tracked so a retrigger restarts it. */
+  private previewNode: AudioBufferSourceNode | null = null;
   private startedAt = 0;
   private startOffset = 0;
   private rafId = 0;
@@ -68,6 +70,8 @@ export class Transport {
   play(): void {
     const s = this.store.state;
     if (!this.playBuffer || !s.source || s.playing) return;
+    // Whole-track playback is exclusive with slice auditioning.
+    this.stopPreview();
     void this.ctx.resume();
     const node = this.ctx.createBufferSource();
     node.buffer = this.playBuffer;
@@ -106,6 +110,7 @@ export class Transport {
 
   stop(): void {
     cancelAnimationFrame(this.rafId);
+    this.stopPreview();
     if (this.playNode) {
       const node = this.playNode;
       this.playNode = null;
@@ -118,6 +123,24 @@ export class Transport {
       node.disconnect();
     }
     this.store.update({ playing: false });
+  }
+
+  /**
+   * Silences an in-flight slice preview. Preview nodes are independent of the
+   * whole-track node, so stop()/play() must release them explicitly; otherwise
+   * a second P press starts a new node on top of the still-sounding one.
+   */
+  private stopPreview(): void {
+    if (!this.previewNode) return;
+    const node = this.previewNode;
+    this.previewNode = null;
+    node.onended = null;
+    try {
+      node.stop();
+    } catch {
+      // already stopped
+    }
+    node.disconnect();
   }
 
   seekSample(sample: number): void {
@@ -201,6 +224,8 @@ export class Transport {
    * result and stays at 1x, independent of the whole-track playback rate.
    */
   playRendered(channelsData: Int16Array[], sampleRate: number): void {
+    // stop() releases the previous preview (and the whole-track node), so
+    // pressing P again retriggers the slice instead of layering a second copy.
     this.stop();
     void this.ctx.resume();
     const buffer = this.ctx.createBuffer(channelsData.length, channelsData[0].length, sampleRate);
@@ -212,6 +237,13 @@ export class Transport {
     const node = this.ctx.createBufferSource();
     node.buffer = buffer;
     node.connect(this.ctx.destination);
+    node.onended = () => {
+      if (this.previewNode === node) {
+        this.previewNode = null;
+        node.disconnect();
+      }
+    };
+    this.previewNode = node;
     node.start();
   }
 
