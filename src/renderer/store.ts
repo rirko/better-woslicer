@@ -9,9 +9,25 @@ import { DEFAULT_PLAYBACK_RATE } from "../core/rate.js";
 import { PeakCache } from "../core/peaks.js";
 import { resolveBreakpointTick } from "../core/timebase.js";
 import { BandAnalysis, BandName } from "../core/bands.js";
+import type { FormatParams, StatusKey } from "../core/messages.js";
 
 export type Phase = "empty" | "parsing" | "ready";
 export type CueMode = "off" | "cowbell" | "triangle" | "metronome";
+
+/**
+ * A status-bar message: one or more stable template segments. The language is
+ * applied only at render time (each segment is translated and the segments
+ * are joined with " · "), so switching the UI language re-renders the current
+ * message without re-deriving it from a string.
+ */
+export interface StatusSegment {
+  key: StatusKey;
+  params?: FormatParams;
+}
+
+export interface StatusEntry {
+  segments: StatusSegment[];
+}
 
 export interface SourceInfo {
   path: string;
@@ -27,7 +43,7 @@ export interface SourceInfo {
 
 export interface ViewState {
   phase: Phase;
-  statusText: string;
+  status: StatusEntry;
   isError: boolean;
   source: SourceInfo | null;
   peaks: PeakCache | null;
@@ -83,7 +99,7 @@ export class Store {
 
   state: ViewState = {
     phase: "empty",
-    statusText: "Empty: drop a WAV/OGG file to begin",
+    status: { segments: [{ key: "statusEmpty" }] },
     isError: false,
     source: null,
     peaks: null,
@@ -131,8 +147,24 @@ export class Store {
     for (const l of this.listeners) l();
   }
 
-  setStatus(text: string, isError = false): void {
-    this.update({ statusText: text, isError });
+  /**
+   * Records a status message. Accepted shapes: a bare template key, a key
+   * with placeholder values (optionally followed by an isError flag), a full
+   * segment object, or a segment array for composed lines (joined with
+   * " · " at render time).
+   */
+  setStatus(
+    message: StatusKey | StatusSegment | StatusSegment[],
+    paramsOrIsError?: FormatParams | boolean,
+    isError = false,
+  ): void {
+    const params = typeof paramsOrIsError === "object" ? paramsOrIsError : undefined;
+    const segments: StatusSegment[] = Array.isArray(message)
+      ? message
+      : typeof message === "string"
+        ? [{ key: message, params }]
+        : [message];
+    this.update({ status: { segments }, isError: typeof paramsOrIsError === "boolean" ? paramsOrIsError : isError });
   }
 
   /** Visible tick range for the current scroll/zoom. */

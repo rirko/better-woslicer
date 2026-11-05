@@ -26,7 +26,7 @@ import { renderSlice } from "../core/slicer.js";
 import { TimeBase, tickToSampleExport } from "../core/timebase.js";
 import { BMSE_CLIPBOARD_FORMAT_NAME, bmseBufferToText, bmseTextToBuffer } from "../core/bmse.js";
 import { isLanguage, languageFromLocale, type Language } from "../core/language.js";
-import { MENU_STRINGS, menuTemplate } from "./menu-i18n.js";
+import { DIALOG_STRINGS, MENU_STRINGS, menuTemplate } from "./menu-i18n.js";
 import { readBuildInfo, formatBuildDetails } from "./build-info.js";
 
 // Test-only paths are accepted only with explicit loopback debugging enabled.
@@ -70,7 +70,8 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: "#0E1013",
-    title: "woslicer-electron",
+    // Product name comes from package.json (app.getName) — the single source.
+    title: app.getName(),
     webPreferences: {
       // Sandboxed preloads cannot require relative modules, so the build
       // inlines channels.js into this single-file bundle (bundle-preload.js).
@@ -222,8 +223,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.openFileDialog, async () => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: "Load WAV / OGG",
-      filters: [{ name: "wave files", extensions: ["wav", "ogg"] }],
+      title: DIALOG_STRINGS[uiLanguage].loadAudio,
+      filters: [{ name: DIALOG_STRINGS[uiLanguage].filterWave, extensions: ["wav", "ogg"] }],
       properties: ["openFile"],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
@@ -233,8 +234,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.openWosDialog, async () => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: "Load .wos",
-      filters: [{ name: "wos files", extensions: ["wos"] }],
+      title: DIALOG_STRINGS[uiLanguage].loadWos,
+      filters: [{ name: DIALOG_STRINGS[uiLanguage].filterWos, extensions: ["wos"] }],
       properties: ["openFile"],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
@@ -245,9 +246,9 @@ function registerIpcHandlers(): void {
     if (!mainWindow) return null;
     const name = typeof suggestedName === "string" && suggestedName.trim() ? suggestedName : "untitled.wos";
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: "Save .wos",
+      title: DIALOG_STRINGS[uiLanguage].saveWos,
       defaultPath: name.endsWith(".wos") ? name : name + ".wos",
-      filters: [{ name: "wos files", extensions: ["wos"] }],
+      filters: [{ name: DIALOG_STRINGS[uiLanguage].filterWos, extensions: ["wos"] }],
     });
     if (result.canceled || !result.filePath) return null;
     return result.filePath;
@@ -257,9 +258,9 @@ function registerIpcHandlers(): void {
     if (!mainWindow) return null;
     const name = typeof suggestedName === "string" && suggestedName.trim() ? suggestedName : "slice.wav";
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: "Export slice WAV",
+      title: DIALOG_STRINGS[uiLanguage].exportSlice,
       defaultPath: name,
-      filters: [{ name: "wave files", extensions: ["wav"] }],
+      filters: [{ name: DIALOG_STRINGS[uiLanguage].filterWave, extensions: ["wav"] }],
     });
     if (result.canceled || !result.filePath) return null;
     return result.filePath;
@@ -268,7 +269,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.exportAllDialog, async (_event, suggestedDir: unknown) => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: "Choose export folder",
+      title: DIALOG_STRINGS[uiLanguage].chooseExportFolder,
       defaultPath: typeof suggestedDir === "string" ? suggestedDir : undefined,
       properties: ["openDirectory", "createDirectory"],
     });
@@ -424,7 +425,7 @@ function showAboutDialog(): void {
   const t = MENU_STRINGS[uiLanguage];
   void dialog.showMessageBox({
     type: "info",
-    title: "woslicer-electron",
+    title: app.getName(),
     message: `${app.getName()} ${app.getVersion()}`,
     detail: `${formatBuildDetails(readBuildInfo(), uiLanguage)}\n\n${t.aboutDetail}`,
   });

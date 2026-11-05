@@ -1,103 +1,135 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LANGUAGES, isLanguage, languageFromLocale } from "../src/core/language.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { MANIFEST as manifest, DATA as GENERATED_DATA, EN as en } from "../src/i18n/generated.js";
+import { LANGUAGES, DOC_LANG, isLanguage, languageFromLocale, type Language } from "../src/core/language.js";
+import { DIALOG_STRINGS, MENU_STRINGS } from "../src/main/menu-i18n.js";
 import {
-  DICTS,
-  KNOWN_KEYS,
+  formatStatus,
   scopeRangeText,
-  translateStatusFor,
   translateText,
+  type ChromeKey,
+  type StatusKey,
 } from "../src/core/messages.js";
 
-test("every language ships the identical chrome key set", () => {
-  const reference = [...KNOWN_KEYS].sort();
-  assert.ok(reference.length >= 80, `dictionary looks short: ${reference.length}`);
-  assert.deepEqual(Object.keys(DICTS.en), [], "English must stay the identity mapping");
-  for (const lang of LANGUAGES) {
-    if (lang === "en") continue;
-    assert.deepEqual(Object.keys(DICTS[lang]).sort(), reference, `dictionary drift in ${lang}`);
-  }
-});
+interface LanguageData {
+  chrome: Record<string, string>;
+  status: Record<string, string>;
+  menu: Record<string, string>;
+  dialogs: Record<string, string>;
+  scopeRange: string;
+}
+const DATA: Record<Language, LanguageData> = GENERATED_DATA;
+const nonEnglish = LANGUAGES.filter((lang) => lang !== "en");
 
-test("no translation is empty or left untranslated", () => {
-  for (const lang of LANGUAGES) {
-    if (lang === "en") continue;
-    for (const [key, value] of Object.entries(DICTS[lang])) {
-      assert.ok(value.trim().length > 0, `${lang}: empty translation for ${key}`);
-      assert.notEqual(value, key, `${lang}: still English for ${key}`);
+function placeholders(template: string): string[] {
+  return [...template.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+}
+
+test("the i18n manifest is the single source of truth for the language set", () => {
+  assert.deepEqual(manifest.languages.map((entry) => entry.id), [...LANGUAGES]);
+  const ids = manifest.languages.map((entry) => entry.id);
+  assert.equal(new Set(ids).size, ids.length, "duplicate language id in manifest");
+  const locales = manifest.languages.flatMap((entry) => entry.chromiumLocales);
+  assert.equal(new Set(locales).size, locales.length, "a chromium locale backs two languages");
+  for (const entry of manifest.languages) {
+    assert.ok(entry.label.trim().length > 0, `empty selector label for ${entry.id}`);
+    assert.ok(entry.docLang.trim().length > 0, `empty docLang for ${entry.id}`);
+    assert.ok(entry.chromiumLocales.length > 0, `no chromium locales for ${entry.id}`);
+    for (const locale of entry.chromiumLocales) {
+      assert.match(locale, /^[a-z]{2,3}(-[A-Z][a-zA-Z]*)*$/, `malformed chromium locale ${locale}`);
     }
   }
 });
 
-test("translateText is identity for English and looks up every other language", () => {
-  assert.equal(translateText("en", "Open"), "Open");
-  assert.equal(translateText("zh", "Open"), "打开");
-  assert.equal(translateText("ja", "Open"), "開く");
-  assert.equal(translateText("ko", "Open"), "열기");
-  assert.equal(translateText("ja", "Not a key"), "Not a key");
+test("docLang covers every language (drives <html lang> and the selector options)", () => {
+  for (const lang of LANGUAGES) {
+    assert.ok(DOC_LANG[lang].length > 0, `missing docLang for ${lang}`);
+  }
 });
 
-test("status messages are translated in every language", () => {
-  assert.equal(translateStatusFor("en", "Playing"), "Playing");
-  assert.equal(translateStatusFor("zh", "Playing"), "播放中");
-  assert.equal(translateStatusFor("ja", "Playing"), "再生中");
-  assert.equal(translateStatusFor("ko", "Playing"), "재생 중");
-  assert.equal(translateStatusFor("ja", "Band detect: +3 cuts"), "帯域検出：+3 カット");
-  assert.equal(translateStatusFor("ko", "Grid: 8 per measure"), "그리드: 마디당 8");
-  assert.equal(translateStatusFor("zh", "Grid: 2 per measure"), "网格：每小节 2 格");
-  assert.equal(translateStatusFor("ja", "Totally unknown"), "Totally unknown");
-});
-
-test("idle status strings fall back to the chrome dictionary", () => {
-  // The initial status text is not a pattern message; it must still translate.
-  assert.equal(
-    translateStatusFor("en", "Empty: drop a WAV/OGG file to begin"),
-    "Empty: drop a WAV/OGG file to begin"
-  );
-  assert.equal(translateStatusFor("zh", "Empty: drop a WAV/OGG file to begin"), "空：拖入 WAV/OGG 文件开始");
-  assert.equal(
-    translateStatusFor("ja", "Empty: drop a WAV/OGG file to begin"),
-    "空：WAV/OGG ファイルをドロップして開始"
-  );
-  assert.equal(
-    translateStatusFor("ko", "Empty: drop a WAV/OGG file to begin"),
-    "비어 있음: WAV/OGG 파일을 놓아 시작"
-  );
-  assert.equal(translateStatusFor("ko", "No source loaded"), "소스가 로드되지 않음");
-});
-
-test("every status shape has a rule in every non-English language", () => {
-  const samples = [
-    "Playing",
-    "Paused",
-    "Stopped",
-    "Break point at tick 12",
-    "Break point already at tick 12",
-    "Added marker at tick 5",
-    "Marker already at tick 5",
-    "Painted 3 marker(s)",
-    "Erased 2 marker(s)",
-    "Marker toggled at tick 9",
-    "Selected 4 marker(s)",
-    "Moved 4 marker(s) by -8 ticks",
-    "Quantized selected marker(s) to grid 8",
-    "Copied 3 marker(s) as relative group",
-    "Pasted 3 marker(s) at tick 96",
-    "Exported 7 slices",
-    "Exporting 7 slices",
-    "Band detect: +2 cuts",
-    "Band detect: 0 cuts",
-    "Tap offset applied: -12.5 ms",
-    "Tap calibration finished",
-    "Calibration closed",
-    "Playback rate: 0.75×",
-    "Grid: 4 per measure",
-  ];
-  for (const lang of ["zh", "ja", "ko"] as const) {
-    for (const message of samples) {
-      assert.notEqual(translateStatusFor(lang, message), message, `${lang} left "${message}" untranslated`);
+test("every language ships the identical key set in every section", () => {
+  const minimums = { chrome: 60, status: 60, menu: 20, dialogs: 5 } as const;
+  for (const section of ["chrome", "status", "menu", "dialogs"] as const) {
+    const reference = Object.keys(en[section]).sort();
+    assert.ok(reference.length >= minimums[section], `${section} dictionary looks short: ${reference.length}`);
+    for (const lang of nonEnglish) {
+      assert.deepEqual(Object.keys(DATA[lang][section]).sort(), reference, `${section} drift in ${lang}`);
     }
   }
+});
+
+test("status templates keep their placeholder names across languages", () => {
+  for (const key of Object.keys(en.status) as StatusKey[]) {
+    const reference = placeholders(en.status[key]);
+    for (const lang of nonEnglish) {
+      assert.deepEqual(placeholders(DATA[lang].status[key]), reference, `${lang} status.${key} placeholders`);
+    }
+  }
+});
+
+test("English values are the reference copy of every user-facing string", () => {
+  // en.json is the baseline the smoke tests and docs quote: it must not drift
+  // from the shipped UI text without an explicit decision.
+  assert.equal(translateText("en", "open"), "Open");
+  assert.equal(translateText("en", "bandDetect"), "Band detect");
+  assert.equal(formatStatus("en", "playing"), "Playing");
+  assert.equal(formatStatus("en", "paintedMarkers", { count: 3 }), "Painted 3 marker(s)");
+});
+
+test("menu and dialog sections stay in lockstep across languages", () => {
+  const menuKeys = Object.keys(MENU_STRINGS.en).sort();
+  const dialogKeys = Object.keys(DIALOG_STRINGS.en).sort();
+  for (const lang of LANGUAGES) {
+    assert.deepEqual(Object.keys(MENU_STRINGS[lang]).sort(), menuKeys, `menu drift in ${lang}`);
+    assert.deepEqual(Object.keys(DIALOG_STRINGS[lang]).sort(), dialogKeys, `dialog drift in ${lang}`);
+  }
+});
+
+test("no translation is empty", () => {
+  for (const lang of nonEnglish) {
+    for (const [section, data] of Object.entries(DATA[lang])) {
+      if (section === "scopeRange") {
+        assert.ok((data as string).trim().length > 0, `${lang}: empty scopeRange`);
+        continue;
+      }
+      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+        if (typeof value === "string") {
+          assert.ok(value.trim().length > 0, `${lang}: empty ${section}.${key}`);
+        }
+      }
+    }
+  }
+});
+
+test("status and scope placeholders are camelCase names", () => {
+  for (const template of [en.scopeRange, ...Object.values(en.status)]) {
+    for (const match of template.matchAll(/\{(\w+)\}/g)) {
+      assert.match(match[1], /^[a-z][A-Za-z0-9]*$/, `placeholder {${match[1]}} is not camelCase`);
+    }
+  }
+});
+
+test("translateText resolves chrome keys with English as the fallback language", () => {
+  assert.equal(translateText("zh", "open"), "打开");
+  assert.equal(translateText("ja", "open"), "開く");
+  assert.equal(translateText("ko", "open"), "열기");
+  assert.equal(translateText("zh", "bandLow"), "低频");
+  // fill {name} slots when given
+  assert.equal(translateText("zh", "framesCount", { count: "1,234" }), "1,234 采样帧");
+  assert.equal(translateText("en", "readoutTick", { measure: "001", tick: 24 }), "M001  tick 24");
+});
+
+test("formatStatus fills every placeholder and leaves unknown ones visible", () => {
+  assert.equal(formatStatus("zh", "breakPointAtTick", { tick: 12 }), "已在 tick 12 打点");
+  assert.equal(formatStatus("ja", "gridPerMeasure", { grid: 8 }), "グリッド：1 小節あたり 8");
+  assert.equal(formatStatus("ko", "movedMarkersBy", { count: 4, delta: -8 }), "마커 4개를 -8 tick 이동");
+  assert.equal(formatStatus("zh", "playing"), "播放中");
+  assert.equal(formatStatus("en", "bandDetectCuts", { count: 5, bands: "Low/Mid/High", threshold: "6.0" }),
+    "Band detect: +5 cuts (Low/Mid/High ≥ +6.0 dB)");
+  // unknown placeholder names stay in the output so the gap is observable
+  assert.equal(formatStatus("en", "movedMarkersBy", { count: 1 }), "Moved 1 marker(s) by {delta} ticks");
 });
 
 test("the band-detect scope line is localized", () => {
@@ -108,6 +140,18 @@ test("the band-detect scope line is localized", () => {
   assert.ok(scopeRangeText("zh", "001", "003", "2.50").startsWith("范围：选区"));
   assert.ok(scopeRangeText("ja", "001", "003", "2.50").startsWith("範囲：選択"));
   assert.ok(scopeRangeText("ko", "001", "003", "2.50").startsWith("범위: 선택"));
+});
+
+test("every data-i18n reference in index.html resolves to a chrome key", () => {
+  const html = readFileSync(join(__dirname, "..", "..", "src", "renderer", "index.html"), "utf8");
+  const referenced = new Set<string>();
+  for (const match of html.matchAll(/data-i18n(?:-title)?="([^"]+)"/g)) {
+    referenced.add(match[1]);
+  }
+  assert.ok(referenced.size >= 60, `index.html carries few i18n references: ${referenced.size}`);
+  const chromeKeys = new Set(Object.keys(en.chrome));
+  const unknown = [...referenced].filter((key) => !chromeKeys.has(key));
+  assert.deepEqual(unknown, [], "index.html references chrome keys that do not exist");
 });
 
 test("locale mapping picks the closest shipped language", () => {
@@ -130,3 +174,8 @@ test("isLanguage gates the IPC payload", () => {
   assert.equal(isLanguage(7), false);
   assert.equal(isLanguage(""), false);
 });
+
+// Keep the chrome key type honest: a ChromeKey must be assignable from its
+// literal and the reference set must not silently collapse to string.
+const _typeProbe: ChromeKey = "open";
+void _typeProbe;

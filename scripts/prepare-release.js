@@ -2,14 +2,19 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-function expectedAssets(version) {
+/** Expected release assets; archive names derive from the package name. */
+function expectedAssets(version, name) {
+  const prefix = name + "-" + version;
   return [
-    { platform: "Windows x64", required: true, name: "woslicer-electron-" + version + "-win32-x64.7z" },
-    { platform: "Linux x64", required: false, name: "woslicer-electron-" + version + "-linux-x64.tar.xz" },
-    { platform: "Windows ARM64", required: false, name: "woslicer-electron-" + version + "-win32-arm64.7z" },
-    { platform: "Linux ARM64", required: false, name: "woslicer-electron-" + version + "-linux-arm64.tar.xz" },
-    { platform: "macOS Intel", required: false, name: "woslicer-electron-" + version + "-darwin-x64.zip" },
-    { platform: "macOS ARM64", required: false, name: "woslicer-electron-" + version + "-darwin-arm64.zip" },
+    { platform: "Windows x64", required: true, name: prefix + "-win32-x64.7z" },
+    { platform: "Linux x64", required: false, name: prefix + "-linux-x64.tar.xz" },
+    { platform: "Windows ARM64", required: false, name: prefix + "-win32-arm64.7z" },
+    { platform: "Linux ARM64", required: false, name: prefix + "-linux-arm64.tar.xz" },
+    { platform: "macOS Intel", required: false, name: prefix + "-darwin-x64.zip" },
+    { platform: "macOS ARM64", required: false, name: prefix + "-darwin-arm64.zip" },
+    // Debug source maps for the minified payload; produced once per commit by
+    // the bundle job and attached alongside the platform archives.
+    { platform: "Debug source maps", required: true, name: prefix + "-maps.tar.xz" },
   ];
 }
 
@@ -37,7 +42,7 @@ function prepareRelease({ tag, artifactDir, notesPath, packagePath, changelogPat
   const releaseNotes = extractChangelog(changelog, pkg.version);
   const directory = path.resolve(artifactDir);
   if (!fs.statSync(directory).isDirectory()) throw new Error("Artifact path is not a directory");
-  const expected = expectedAssets(pkg.version);
+  const expected = expectedAssets(pkg.version, pkg.name);
   const allowed = new Set(expected.flatMap(asset => [asset.name, asset.name + ".sha256"]));
   const entries = fs.readdirSync(directory);
   const unexpected = entries.filter(name => !allowed.has(name));
@@ -63,7 +68,7 @@ function prepareRelease({ tag, artifactDir, notesPath, packagePath, changelogPat
     available.push(asset);
   }
   const tick = String.fromCharCode(96);
-  const notes = ["# woslicer-electron " + pkg.version, releaseNotes, "## Downloads"];
+  const notes = ["# " + pkg.name + " " + pkg.version, releaseNotes, "## Downloads"];
   for (const asset of available) notes.push("- " + asset.platform + ": " + tick + asset.name + tick);
   if (unavailable.length) {
     notes.push("## Optional platform builds not included");

@@ -191,7 +191,7 @@ export class Transport {
     if (!s.source) return;
     const ticks = markerTicks(s.doc.markers);
     if (!ticks.length) {
-      this.store.setStatus("No markers to preview — place a cut with Z first");
+      this.store.setStatus("noMarkersToPreview");
       return;
     }
     const base = this.timeBase();
@@ -202,7 +202,7 @@ export class Transport {
     const end =
       index + 1 < ticks.length ? tickToSampleExport(ticks[index + 1], base) : s.source.length;
     if (start > s.source.length) {
-      this.store.setStatus("Preview start is beyond the end of the source", true);
+      this.store.setStatus("previewBeyondEnd", undefined, true);
       return;
     }
     const rendered = renderSlice(
@@ -215,7 +215,7 @@ export class Transport {
       }
     );
     this.playRendered(rendered.channelsData, rendered.sampleRate);
-    this.store.setStatus(`Preview slice ${String(index).padStart(3, "0")} (tick ${ticks[index]})`);
+    this.store.setStatus("previewSlice", { slice: String(index).padStart(3, "0"), tick: ticks[index] });
   }
 
   /**

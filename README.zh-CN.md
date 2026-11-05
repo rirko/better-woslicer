@@ -1,4 +1,4 @@
-# woslicer-electron
+# woslicer-dx
 
 [English](README.md) · **中文** · [日本語](README.ja.md) · [한국어](README.ko.md)
 
@@ -20,9 +20,9 @@
 
 | 平台 | 格式 | 程序 |
 | --- | --- | --- |
-| Windows | `.7z` | `woslicer-electron.exe` |
-| Linux | `.tar.xz` | `woslicer-electron` |
-| macOS | `.zip` | `woslicer-electron.app` |
+| Windows | `.7z` | `woslicer-dx.exe` |
+| Linux | `.tar.xz` | `woslicer-dx` |
+| macOS | `.zip` | `woslicer-dx.app` |
 
 macOS CI 构建未公证。应用在本地处理文件，运行时无需联网。
 

@@ -286,13 +286,13 @@ export function handleKeyDown(store: Store, actions: KeyActions, e: KeyEventLike
   const s = store.state;
   switch (action) {
     case "undo":
-      if (s.doc.undo()) store.setStatus("Undo");
-      else store.setStatus("Nothing to undo");
+      if (s.doc.undo()) store.setStatus("undo");
+      else store.setStatus("nothingToUndo");
       actions.zoomRefresh();
       return;
     case "redo":
-      if (s.doc.redo()) store.setStatus("Redo");
-      else store.setStatus("Nothing to redo");
+      if (s.doc.redo()) store.setStatus("redo");
+      else store.setStatus("nothingToRedo");
       actions.zoomRefresh();
       return;
     case "select-copy":
@@ -409,6 +409,6 @@ function cycleGrid(store: Store, dir: number): void {
   const next = GRID_CYCLE[nextIndex];
   if (next !== current) {
     store.update({ grid: next });
-    store.setStatus(`Grid: ${next} per measure`);
+    store.setStatus("gridPerMeasure", { grid: next });
   }
 }

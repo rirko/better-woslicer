@@ -19,11 +19,16 @@ import {
   bandScopeWhole,
   getLanguage,
   initLanguage,
+  renderStatus,
   setLanguage,
-  translateStatus,
   tr,
+  LANGUAGES,
+  LANGUAGE_LABELS,
+  DOC_LANG,
   type Language,
 } from "./i18n.js";
+import type { ChromeKey, FormatParams, StatusKey } from "../core/messages.js";
+import type { StatusEntry, StatusSegment } from "./store.js";
 import { gridStepTicks } from "../core/gridlines.js";
 import { MAX_TICKS, resolveBreakpointTick, sampleToTickNearest, tickToSampleExport } from "../core/timebase.js";
 import { DEFAULT_PLAYBACK_RATE, formatRate, stepPlaybackRate } from "../core/rate.js";
@@ -147,13 +152,15 @@ function updateScrollbar(): void {
 
 function updateReadout(): void {
   const s = store.state;
-  const measure = Math.floor(s.cursorTick / 192) + 1;
-  let text = `M${String(measure).padStart(3, "0")}  tick ${s.cursorTick}`;
+  const measure = String(Math.floor(s.cursorTick / 192) + 1).padStart(3, "0");
+  let text: string;
   if (s.source) {
     const sec = s.playheadSample / s.source.sampleRate;
     const mm = Math.floor(sec / 60);
     const ss = (sec - mm * 60).toFixed(3).padStart(6, "0");
-    text = `M${String(measure).padStart(3, "0")}  ${String(mm).padStart(2, "0")}:${ss}`;
+    text = tr("readoutTime", { measure, time: `${String(mm).padStart(2, "0")}:${ss}` });
+  } else {
+    text = tr("readoutTick", { measure, tick: s.cursorTick });
   }
   el<HTMLSpanElement>("readout-position").textContent = text;
   el<HTMLSpanElement>("status-right").textContent = s.source
@@ -196,8 +203,8 @@ function updateCutList(): void {
   list.appendChild(fragment);
 }
 
-function setStatus(text: string, isError = false): void {
-  store.setStatus(text, isError);
+function setStatus(key: StatusKey, params?: FormatParams, isError = false): void {
+  store.setStatus(key, params, isError);
 }
 
 /**
@@ -208,12 +215,14 @@ function setStatus(text: string, isError = false): void {
 function applyRateStep(direction: -1 | 1): void {
   const step = stepPlaybackRate(store.state.playbackRate, direction);
   transport.setRate(step.rate);
+  const rate = formatRate(step.rate);
   store.setStatus(
     step.clamped
       ? direction < 0
-        ? `Already slowest ${formatRate(step.rate)}`
-        : `Already fastest ${formatRate(step.rate)}`
-      : `Playback rate: ${formatRate(step.rate)}`
+        ? "alreadySlowest"
+        : "alreadyFastest"
+      : "playbackRate",
+    { rate }
   );
   syncRateSelect();
 }
@@ -247,7 +256,7 @@ function ensureBandAnalysis(): Promise<BandAnalysis | null> {
   if (!s.source) return Promise.resolve(null);
   if (s.bandAnalysis) return Promise.resolve(s.bandAnalysis);
   const source = s.source;
-  store.setStatus("Analyzing bands…");
+  store.setStatus("analyzingBands");
   return new Promise((resolve) => {
     // Let the status paint before the synchronous filter pass starts.
     setTimeout(() => {
@@ -318,7 +327,7 @@ function updateBandPanel(): void {
   else estimate.textContent = `+${s.bandEstimate}`;
   const button = el<HTMLButtonElement>("btn-band-detect");
   button.disabled = !s.source || s.bandBusy || selectedBands().length === 0;
-  button.textContent = tr(s.bandBusy ? "Detecting…" : "Detect");
+  button.textContent = tr(s.bandBusy ? "detecting" : "detect");
   for (const chip of document.querySelectorAll<HTMLButtonElement>(".band-chip")) {
     chip.classList.toggle("on", s.bandDetectBands[chip.dataset.band as BandName]);
     chip.setAttribute("aria-pressed", String(s.bandDetectBands[chip.dataset.band as BandName]));
@@ -346,36 +355,37 @@ function scheduleBandEstimate(): void {
 async function bandDetect(): Promise<void> {
   const s = store.state;
   if (!s.source) {
-    store.setStatus("Band detect needs a loaded source", true);
+    store.setStatus("bandDetectNeedsSource", true);
     return;
   }
   if (!selectedBands().length) {
-    store.setStatus("Band detect: select at least one band", true);
+    store.setStatus("bandDetectSelectBand", true);
     return;
   }
   store.update({ bandBusy: true });
   updateBandPanel();
-  store.setStatus("Detecting band onsets…");
+  store.setStatus("detectingBandOnsets");
   try {
     const analysis = await ensureBandAnalysis();
     if (!analysis) return;
-    const threshold = store.state.bandThresholdDb;
+    const threshold = store.state.bandThresholdDb.toFixed(1);
     const result = runBandDetect(analysis);
     const added = store.state.doc.addTicks(result.ticks);
     const range = bandRange();
-    const label = selectedBands()
+    const bands = selectedBands()
       .map((b) => b[0].toUpperCase() + b.slice(1))
       .join("/");
     if (added === 0) {
-      store.setStatus(`Band detect: 0 cuts · no rise ≥ +${threshold.toFixed(1)} dB`);
+      store.setStatus({ key: "bandDetectZero", params: { threshold } });
     } else {
-      const parts = [`Band detect: +${added} cuts (${label} ≥ +${threshold.toFixed(1)} dB)`];
-      if (range.hasRange) parts.push("in selection");
-      parts.push("· 1 undo step");
-      const notes: string[] = [];
-      if (result.skippedGap) notes.push(`${result.skippedGap} skipped by min gap`);
-      if (result.existing) notes.push(`${result.existing} already existed`);
-      store.setStatus(parts.join(" ") + (notes.length ? ` · ${notes.join(" · ")}` : ""));
+      // The result line is a sequence of translatable segments; the store
+      // keeps them keyed so a language switch re-renders every segment.
+      const segments: StatusSegment[] = [{ key: "bandDetectCuts", params: { count: added, bands, threshold } }];
+      if (range.hasRange) segments.push({ key: "bandDetectInSelection" });
+      segments.push({ key: "bandDetectUndoStep" });
+      if (result.skippedGap) segments.push({ key: "bandDetectSkipped", params: { count: result.skippedGap } });
+      if (result.existing) segments.push({ key: "bandDetectExisting", params: { count: result.existing } });
+      store.setStatus(segments);
     }
     store.update({ bandEstimate: null });
     redraw();
@@ -394,7 +404,7 @@ let calibrationTimer: number | null = null;
 function syncTapOffsetDisplay(): void {
   const ms = store.state.tapOffsetMs;
   el<HTMLSpanElement>("tap-offset").textContent =
-    ms === 0 ? "" : `Offset ${ms > 0 ? "+" : ""}${ms} ms`;
+    ms === 0 ? "" : tr("offsetDisplay", { ms: `${ms > 0 ? "+" : ""}${ms}` });
 }
 
 function updateCalibrationUi(): void {
@@ -416,9 +426,13 @@ function renderLiveCalibration(): void {
   }
   box.classList.remove("hidden");
   const sign = result.medianMs >= 0 ? "+" : "";
-  box.textContent =
-    `Taps ${result.matched}/${result.total} matched · median ${sign}${result.medianMs.toFixed(1)} ms · ` +
-    `mean ${result.meanMs.toFixed(1)} ms · ±${result.stdMs.toFixed(1)} ms`;
+  box.textContent = tr("tapsLive", {
+    matched: result.matched,
+    total: result.total,
+    median: `${sign}${result.medianMs.toFixed(1)}`,
+    mean: result.meanMs.toFixed(1),
+    spread: result.stdMs.toFixed(1),
+  });
   apply.classList.remove("hidden");
 }
 
@@ -429,7 +443,7 @@ function closeCalibration(): void {
     calibrationTimer = null;
   }
   el<HTMLDivElement>("calibration-modal").classList.add("hidden");
-  store.setStatus("Calibration closed");
+  store.setStatus("calibrationClosed");
 }
 
 function finishCalibration(): void {
@@ -444,22 +458,26 @@ function finishCalibration(): void {
   box.dataset.median = String(result.medianMs);
   box.dataset.matched = String(result.matched);
   if (result.matched === 0) {
-    box.textContent = `No taps matched (${result.total} tap(s) recorded) — restart and tap on the clicks.`;
+    box.textContent = tr("noTapsMatched", { total: result.total });
     el<HTMLButtonElement>("btn-calibration-apply").classList.add("hidden");
   } else {
     const sign = result.medianMs >= 0 ? "+" : "";
-    box.textContent =
-      `Final: ${result.matched}/${result.total} taps · median ${sign}${result.medianMs.toFixed(1)} ms · ` +
-      `mean ${result.meanMs.toFixed(1)} ms · ±${result.stdMs.toFixed(1)} ms`;
+    box.textContent = tr("tapsFinal", {
+      matched: result.matched,
+      total: result.total,
+      median: `${sign}${result.medianMs.toFixed(1)}`,
+      mean: result.meanMs.toFixed(1),
+      spread: result.stdMs.toFixed(1),
+    });
     el<HTMLButtonElement>("btn-calibration-apply").classList.remove("hidden");
   }
   updateCalibrationUi();
-  store.setStatus("Tap calibration finished — Apply or Restart");
+  store.setStatus("tapCalibrationFinished");
 }
 
 function startCalibration(): void {
   if (!store.state.source) {
-    store.setStatus("Load a source first: calibration runs on the audio clock", true);
+    store.setStatus("calibrationNeedsSource", undefined, true);
     return;
   }
   transport.stop();
@@ -478,20 +496,27 @@ function startCalibration(): void {
     updateCalibrationUi();
     renderLiveCalibration();
   }, 50);
-  store.setStatus("Tap calibration: tap Enter / , / . on the clicks — Finish when stable");
+  store.setStatus("calibrationStart");
 }
 
 // Single render path for the status bar: every store.setStatus (from actions,
-// interactions, transport) flows through the subscription into the DOM.
-let lastRenderedStatus = "";
-let lastRenderedError: boolean | null = null;store.subscribe(() => {
+// interactions, transport) flows through the subscription into the DOM. The
+// status entry is rendered in the current language; a language switch re-runs
+// renderStatus through the explicit refresh in the language-change handler.
+let lastRenderedStatus: StatusEntry | null = null;
+let lastRenderedError: boolean | null = null;
+function renderStatusBar(): void {
   const s = store.state;
-  if (s.statusText !== lastRenderedStatus || s.isError !== lastRenderedError) {
-    lastRenderedStatus = s.statusText;
-    lastRenderedError = s.isError;
-    const bar = el<HTMLElement>("status-bar");
-    bar.classList.toggle("error", s.isError);
-    el<HTMLSpanElement>("status-main").textContent = translateStatus(s.statusText);
+  lastRenderedStatus = s.status;
+  lastRenderedError = s.isError;
+  const bar = el<HTMLElement>("status-bar");
+  bar.classList.toggle("error", s.isError);
+  el<HTMLSpanElement>("status-main").textContent = renderStatus(s.status);
+}
+store.subscribe(() => {
+  const s = store.state;
+  if (s.status !== lastRenderedStatus || s.isError !== lastRenderedError) {
+    renderStatusBar();
   }
   updateCommandStates();
   // Grid density changes the drawn line set AND the snap targets: repaint the
@@ -542,25 +567,25 @@ async function loadFromPath(): Promise<void> {
     const path = await api().openAudioDialog();
     if (!path) return;
     store.update({ phase: "parsing" });
-    setStatus("Parsing source file...");
+    setStatus("parsingSourceFile");
     const info = await api().readAudioFile(path);
     applyLoadedAudio(info);
   } catch (err) {
     store.update({ phase: store.state.source ? "ready" : "empty" });
-    setStatus(`Load failed: ${errorMessage(err)}`, true);
+    setStatus("loadFailed", { message: errorMessage(err) }, true);
   }
 }
 
 async function loadFromDrop(file: File): Promise<void> {
   try {
     store.update({ phase: "parsing" });
-    setStatus("Parsing dropped file...");
+    setStatus("parsingDroppedFile");
     const buffer = await file.arrayBuffer();
     const info = await api().decodeAudioBuffer(file.name, buffer);
     applyLoadedAudio(info);
   } catch (err) {
     store.update({ phase: store.state.source ? "ready" : "empty" });
-    setStatus(`Drop failed: ${errorMessage(err)}`, true);
+    setStatus("dropFailed", { message: errorMessage(err) }, true);
   }
 }
 
@@ -602,11 +627,11 @@ function applyLoadedAudio(info: {
   el<HTMLInputElement>("input-basename").value = baseName;
   el<HTMLDivElement>("empty-hint").classList.add("hidden");
   el<HTMLSpanElement>("src-name").textContent = info.name;
-  el<HTMLSpanElement>("src-format").textContent = `PCM 16-bit internal · ${info.channels}ch`;
-  el<HTMLSpanElement>("src-length").textContent = `${info.length.toLocaleString()} frames`;
+  el<HTMLSpanElement>("src-format").textContent = tr("srcFormat", { channels: info.channels });
+  el<HTMLSpanElement>("src-length").textContent = tr("framesCount", { count: info.length.toLocaleString() });
   el<HTMLSpanElement>("src-duration").textContent = `${(info.length / info.sampleRate).toFixed(3)}s`;
   transport.loadSource(floatData, info.sampleRate);
-  setStatus(`Ready: ${info.name} (${info.sampleRate}Hz, ${info.channels}ch)`);
+  setStatus("readySource", { name: info.name, rate: info.sampleRate, channels: info.channels });
   redraw();
 }
 
@@ -629,10 +654,10 @@ async function loadWos(): Promise<void> {
     el<HTMLInputElement>("input-shift").value = String(docData.shift);
     el<HTMLInputElement>("input-fade").value = String(docData.fadeoutMs);
     el<HTMLInputElement>("input-gate").value = String(docData.noisegateDb);
-    store.setStatus(`Loaded ${path.split(/[\\/]/).pop()} (BPM ${docData.bpm}, shift ${docData.shift})`);
+    store.setStatus("loadedWos", { file: path.split(/[\\/]/).pop() ?? path, bpm: docData.bpm, shift: docData.shift });
     redraw();
   } catch (err) {
-    setStatus(`.wos load failed: ${errorMessage(err)}`, true);
+    setStatus("wosLoadFailed", { message: errorMessage(err) }, true);
   }
 }
 
@@ -652,12 +677,12 @@ async function saveWos(): Promise<void> {
       markers: s.doc.markers,
     });
     await api().writeWosFile(path, bytes);
-    setStatus(`Saved ${path.split(/[\\/]/).pop()}`);
+    setStatus("savedWos", { file: path.split(/[\\/]/).pop() ?? path });
   } catch (err) {
     if (err instanceof WosFormatError) {
-      setStatus(`Save blocked: ${err.message}`, true);
+      setStatus("saveBlocked", { message: err.message }, true);
     } else {
-      setStatus(`.wos save failed: ${errorMessage(err)}`, true);
+      setStatus("wosSaveFailed", { message: errorMessage(err) }, true);
     }
   }
 }
@@ -679,19 +704,19 @@ function effectiveNoisegate(): number {
 async function exportAll(): Promise<void> {
   const s = store.state;
   if (!s.source) {
-    setStatus("Nothing to export: load a source first", true);
+    setStatus("nothingToExportNoSource", undefined, true);
     return;
   }
   const ticks = markerTicks(s.doc.markers);
   if (!ticks.length) {
-    setStatus("Nothing to export: no markers placed", true);
+    setStatus("nothingToExportNoMarkers", undefined, true);
     return;
   }
   try {
     const dir = await api().exportAllDialog(s.source.path);
     if (!dir) return;
     store.update({ exportLock: true });
-    setStatus(`Exporting ${ticks.length} slices...`);
+    setStatus("exportingSlices", { count: ticks.length });
     const result = await api().exportAll({
       dirPath: dir,
       baseName: s.baseName,
@@ -701,11 +726,12 @@ async function exportAll(): Promise<void> {
       noisegateDb: effectiveNoisegate(),
       markers: ticks,
     });
-    setStatus(`Exported ${result.written.length} slices to ${dir}`);
+    setStatus("exportedSlicesTo", { count: result.written.length, directory: dir });
   } catch (err) {
     const message = errorMessage(err);
     setStatus(
-      message.includes("missing on disk") ? `Source file missing: ${message}` : `Export failed: ${message}`,
+      message.includes("missing on disk") ? "sourceFileMissing" : "exportFailed",
+      { message },
       true
     );
   } finally {
@@ -717,12 +743,12 @@ async function exportAll(): Promise<void> {
 async function exportSliceAtCursor(): Promise<void> {
   const s = store.state;
   if (!s.source) {
-    setStatus("Nothing to export: load a source first", true);
+    setStatus("nothingToExportNoSource", undefined, true);
     return;
   }
   const ticks = markerTicks(s.doc.markers);
   if (!ticks.length) {
-    setStatus("Nothing to export: no markers placed", true);
+    setStatus("nothingToExportNoMarkers", undefined, true);
     return;
   }
   const base = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate };
@@ -736,9 +762,9 @@ async function exportSliceAtCursor(): Promise<void> {
     if (!filePath) return;
     store.update({ exportLock: true });
     await api().exportSlice({ filePath, start, end, fadeoutMs: s.doc.fadeoutMs, noisegateDb: effectiveNoisegate() });
-    setStatus(`Exported ${name}`);
+    setStatus("exportedSingle", { file: name });
   } catch (err) {
-    setStatus(`Export failed: ${errorMessage(err)}`, true);
+    setStatus("exportFailed", { message: errorMessage(err) }, true);
   } finally {
     store.update({ exportLock: false });
   }
@@ -752,7 +778,7 @@ async function bmseOut(): Promise<void> {
   const s = store.state;
   const ticks = markerTicks(s.doc.markers);
   if (!ticks.length) {
-    setStatus("No markers to copy", true);
+    setStatus("noMarkersToCopy", undefined, true);
     return;
   }
   const text = buildBmseClipboard(ticks, {
@@ -760,7 +786,7 @@ async function bmseOut(): Promise<void> {
     useFfNumbering: s.useFfNumbering,
   });
   await api().writeBmseClipboard(text);
-  setStatus(`BMSE clipboard: ${ticks.length} markers, start number ${s.clipStartNumber}`);
+  setStatus("bmseClipboardOut", { count: ticks.length, start: s.clipStartNumber });
 }
 
 async function bmseIn(): Promise<void> {
@@ -770,12 +796,12 @@ async function bmseIn(): Promise<void> {
     store.state.doc.setTicks(parsed.ticks);
     store.setStatus(
       parsed.invalidLines.length
-        ? `BMSE clipboard: imported ${parsed.ticks.length} markers, skipped ${parsed.invalidLines.length} malformed line(s)`
-        : `BMSE clipboard: imported ${parsed.ticks.length} markers`
+        ? { key: "bmseClipboardImportedSkipped", params: { count: parsed.ticks.length, skipped: parsed.invalidLines.length } }
+        : { key: "bmseClipboardImported", params: { count: parsed.ticks.length } }
     );
     redraw();
   } catch (err) {
-    setStatus(`BMSE clipboard read failed: ${errorMessage(err)}`, true);
+    setStatus("bmseReadFailed", { message: errorMessage(err) }, true);
   }
 }
 
@@ -786,44 +812,44 @@ async function bmseIn(): Promise<void> {
 const actions: KeyActions = {
   toggleMarkerAtCursor(): void {
     if (store.state.doc.toggleMarker(store.state.cursorTick)) {
-      store.setStatus(`Marker toggled at tick ${store.state.cursorTick}`);
+      store.setStatus("markerToggledAtTick", { tick: store.state.cursorTick });
     }
     redraw();
   },
   selectCopy(): void {
     const selected = store.state.selectedTicks;
     if (!selected.length) {
-      store.setStatus("Copy: no markers selected (box-select or click a marker first)", true);
+      store.setStatus("copyNoSelection", undefined, true);
       return;
     }
     const offsets = store.state.doc.copySelection(selected);
-    store.setStatus(`Copied ${offsets.length} marker(s) as relative group (origin tick ${selected[0]})`);
+    store.setStatus("copiedRelativeGroup", { count: offsets.length, origin: selected[0] });
   },
   selectCut(): void {
     const selected = store.state.selectedTicks;
     if (!selected.length) {
-      store.setStatus("Cut: no markers selected (box-select or click a marker first)", true);
+      store.setStatus("cutNoSelection", undefined, true);
       return;
     }
     const offsets = store.state.doc.cutSelection(selected);
     store.update({ selectedTicks: [] });
-    store.setStatus(`Cut ${offsets.length} marker(s) into the selection clipboard`);
+    store.setStatus("cutToClipboard", { count: offsets.length });
     redraw();
   },
   selectPaste(): void {
     const doc = store.state.doc;
     if (!doc.selectionClipboard) {
-      store.setStatus("Paste: selection clipboard is empty (Ctrl+C / Ctrl+X first)", true);
+      store.setStatus("pasteClipboardEmpty", undefined, true);
       return;
     }
     const target = store.state.cursorTick;
     const pasted = doc.pasteSelection(target);
     if (!pasted) {
-      store.setStatus(`Paste rejected at tick ${target}: ${doc.pasteRejectReason(target)}`, true);
+      store.setStatus("pasteRejected", { tick: target, reason: doc.pasteRejectReason(target) }, true);
       return;
     }
     store.update({ selectedTicks: pasted });
-    store.setStatus(`Pasted ${pasted.length} marker(s) at tick ${target} (relative spacing kept)`);
+    store.setStatus("pastedRelativeGroup", { count: pasted.length, tick: target });
     redraw();
   },
   previewAtCursor(): void {
@@ -838,7 +864,7 @@ const actions: KeyActions = {
   playPause(): void {
     if (calibrator.isActive()) return; // calibration owns playback while open
     transport.togglePlayPause();
-    store.setStatus(transport.isPlaying() ? "Playing" : "Paused");
+    store.setStatus(transport.isPlaying() ? "playing" : "paused");
     redraw();
   },
   /**
@@ -858,7 +884,7 @@ const actions: KeyActions = {
     }
     const s = store.state;
     if (!s.source) {
-      store.setStatus("Load a source before placing a break point", true);
+      store.setStatus("loadBeforeBreakPoint", undefined, true);
       return;
     }
     const base = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate };
@@ -882,8 +908,8 @@ const actions: KeyActions = {
       });
     // resolveBreakpointTick never returns an out-of-range tick, so a false
     // return from setMarker means this tick already holds the marker.
-    if (s.doc.setMarker(tick, true)) store.setStatus(`Break point at tick ${tick}`);
-    else store.setStatus(`Break point already at tick ${tick}`);
+    if (s.doc.setMarker(tick, true)) store.setStatus("breakPointAtTick", { tick });
+    else store.setStatus("breakPointAlreadyAtTick", { tick });
     redraw();
   },
   rateDown(): void {
@@ -900,49 +926,49 @@ const actions: KeyActions = {
   loadWos,
   clearMarkers(): void {
     if (store.state.doc.clearAll()) {
-      store.setStatus("All markers cleared");
+      store.setStatus("allMarkersCleared");
       store.update({ selectedTicks: [] });
     }
     redraw();
   },
   undo(): void {
-    if (store.state.doc.undo()) store.setStatus("Undo");
-    else store.setStatus("Nothing to undo");
+    if (store.state.doc.undo()) store.setStatus("undo");
+    else store.setStatus("nothingToUndo");
     redraw();
   },
   redo(): void {
-    if (store.state.doc.redo()) store.setStatus("Redo");
-    else store.setStatus("Nothing to redo");
+    if (store.state.doc.redo()) store.setStatus("redo");
+    else store.setStatus("nothingToRedo");
     redraw();
   },
   setClipNumber(n: number): void {
     const clamped = Math.max(0, Math.min(9999, n));
     store.update({ clipStartNumber: clamped });
     el<HTMLInputElement>("input-clipnum").value = String(clamped);
-    store.setStatus(`Clip start number: ${clamped}`);
+    store.setStatus("clipStartNumber", { number: clamped });
   },
   toggleFf(): void {
     const next = !store.state.useFfNumbering;
     store.update({ useFfNumbering: next });
     el<HTMLInputElement>("check-ff").checked = next;
-    store.setStatus(`FF numbering rule: ${next ? "on" : "off"}`);
+    store.setStatus("ffNumberingRule", { state: next ? "on" : "off" });
   },
   shiftAll(delta: number): void {
     if (store.state.doc.shiftAll(delta)) {
-      store.setStatus(`Shifted all markers by ${delta} tick(s)`);
+      store.setStatus("shiftedAllMarkers", { count: delta });
     }
     redraw();
   },
   quantizeSelection(): void {
     const s = store.state;
     if (!s.selectedTicks.length) {
-      store.setStatus("Quantize disabled: select markers first (box-select or click)", true);
+      store.setStatus("quantizeDisabled", undefined, true);
       return;
     }
     // state.grid is a density (cells per measure); the doc works in ticks.
     const cell = gridStepTicks(s.grid);
     if (!s.doc.quantizeSelection(s.selectedTicks, cell)) {
-      store.setStatus("Selected markers already on grid");
+      store.setStatus("alreadyOnGrid");
       return;
     }
     const snapped = [
@@ -953,7 +979,7 @@ const actions: KeyActions = {
       ),
     ];
     store.update({ selectedTicks: snapped });
-    store.setStatus(`Quantized selected marker(s) to grid ${s.grid}`);
+    store.setStatus("quantizedToGrid", { grid: s.grid });
     redraw();
   },
   clearSelection(): void {
@@ -964,7 +990,7 @@ const actions: KeyActions = {
       return;
     }
     if (interactions.cancelGesture()) {
-      store.setStatus("Gesture cancelled");
+      store.setStatus("gestureCancelled");
       redraw();
       return;
     }
@@ -974,23 +1000,23 @@ const actions: KeyActions = {
   measureCopy(): void {
     const measure = Math.floor(store.state.cursorTick / 192);
     store.update({ measureClipboard: store.state.doc.copyMeasure(measure) });
-    store.setStatus(`Copied measure ${measure + 1} markers`);
+    store.setStatus("copiedMeasure", { measure: measure + 1 });
   },
   measureCut(): void {
     const measure = Math.floor(store.state.cursorTick / 192);
     store.update({ measureClipboard: store.state.doc.cutMeasure(measure) });
-    store.setStatus(`Cut measure ${measure + 1} markers`);
+    store.setStatus("cutMeasure", { measure: measure + 1 });
     redraw();
   },
   measurePaste(): void {
     const clip = store.state.measureClipboard;
     if (!clip) {
-      store.setStatus("Measure clipboard is empty", true);
+      store.setStatus("measureClipboardEmpty", undefined, true);
       return;
     }
     const measure = Math.floor(store.state.cursorTick / 192);
     store.state.doc.pasteMeasure(measure, clip);
-    store.setStatus(`Pasted markers at measure ${measure + 1}`);
+    store.setStatus("pastedMeasure", { measure: measure + 1 });
     redraw();
   },
   zoomIn(): void {
@@ -1052,13 +1078,14 @@ function wireDom(): void {
     if (next) {
       void ensureBandAnalysis().then((analysis) => {
         store.setStatus(
-          analysis ? "Band overlay on (Low/Mid/High)" : "Band overlay needs a loaded source",
+          analysis ? "bandOverlayOn" : "bandOverlayNeedsSource",
+          undefined,
           !analysis
         );
         redraw();
       });
     } else {
-      store.setStatus("Band overlay off");
+      store.setStatus("bandOverlayOff");
       redraw();
     }
   });
@@ -1069,7 +1096,7 @@ function wireDom(): void {
       const current = store.state.bandDetectBands;
       const next = { ...current, [band]: !current[band] };
       if (!next.low && !next.mid && !next.high) {
-        store.setStatus("Band detect: keep at least one band selected", true);
+        store.setStatus("bandDetectKeepBand", undefined, true);
         return;
       }
       store.update({ bandDetectBands: next });
@@ -1110,13 +1137,21 @@ function wireDom(): void {
     if (!Number.isFinite(median) || matched === 0) return;
     store.update({ tapOffsetMs: Math.round(median) });
     syncTapOffsetDisplay();
-    store.setStatus(
-      `Tap offset applied: ${median >= 0 ? "+" : ""}${median.toFixed(1)} ms — Enter break points are compensated`
-    );
+    store.setStatus("tapOffsetApplied", { offset: `${median >= 0 ? "+" : ""}${median.toFixed(1)}` });
   });
 
-  // UI language (EN / 中文), persisted in localStorage.
+  // UI language, persisted in localStorage. The options come from the i18n
+  // language manifest so the selector can never drift from the shipped set.
+  // Each option carries its own lang attribute (its manifest docLang) so the
+  // browser renders every native name with that language's font fallback.
   const languageSelect = el<HTMLSelectElement>("select-language");
+  for (const lang of LANGUAGES) {
+    const option = document.createElement("option");
+    option.value = lang;
+    option.lang = DOC_LANG[lang];
+    option.textContent = LANGUAGE_LABELS[lang];
+    languageSelect.append(option);
+  }
   languageSelect.value = getLanguage();
   languageSelect.addEventListener("change", (e) => {
     const lang = (e.target as HTMLSelectElement).value as Language;
@@ -1125,7 +1160,7 @@ function wireDom(): void {
     void api()
       .setLanguage(lang)
       .catch(() => undefined);
-    el<HTMLSpanElement>("status-main").textContent = translateStatus(store.state.statusText);
+    renderStatusBar();
     updateBandPanel();
   });
 
@@ -1135,7 +1170,7 @@ function wireDom(): void {
   el<HTMLButtonElement>("btn-stop").addEventListener("click", () => {
     transport.stop();
     store.update({ playheadSample: 0 });
-    store.setStatus("Stopped");
+    store.setStatus("stopped");
     redraw();
   });
   el<HTMLButtonElement>("btn-follow").addEventListener("click", (e) => {
@@ -1146,7 +1181,14 @@ function wireDom(): void {
   el<HTMLSelectElement>("select-cue").addEventListener("change", (e) => {
     const mode = (e.target as HTMLSelectElement).value as typeof store.state.cueMode;
     store.update({ cueMode: mode });
-    store.setStatus(`Cue: ${mode}`);
+    // Reuse the cue-select chrome keys so the mode name is localized too.
+    const modeKeys: Record<typeof store.state.cueMode, ChromeKey> = {
+      off: "cueOff",
+      cowbell: "cueCowbell",
+      triangle: "cueTriangle",
+      metronome: "cueMetronome",
+    };
+    store.setStatus("cueMode", { mode: tr(modeKeys[mode]) });
   });
   el<HTMLInputElement>("input-cue-vol").addEventListener("input", (e) => {
     const v = Number((e.target as HTMLInputElement).value) / 100;
@@ -1156,7 +1198,7 @@ function wireDom(): void {
   el<HTMLSelectElement>("select-rate").addEventListener("change", (e) => {
     const rate = Number((e.target as HTMLSelectElement).value);
     transport.setRate(rate);
-    store.setStatus(`Playback rate: ${formatRate(rate)}`);
+    store.setStatus("playbackRate", { rate: formatRate(rate) });
     syncRateSelect();
   });
 
@@ -1164,7 +1206,7 @@ function wireDom(): void {
     const bpm = readNumericInput(e.target as HTMLInputElement, store.state.doc.bpm);
     if (bpm > 0) {
       store.state.doc.bpm = bpm;
-      store.setStatus(`BPM: ${bpm}`);
+      store.setStatus("bpmValue", { bpm });
       redraw();
     }
   });
@@ -1181,7 +1223,7 @@ function wireDom(): void {
     const v = readNumericInput(e.target as HTMLInputElement, store.state.doc.noisegateDb);
     store.state.doc.noisegateDb = v;
     if (!Number.isInteger(v)) {
-      setStatus("Note: noisegate will refuse to save until the dB value is an integer", true);
+      setStatus("noisegateNote", undefined, true);
     }
   });
   el<HTMLInputElement>("check-gate").addEventListener("change", (e) => {
@@ -1213,12 +1255,12 @@ function wireDom(): void {
   el<HTMLButtonElement>("btn-edge").addEventListener("click", () => {
     const s = store.state;
     if (!s.source) {
-      setStatus("Edge detection needs a loaded source", true);
+      setStatus("edgeDetectionNeedsSource", undefined, true);
       return;
     }
     const edges = detectEdges(s.source, { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate }, 4);
     s.doc.setTicks(edges);
-    store.setStatus(`Edge detection: ${edges.length} candidates`);
+    store.setStatus("edgeDetectionCandidates", { count: edges.length });
     redraw();
   });
 
@@ -1237,7 +1279,7 @@ function wireDom(): void {
   window.addEventListener("dragover", (e) => {
     e.preventDefault();
     waveWrap.classList.add("dragover");
-    setStatus("Drop to load source");
+    setStatus("dropToLoad");
   });
   window.addEventListener("dragleave", () => waveWrap.classList.remove("dragover"));
   window.addEventListener("drop", (e) => {
@@ -1356,6 +1398,8 @@ window.addEventListener("DOMContentLoaded", () => {
     interactions.attach();
     transport.setCueVolume(store.state.cueVolume);
     syncTapOffsetDisplay();
+    renderStatusBar();
+    updateReadout();
     redraw();
     animate();
   } catch (err) {

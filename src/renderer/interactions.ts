@@ -158,7 +158,7 @@ export class Interactions {
       const tick = this.clampedTick(this.eventTick(e));
       this.drag = { kind: "box", anchorTick: tick, previousSelection: [...s.selectedTicks] };
       this.store.update({ selectionStartTick: tick, selectionEndTick: tick, selectedTicks: [] });
-      this.store.setStatus("Box select (Shift = add, Ctrl = toggle)");
+      this.store.setStatus("boxSelectHint");
       this.onDirty();
       return;
     }
@@ -171,7 +171,7 @@ export class Interactions {
       if (!s.selectedTicks.includes(nearMarker)) {
         this.store.update({ selectedTicks: original, selectionStartTick: null, selectionEndTick: null });
       }
-      this.store.setStatus(`Dragging ${original.length} marker(s)`);
+      this.store.setStatus("draggingMarkers", { count: original.length });
       this.onDirty();
       return;
     }
@@ -214,7 +214,7 @@ export class Interactions {
         this.paintAt(tick, painted);
         this.drag = { kind: "paint", lastTick: tick, lastX: e.clientX, before, painted };
         this.store.update({ cursorTick: tick });
-        this.store.setStatus(`Painting markers (${painted.size})`);
+        this.store.setStatus("paintingMarkers", { count: painted.size });
         this.onDirty();
         break;
       }
@@ -225,7 +225,7 @@ export class Interactions {
         if (freehand && Math.abs(e.clientX - this.drag.lastX) < FREE_PAINT_MIN_PX) break;
         if (this.paintAt(tick, this.drag.painted)) {
           this.store.update({ cursorTick: tick });
-          this.store.setStatus(`Painting markers (${this.drag.painted.size})`);
+          this.store.setStatus("paintingMarkers", { count: this.drag.painted.size });
           this.onDirty();
         }
         this.drag.lastTick = tick;
@@ -236,7 +236,7 @@ export class Interactions {
         const erased = this.eraseAt(e);
         if (erased > 0) {
           this.drag.erased += erased;
-          this.store.setStatus(`Erasing markers (${this.drag.erased})`);
+          this.store.setStatus("erasingMarkers", { count: this.drag.erased });
           this.onDirty();
         }
         this.drag.lastX = e.clientX;
@@ -301,7 +301,9 @@ export class Interactions {
         const changed = this.paintAt(this.drag.anchorTick, painted);
         if (changed) doc.commitSnapshot(this.drag.before);
         this.store.setStatus(
-          changed ? `Added marker at tick ${this.drag.anchorTick}` : `Marker already at tick ${this.drag.anchorTick}`
+          changed
+            ? { key: "addedMarkerAtTick", params: { tick: this.drag.anchorTick } }
+            : { key: "markerAlreadyAtTick", params: { tick: this.drag.anchorTick } }
         );
         break;
       }
@@ -309,15 +311,17 @@ export class Interactions {
         const committed = this.store.state.doc.commitSnapshot(this.drag.before);
         this.store.setStatus(
           committed
-            ? `Painted ${this.drag.painted.size} marker(s)`
-            : "Paint gesture changed nothing"
+            ? { key: "paintedMarkers", params: { count: this.drag.painted.size } }
+            : "paintGestureNoop"
         );
         break;
       }
       case "erase": {
         const committed = this.store.state.doc.commitSnapshot(this.drag.before);
         this.store.setStatus(
-          committed ? `Erased ${this.drag.erased} marker(s)` : "Erase gesture removed nothing"
+          committed
+            ? { key: "erasedMarkers", params: { count: this.drag.erased } }
+            : "eraseGestureNoop"
         );
         break;
       }
@@ -348,8 +352,8 @@ export class Interactions {
           this.store.update({ selectedTicks: selected });
           this.store.setStatus(
             selected.length
-              ? `Box select (${mode}): ${selected.length} marker(s) selected`
-              : `Box select (${mode}): no markers inside`
+              ? { key: "boxSelectSelected", params: { mode, count: selected.length } }
+              : { key: "boxSelectEmpty", params: { mode } }
           );
         }
         break;
@@ -361,9 +365,9 @@ export class Interactions {
           const doc = this.store.state.doc;
           const applied = doc.moveSelection(this.drag.originalTicks, requestedDelta);
           if (applied !== requestedDelta) {
-            this.store.setStatus(`Move clamped to ${applied} tick(s) to keep the group on the timeline`);
+            this.store.setStatus("moveClamped", { count: applied });
           } else {
-            this.store.setStatus(`Moved ${this.drag.originalTicks.length} marker(s) by ${applied} ticks`);
+            this.store.setStatus("movedMarkersBy", { count: this.drag.originalTicks.length, delta: applied });
           }
           this.store.update({
             selectedTicks: normalizeSelection(this.drag.originalTicks.map((t) => t + applied)),

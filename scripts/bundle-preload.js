@@ -2,32 +2,37 @@
  * Bundles the sandboxed preload script into a single file.
  *
  * Electron sandboxed preloads may only `require("electron")` and node
- * builtins — relative imports fail at runtime. The preload's only relative
- * dependency is channels.js, so we inline it as an IIFE and rewrite the
- * require. Output: dist/src/main/preload.bundle.js
+ * builtins — relative imports fail at runtime. esbuild inlines the preload's
+ * only relative dependency (channels.ts) so the output is one self-contained
+ * CommonJS file. Dev builds (build:main) write it unminified next to the tsc
+ * output; the packaging build reuses buildPreloadBundle() with minification
+ * (see scripts/bundle-app.js).
  */
-const fs = require("fs");
 const path = require("path");
+const esbuild = require("esbuild");
 
-const mainDir = path.join(__dirname, "..", "dist", "src", "main");
-const channelsSrc = fs.readFileSync(path.join(mainDir, "channels.js"), "utf8");
-let preloadSrc = fs.readFileSync(path.join(mainDir, "preload.js"), "utf8");
+const root = path.join(__dirname, "..");
 
-const requirePattern = /require\("\.\/channels(\.js)?"\)/g;
-if (!requirePattern.test(preloadSrc)) {
-  throw new Error('bundle-preload: expected require("./channels") in preload.js');
+/** Builds the single-file preload bundle. Returns esbuild's output files. */
+function buildPreloadBundle(outfile, { minify = false, sourcemap = false } = {}) {
+  return esbuild.buildSync({
+    entryPoints: [path.join(root, "src", "main", "preload.ts")],
+    outfile,
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    target: "es2022",
+    minify,
+    sourcemap,
+    external: ["electron"],
+    logLevel: "warning",
+  });
 }
-preloadSrc = preloadSrc.replace(requirePattern, "__channels");
 
-const inlined = [
-  "var __channels = (function () {",
-  "var module = { exports: {} };",
-  "var exports = module.exports;",
-  channelsSrc,
-  "return module.exports;",
-  "})();",
-].join("\n");
+module.exports = { buildPreloadBundle };
 
-const out = preloadSrc.replace(/"use strict";/, '"use strict";\n' + inlined);
-fs.writeFileSync(path.join(mainDir, "preload.bundle.js"), out);
-console.log("bundled preload -> dist/src/main/preload.bundle.js");
+if (require.main === module) {
+  const outfile = path.join(root, "dist", "src", "main", "preload.bundle.js");
+  buildPreloadBundle(outfile);
+  console.log("bundled preload -> " + path.relative(root, outfile));
+}

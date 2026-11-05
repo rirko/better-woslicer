@@ -1,14 +1,18 @@
 /**
- * Native application menu, translated per UI language.
+ * Native application menu and dialog strings, translated per UI language.
  *
- * Pure by design: it takes the language plus the two things the menu has to do
- * (forward a command id to the renderer, open the About box) and returns a
- * plain template. main.ts owns the Electron objects and calls
- * Menu.buildFromTemplate, so this module stays unit-testable without Electron.
+ * Pure by design: the string data lives in src/i18n/<language>.json
+ * (re-exported by src/i18n/generated.ts); this module types it and builds
+ * the menu template. It takes the language plus the two things the menu has
+ * to do (forward a command id to the renderer, open the About box) and
+ * returns a plain template. main.ts owns the Electron objects and calls
+ * Menu.buildFromTemplate, so this module stays unit-testable without
+ * Electron.
  */
 
 import type { MenuItemConstructorOptions } from "electron";
-import type { Language } from "../core/language.js";
+import { LANGUAGES, type Language } from "../core/language.js";
+import { DATA } from "../i18n/generated.js";
 
 export interface MenuStrings {
   file: string;
@@ -37,120 +41,31 @@ export interface MenuStrings {
   aboutDetail: string;
 }
 
-export const MENU_STRINGS: Record<Language, MenuStrings> = {
-  en: {
-    file: "File",
-    openAudio: "Open WAV/OGG...",
-    openWos: "Open .wos...",
-    saveWos: "Save .wos...",
-    exportSlice: "Export slice WAV...",
-    exportAll: "Export all slices...",
-    exit: "Exit",
-    edit: "Edit",
-    undo: "Undo",
-    redo: "Redo",
-    copySelection: "Copy selected markers",
-    cutSelection: "Cut selected markers",
-    pasteSelection: "Paste selected markers",
-    quantizeSelection: "Quantize selected markers",
-    copyMeasure: "Copy measure (legacy)",
-    cutMeasure: "Cut measure (legacy)",
-    pasteMeasure: "Paste measure (legacy, Ctrl+F)",
-    clearMarkers: "Clear all markers",
-    view: "View",
-    zoomIn: "Zoom in",
-    zoomOut: "Zoom out",
-    help: "Help",
-    about: "About",
-    aboutDetail:
-      "Electron + TypeScript reimplementation of woslicerIII.\n" +
-      "Slice DSP and .wos format are byte-compatible with the original.",
-  },
-  zh: {
-    file: "文件",
-    openAudio: "打开 WAV/OGG…",
-    openWos: "打开 .wos…",
-    saveWos: "保存 .wos…",
-    exportSlice: "导出切片 WAV…",
-    exportAll: "导出全部切片…",
-    exit: "退出",
-    edit: "编辑",
-    undo: "撤销",
-    redo: "重做",
-    copySelection: "复制选中切点",
-    cutSelection: "剪切选中切点",
-    pasteSelection: "粘贴选中切点",
-    quantizeSelection: "量化选中切点",
-    copyMeasure: "复制小节（旧版）",
-    cutMeasure: "剪切小节（旧版）",
-    pasteMeasure: "粘贴小节（旧版，Ctrl+F）",
-    clearMarkers: "清除全部切点",
-    view: "视图",
-    zoomIn: "放大",
-    zoomOut: "缩小",
-    help: "帮助",
-    about: "关于",
-    aboutDetail:
-      "woslicerIII 的 Electron + TypeScript 重写版。\n" +
-      "切片 DSP 与 .wos 格式与原版字节兼容。",
-  },
-  ja: {
-    file: "ファイル",
-    openAudio: "WAV/OGG を開く…",
-    openWos: ".wos を開く…",
-    saveWos: ".wos を保存…",
-    exportSlice: "スライス WAV を書き出し…",
-    exportAll: "すべてのスライスを書き出し…",
-    exit: "終了",
-    edit: "編集",
-    undo: "元に戻す",
-    redo: "やり直す",
-    copySelection: "選択マーカーをコピー",
-    cutSelection: "選択マーカーを切り取り",
-    pasteSelection: "選択マーカーを貼り付け",
-    quantizeSelection: "選択マーカーをクオンタイズ",
-    copyMeasure: "小節をコピー（旧）",
-    cutMeasure: "小節を切り取り（旧）",
-    pasteMeasure: "小節を貼り付け（旧, Ctrl+F）",
-    clearMarkers: "すべてのマーカーを消去",
-    view: "表示",
-    zoomIn: "拡大",
-    zoomOut: "縮小",
-    help: "ヘルプ",
-    about: "バージョン情報",
-    aboutDetail:
-      "woslicerIII の Electron + TypeScript 実装。\n" +
-      "スライス DSP と .wos 形式はオリジナルとバイト互換です。",
-  },
-  ko: {
-    file: "파일",
-    openAudio: "WAV/OGG 열기…",
-    openWos: ".wos 열기…",
-    saveWos: ".wos 저장…",
-    exportSlice: "슬라이스 WAV 내보내기…",
-    exportAll: "모든 슬라이스 내보내기…",
-    exit: "종료",
-    edit: "편집",
-    undo: "실행 취소",
-    redo: "다시 실행",
-    copySelection: "선택한 마커 복사",
-    cutSelection: "선택한 마커 잘라내기",
-    pasteSelection: "선택한 마커 붙여넣기",
-    quantizeSelection: "선택한 마커 양자화",
-    copyMeasure: "마디 복사 (레거시)",
-    cutMeasure: "마디 잘라내기 (레거시)",
-    pasteMeasure: "마디 붙여넣기 (레거시, Ctrl+F)",
-    clearMarkers: "모든 마커 지우기",
-    view: "보기",
-    zoomIn: "확대",
-    zoomOut: "축소",
-    help: "도움말",
-    about: "정보",
-    aboutDetail:
-      "woslicerIII의 Electron + TypeScript 재구현입니다.\n" +
-      "슬라이스 DSP와 .wos 형식은 원본과 바이트 호환입니다.",
-  },
-};
+/**
+ * Builds a per-language record by picking one entry per declared language.
+ * LANGUAGES and the DATA keys both derive from the i18n manifest, so the
+ * mapping is complete by construction; the assertion only restates that.
+ */
+function perLanguage<T>(pick: (lang: Language) => T): Record<Language, T> {
+  return Object.fromEntries(LANGUAGES.map((lang) => [lang, pick(lang)])) as Record<Language, T>;
+}
+
+/** Menu labels keyed by language, from the i18n data files. */
+export const MENU_STRINGS: Record<Language, MenuStrings> = perLanguage((lang) => DATA[lang].menu);
+
+/** Titles of the file dialogs the main process opens, plus filter labels. */
+export interface DialogStrings {
+  loadAudio: string;
+  loadWos: string;
+  saveWos: string;
+  exportSlice: string;
+  chooseExportFolder: string;
+  filterWave: string;
+  filterWos: string;
+}
+
+/** File-dialog titles keyed by language, from the i18n data files. */
+export const DIALOG_STRINGS: Record<Language, DialogStrings> = perLanguage((lang) => DATA[lang].dialogs);
 
 export interface MenuHandlers {
   /** Forwards a menu command id to the renderer. */

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Language } from "../core/language.js";
+import { translateText } from "../core/messages.js";
 
 export interface BuildInfo {
   version: string;
@@ -28,11 +29,10 @@ export function readBuildInfo(): BuildInfo {
 
 export function formatBuildDetails(info: BuildInfo, language: Language): string {
   const labels = {
-    en: { commit: "Commit", date: "Built (UTC)", dirty: "modified working tree" },
-    zh: { commit: "提交", date: "构建日期（UTC）", dirty: "包含未提交修改" },
-    ja: { commit: "コミット", date: "ビルド日時（UTC）", dirty: "未コミットの変更あり" },
-    ko: { commit: "커밋", date: "빌드 날짜 (UTC)", dirty: "커밋되지 않은 변경 포함" },
-  }[language];
+    commit: translateText(language, "aboutCommitLabel"),
+    date: translateText(language, "aboutDateLabel"),
+    dirty: translateText(language, "aboutDirtyLabel"),
+  };
   return `${labels.commit}: ${info.commit}${info.dirty ? ` (${labels.dirty})` : ""}\n` +
     `${labels.date}: ${info.builtAt}`;
 }

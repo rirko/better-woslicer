@@ -1,4 +1,4 @@
-# woslicer-electron
+# woslicer-dx
 
 [English](README.md) · [中文](README.zh-CN.md) · **日本語** · [한국어](README.ko.md)
 
@@ -20,9 +20,9 @@ wosderge の woslicerIII をベースにした、BMS 向けのオフライン音
 
 | プラットフォーム | 形式 | アプリ |
 | --- | --- | --- |
-| Windows | `.7z` | `woslicer-electron.exe` |
-| Linux | `.tar.xz` | `woslicer-electron` |
-| macOS | `.zip` | `woslicer-electron.app` |
+| Windows | `.7z` | `woslicer-dx.exe` |
+| Linux | `.tar.xz` | `woslicer-dx` |
+| macOS | `.zip` | `woslicer-dx.app` |
 
 macOS の CI ビルドは公証されていません。本アプリはファイルをローカルで処理し、実行時にネットワーク接続は不要です。
 

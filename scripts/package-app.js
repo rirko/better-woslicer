@@ -1,4 +1,6 @@
-// Native-platform portable packaging. Run after npm run build.
+// Native-platform portable packaging. Run after npm run bundle (the npm
+// package script chains them); CI platform jobs instead pass --bundle <dir>
+// pointing at the shared precompiled payload artifact.
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
@@ -22,11 +24,23 @@ const runtime = path.join(root, "node_modules", "electron", "dist");
 if (!fs.existsSync(path.join(runtime, platform === "win32" ? "electron.exe" : platform === "darwin" ? "Electron.app" : "electron"))) {
   throw new Error("Install the native Electron runtime first: node node_modules/electron/install.js");
 }
-for (const required of [pkg.main, "dist/src/main/preload.bundle.js", "dist/renderer/index.html"]) {
-  if (!fs.existsSync(path.join(root, required))) throw new Error("Missing build output: " + required);
+// The payload is the esbuild precompiled app (scripts/bundle-app.js). Local
+// runs use dist/pack (the npm package script bundles first); CI platform jobs
+// pass --bundle <dir> to consume the shared bundle artifact verbatim.
+const bundleFlagIndex = process.argv.indexOf("--bundle");
+const payload = bundleFlagIndex === -1
+  ? path.join(root, "dist", "pack")
+  : path.resolve(process.argv[bundleFlagIndex + 1] || "");
+if (bundleFlagIndex !== -1 && !process.argv[bundleFlagIndex + 1]) throw new Error("--bundle requires a directory");
+for (const required of ["src/main/main.js", "src/main/preload.bundle.js", "src/main/build-info.json", "renderer/index.html"]) {
+  if (!fs.existsSync(path.join(payload, required))) throw new Error("Missing precompiled payload file: " + required);
 }
-const { readBuildInfo } = require("../dist/src/main/build-info.js");
-if (readBuildInfo().version !== pkg.version) throw new Error("Build metadata version is stale; rebuild first");
+const buildInfo = JSON.parse(fs.readFileSync(path.join(payload, "src/main/build-info.json"), "utf8"));
+if (buildInfo.version !== pkg.version) throw new Error("Build metadata version is stale; rebuild first");
+// Locale pruning is driven by the i18n language manifest: only the Chromium
+// locales behind a shipped UI language (plus the English fallback) stay.
+const manifest = JSON.parse(fs.readFileSync(path.join(root, "src", "i18n", "languages.json"), "utf8"));
+const keepLocales = new Set(manifest.languages.flatMap((entry) => entry.chromiumLocales));
 clean(output);
 fs.mkdirSync(output, { recursive: true });
 fs.cpSync(runtime, output, { recursive: true, verbatimSymlinks: true });
@@ -74,16 +88,35 @@ if (platform === "darwin") {
   resources = path.join(output, "resources");
 }
 fs.rmSync(path.join(resources, "default_app.asar"), { force: true });
+// Prune the bundled Chromium locales down to the i18n manifest's set. Missing
+// manifest locales fail loudly (they would silently fall back to en-US).
+(function pruneLocales(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === "locales") {
+      const localeDir = path.join(dir, entry.name);
+      for (const pak of fs.readdirSync(localeDir)) {
+        if (pak.endsWith(".pak") && !keepLocales.has(pak.slice(0, -4))) fs.rmSync(path.join(localeDir, pak));
+      }
+      for (const locale of keepLocales) {
+        if (!fs.existsSync(path.join(localeDir, locale + ".pak"))) {
+          throw new Error("Electron runtime is missing a locale required by the i18n manifest: " + locale);
+        }
+      }
+    } else {
+      pruneLocales(path.join(dir, entry.name));
+    }
+  }
+})(output);
 const app = path.join(resources, "app");
 fs.mkdirSync(app, { recursive: true });
-for (const item of [
-  "dist/src", "dist/renderer", "LICENSE", "NOTICE",
-  "README.md", "README.zh-CN.md", "README.ja.md", "README.ko.md",
-  "CHANGELOG.md", "CHANGELOG.zh-CN.md",
-]) {
-  fs.cpSync(path.join(root, item), path.join(app, item), { recursive: true });
+fs.cpSync(payload, app, { recursive: true });
+for (const item of ["LICENSE", "NOTICE"]) {
+  fs.cpSync(path.join(root, item), path.join(app, item));
 }
-// Resolve the installed production dependency closure, including nested dependencies.
+// Resolve the installed production dependency closure, including nested
+// dependencies. Doc, type-declaration and source-map files stay behind; every
+// piece of runtime code (and each package's license file) is kept.
 const copied = new Set();
 function copyDependency(name, from) {
   let parent = from, source;
@@ -95,13 +128,18 @@ function copyDependency(name, from) {
   if (!source) throw new Error("Missing production dependency: " + name);
   if (copied.has(source)) return;
   copied.add(source);
-  fs.cpSync(source, path.join(app, path.relative(root, source)), { recursive: true });
+  fs.cpSync(source, path.join(app, path.relative(root, source)), {
+    recursive: true,
+    filter: (entry) =>
+      fs.statSync(entry).isDirectory() ||
+      (!entry.endsWith(".md") && !entry.endsWith(".d.ts") && !entry.endsWith(".map")),
+  });
   const metadata = JSON.parse(fs.readFileSync(path.join(source, "package.json")));
   for (const dependency of Object.keys(metadata.dependencies || {})) copyDependency(dependency, source);
 }
 for (const dependency of Object.keys(pkg.dependencies || {})) copyDependency(dependency, root);
 fs.writeFileSync(path.join(app, "package.json"), JSON.stringify({ name: pkg.name, productName: pkg.productName,
-  version: pkg.version, license: pkg.license, main: pkg.main, dependencies: pkg.dependencies }, null, 2));
+  version: pkg.version, license: pkg.license, main: "src/main/main.js", dependencies: pkg.dependencies }, null, 2));
 if (platform === "darwin") {
   // Local ad-hoc signing only: no Developer ID, notarization, credentials or release publishing.
   execFileSync("codesign", ["--force", "--deep", "--sign", "-", path.join(output, `${pkg.productName}.app`)], { stdio: "inherit" });

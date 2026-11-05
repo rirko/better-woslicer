@@ -1,4 +1,4 @@
-# woslicer-electron
+# woslicer-dx
 
 **English** · [中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
@@ -20,9 +20,9 @@ Download a build from the repository's Actions artifacts and extract it:
 
 | Platform | Archive | Application |
 | --- | --- | --- |
-| Windows | `.7z` | `woslicer-electron.exe` |
-| Linux | `.tar.xz` | `woslicer-electron` |
-| macOS | `.zip` | `woslicer-electron.app` |
+| Windows | `.7z` | `woslicer-dx.exe` |
+| Linux | `.tar.xz` | `woslicer-dx` |
+| macOS | `.zip` | `woslicer-dx.app` |
 
 macOS CI builds are not notarized. The application processes files locally and does not require a network connection.
 

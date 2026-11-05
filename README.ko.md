@@ -1,4 +1,4 @@
-# woslicer-electron
+# woslicer-dx
 
 [English](README.md) · [中文](README.zh-CN.md) · [日本語](README.ja.md) · **한국어**
 
@@ -20,9 +20,9 @@ wosderge의 woslicerIII를 기반으로 만든 BMS용 오프라인 오디오 슬
 
 | 플랫폼 | 형식 | 실행 파일 |
 | --- | --- | --- |
-| Windows | `.7z` | `woslicer-electron.exe` |
-| Linux | `.tar.xz` | `woslicer-electron` |
-| macOS | `.zip` | `woslicer-electron.app` |
+| Windows | `.7z` | `woslicer-dx.exe` |
+| Linux | `.tar.xz` | `woslicer-dx` |
+| macOS | `.zip` | `woslicer-dx.app` |
 
 macOS CI 빌드는 공증되지 않았습니다. 이 앱은 파일을 로컬에서 처리하며 실행할 때 네트워크 연결이 필요하지 않습니다.
 

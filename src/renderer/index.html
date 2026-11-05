@@ -1,26 +1,26 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta
     http-equiv="Content-Security-Policy"
     content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; font-src 'self'; connect-src 'none'"
   />
-  <title>woslicer-electron</title>
+  <title>{{APP_NAME}}</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header id="command-bar" class="command-bar">
     <div class="cluster">
-      <button id="btn-open" class="cmd-btn" title="Open WAV/OGG (Ctrl+O)">Open</button>
-      <button id="btn-undo" class="cmd-btn" title="Undo (Ctrl+Z)">Undo</button>
-      <button id="btn-redo" class="cmd-btn" title="Redo (Ctrl+Shift+Z)">Redo</button>
+      <button id="btn-open" class="cmd-btn" data-i18n-title="titleOpen" data-i18n="open"></button>
+      <button id="btn-undo" class="cmd-btn" data-i18n-title="titleUndo" data-i18n="undo"></button>
+      <button id="btn-redo" class="cmd-btn" data-i18n-title="titleRedo" data-i18n="redo"></button>
     </div>
     <div class="cluster">
-      <label class="field-label" for="input-bpm">BPM</label>
+      <label class="field-label" for="input-bpm" data-i18n="bpmLabel"></label>
       <input id="input-bpm" class="num-input" type="text" inputmode="decimal" value="120" />
       <span class="beats-note">4/4</span>
-      <label class="field-label" for="select-grid">Grid</label>
+      <label class="field-label" for="select-grid" data-i18n="gridLabel"></label>
       <select id="select-grid" class="select">
         <option value="1">1</option>
         <option value="2">2</option>
@@ -32,12 +32,12 @@
         <option value="24">24</option>
         <option value="32">32</option>
       </select>
-      <button id="btn-snap" class="cmd-btn toggle on" title="Snap to grid">Snap</button>
-      <button id="btn-quantize" class="cmd-btn" title="Quantize markers to grid">Quantize</button>
+      <button id="btn-snap" class="cmd-btn toggle on" data-i18n-title="titleSnap" data-i18n="snap"></button>
+      <button id="btn-quantize" class="cmd-btn" data-i18n-title="titleQuantize" data-i18n="quantize"></button>
     </div>
     <div class="cluster">
-      <button id="btn-copy" class="cmd-btn" title="Copy measure markers (Ctrl+C)">Copy</button>
-      <button id="btn-paste" class="cmd-btn" title="Paste measure markers (Ctrl+F / Ctrl+V)">Paste</button>
+      <button id="btn-copy" class="cmd-btn" data-i18n-title="titleCopy" data-i18n="copy"></button>
+      <button id="btn-paste" class="cmd-btn" data-i18n-title="titlePaste" data-i18n="paste"></button>
     </div>
     <div class="cluster grow"></div>
     <div class="cluster">
@@ -45,39 +45,34 @@
         id="btn-bands"
         class="cmd-btn toggle bands-toggle"
         aria-pressed="false"
-        title="Band overlay: Low / Mid / High envelopes (display only)"
+        data-i18n-title="titleBands"
       >
-        <span class="swatch low"></span><span class="swatch mid"></span><span class="swatch high"></span><span class="bands-label">Bands</span>
+        <span class="swatch low"></span><span class="swatch mid"></span><span class="swatch high"></span><span class="bands-label" data-i18n="bands"></span>
       </button>
-      <button id="btn-zoom-out" class="cmd-btn" title="Zoom out (-)">&minus;</button>
-      <button id="btn-zoom-in" class="cmd-btn" title="Zoom in (+)">+</button>
-      <button id="btn-marker" class="cmd-btn" title="Toggle marker at cursor (Z)">Mark</button>
-      <button id="btn-export" class="cmd-btn primary" title="Export all slices (Ctrl+Shift+E)">Export</button>
-      <select id="select-language" class="select lang-select" title="UI language">
-        <option value="en" selected>EN</option>
-        <option value="zh">中文</option>
-        <option value="ja">日本語</option>
-        <option value="ko">한국어</option>
-      </select>
+      <button id="btn-zoom-out" class="cmd-btn" data-i18n-title="titleZoomOut">&minus;</button>
+      <button id="btn-zoom-in" class="cmd-btn" data-i18n-title="titleZoomIn">+</button>
+      <button id="btn-marker" class="cmd-btn" data-i18n-title="titleMark" data-i18n="mark"></button>
+      <button id="btn-export" class="cmd-btn primary" data-i18n-title="titleExport" data-i18n="export"></button>
+      <select id="select-language" class="select lang-select" data-i18n-title="titleLanguage"></select>
     </div>
   </header>
 
   <section id="transport" class="transport">
-    <button id="btn-play" class="tr-btn" title="Play / pause (Space)">Play</button>
-    <button id="btn-stop" class="tr-btn" title="Stop">Stop</button>
-    <div class="tr-readout mono" id="readout-position">M001&nbsp;&nbsp;00:00.000</div>
+    <button id="btn-play" class="tr-btn" data-i18n-title="titlePlay" data-i18n="play"></button>
+    <button id="btn-stop" class="tr-btn" data-i18n-title="stop" data-i18n="stop"></button>
+    <div class="tr-readout mono" id="readout-position"></div>
     <div class="cluster">
-      <label class="field-label" for="select-cue">Cue</label>
+      <label class="field-label" for="select-cue" data-i18n="cueLabel"></label>
       <select id="select-cue" class="select">
-        <option value="off" selected>Off</option>
-        <option value="cowbell">Cowbell</option>
-        <option value="triangle">Triangle</option>
-        <option value="metronome">Metronome</option>
+        <option value="off" selected data-i18n="cueOff"></option>
+        <option value="cowbell" data-i18n="cueCowbell"></option>
+        <option value="triangle" data-i18n="cueTriangle"></option>
+        <option value="metronome" data-i18n="cueMetronome"></option>
       </select>
-      <input id="input-cue-vol" class="vol-slider" type="range" min="0" max="100" value="60" title="Cue volume" />
+      <input id="input-cue-vol" class="vol-slider" type="range" min="0" max="100" value="60" data-i18n-title="titleCueVolume" />
       <span id="rate-wrap" class="rate-wrap">
-        <label class="field-label" for="select-rate">Rate</label>
-        <select id="select-rate" class="select" title="Monitor playback rate ([ slow down / ] speed up); markers and exports stay at source time">
+        <label class="field-label" for="select-rate" data-i18n="rateLabel"></label>
+        <select id="select-rate" class="select" data-i18n-title="titleRate">
           <option value="0.25">0.25&times;</option>
           <option value="0.5">0.5&times;</option>
           <option value="0.75">0.75&times;</option>
@@ -85,78 +80,78 @@
           <option value="1.5">1.5&times;</option>
         </select>
       </span>
-      <button id="btn-follow" class="cmd-btn toggle on" title="Follow playhead">Follow</button>
-      <button id="btn-calibrate" class="cmd-btn" title="Tap calibration: 16 quarter-note clicks at the current BPM; press Enter on each beat to measure your latency">Calibrate</button>
-      <span id="tap-offset" class="tap-offset mono" title="Applied tap offset (Enter break points)"></span>
+      <button id="btn-follow" class="cmd-btn toggle on" data-i18n-title="titleFollow" data-i18n="follow"></button>
+      <button id="btn-calibrate" class="cmd-btn" data-i18n-title="titleCalibrate" data-i18n="calibrate"></button>
+      <span id="tap-offset" class="tap-offset mono" data-i18n-title="titleTapOffset"></span>
     </div>
     <div class="grow"></div>
     <div class="cluster">
-      <label class="field-label" for="input-shift">Shift</label>
+      <label class="field-label" for="input-shift" data-i18n="shiftLabel"></label>
       <input id="input-shift" class="num-input small" type="text" inputmode="decimal" value="0" />
-      <label class="field-label" for="input-fade">Fade&nbsp;ms</label>
+      <label class="field-label" for="input-fade" data-i18n="fadeLabel"></label>
       <input id="input-fade" class="num-input small" type="text" inputmode="numeric" value="0" />
-      <label class="field-label" for="input-gate">Gate&nbsp;dB</label>
+      <label class="field-label" for="input-gate" data-i18n="gateLabel"></label>
       <input id="input-gate" class="num-input small" type="text" inputmode="numeric" value="-48" />
-      <label class="check-label"><input id="check-gate" type="checkbox" checked /> gate</label>
+      <label class="check-label"><input id="check-gate" type="checkbox" checked /> <span data-i18n="gateCheckbox"></span></label>
     </div>
   </section>
 
   <main id="workspace" class="workspace">
     <aside id="side-panel" class="side-panel">
       <div class="side-tabs">
-        <button class="side-tab active" data-tab="source">Source</button>
-        <button class="side-tab" data-tab="cuts">Cuts</button>
-        <button class="side-tab" data-tab="output">Output</button>
+        <button class="side-tab active" data-tab="source" data-i18n="tabSource"></button>
+        <button class="side-tab" data-tab="cuts" data-i18n="tabCuts"></button>
+        <button class="side-tab" data-tab="output" data-i18n="tabOutput"></button>
       </div>
       <div class="side-body" id="tab-source">
-        <div class="kv"><span>File</span><em id="src-name">&mdash;</em></div>
-        <div class="kv"><span>Format</span><em id="src-format">&mdash;</em></div>
-        <div class="kv"><span>Length</span><em id="src-length" class="mono">&mdash;</em></div>
-        <div class="kv"><span>Duration</span><em id="src-duration" class="mono">&mdash;</em></div>
-        <p class="hint">Drop a WAV/OGG anywhere, or press Open.</p>
+        <div class="kv"><span data-i18n="fileLabel"></span><em id="src-name">&mdash;</em></div>
+        <div class="kv"><span data-i18n="formatLabel"></span><em id="src-format">&mdash;</em></div>
+        <div class="kv"><span data-i18n="lengthLabel"></span><em id="src-length" class="mono">&mdash;</em></div>
+        <div class="kv"><span data-i18n="durationLabel"></span><em id="src-duration" class="mono">&mdash;</em></div>
+        <p class="hint" data-i18n="hintDropOrOpen"></p>
       </div>
       <div class="side-body hidden" id="tab-cuts">
         <details id="band-detect" class="band-detect" open>
-          <summary>Band detect <span id="band-estimate" class="band-estimate mono"></span></summary>
+          <summary><span data-i18n="bandDetect"></span> <span id="band-estimate" class="band-estimate mono"></span></summary>
           <div class="band-chips">
-            <button class="band-chip on" data-band="low" aria-pressed="true">Low</button>
-            <button class="band-chip on" data-band="mid" aria-pressed="true">Mid</button>
-            <button class="band-chip on" data-band="high" aria-pressed="true">High</button>
+            <button class="band-chip on" data-band="low" aria-pressed="true" data-i18n="bandLow"></button>
+            <button class="band-chip on" data-band="mid" aria-pressed="true" data-i18n="bandMid"></button>
+            <button class="band-chip on" data-band="high" aria-pressed="true" data-i18n="bandHigh"></button>
           </div>
           <label class="band-field">
-            <span>Rise</span>
+            <span data-i18n="riseLabel"></span>
             <input id="input-band-threshold" class="num-input small" type="number" step="0.5" min="1" max="24" value="6.0" />
             <span>dB</span>
           </label>
           <label class="band-field">
-            <span>Min gap</span>
+            <span data-i18n="minGapLabel"></span>
             <select id="select-band-gap" class="select">
-              <option value="1" selected>1 grid</option>
-              <option value="2">2 grid</option>
-              <option value="4">4 grid</option>
-              <option value="8">8 grid</option>
+              <option value="1" selected data-i18n="gap1Grid"></option>
+              <option value="2" data-i18n="gap2Grid"></option>
+              <option value="4" data-i18n="gap4Grid"></option>
+              <option value="8" data-i18n="gap8Grid"></option>
             </select>
           </label>
-          <div id="band-scope" class="band-scope">Scope: whole track (no range selection)</div>
+          <div id="band-scope" class="band-scope"></div>
           <label class="check-label band-snap">
             <input id="check-band-snap" type="checkbox" checked />
-            Snap to grid (off = exact onset)
+            <span data-i18n="bandSnapLabel"></span>
           </label>
-          <button id="btn-band-detect" class="cmd-btn wide">Detect</button>
+          <button id="btn-band-detect" class="cmd-btn wide" data-i18n="detect"></button>
         </details>
         <ul id="cut-list" class="cut-list"></ul>
       </div>
       <div class="side-body hidden" id="tab-output">
-        <div class="kv"><span>Base name</span><input id="input-basename" class="text-input" value="slice" /></div>
-        <div class="kv"><span>Clip start no.</span><input id="input-clipnum" class="num-input small" value="1" /></div>
-        <label class="check-label"><input id="check-ff" type="checkbox" /> FF numbering rule</label>
-        <button id="btn-export-one" class="cmd-btn wide" title="Export slice at cursor (Ctrl+E)">Export slice at cursor</button>
-        <button id="btn-bmse-out" class="cmd-btn wide" title="Copy BMSE clipboard (V)">BMSE clipboard out (V)</button>
-        <button id="btn-bmse-in" class="cmd-btn wide" title="Read BMSE clipboard (B)">BMSE clipboard in (B)</button>
-        <button id="btn-save-wos" class="cmd-btn wide" title="Save .wos (T)">Save .wos (T)</button>
-        <button id="btn-load-wos" class="cmd-btn wide" title="Load .wos (Y)">Load .wos (Y)</button>
-        <button id="btn-edge" class="cmd-btn wide" title="Auto edge detection">Edge detect</button>
-        <button id="btn-clear" class="cmd-btn wide danger" title="Clear all markers (C)">Clear markers (C)</button>
+        <div class="kv"><span data-i18n="baseNameLabel"></span><input id="input-basename" class="text-input" value="slice" /></div>
+        <div class="kv"><span data-i18n="clipStartNoLabel"></span><input id="input-clipnum" class="num-input small" value="1" /></div>
+        <label class="check-label"><input id="check-ff" type="checkbox" /> <span data-i18n="ffNumberingLabel"></span></label>
+        <button id="btn-export-one" class="cmd-btn wide" data-i18n-title="titleExportSlice" data-i18n="exportSliceAtCursor"></button>
+        <button id="btn-bmse-out" class="cmd-btn wide" data-i18n-title="titleBmseOut" data-i18n="bmseOut"></button>
+        <button id="btn-bmse-in" class="cmd-btn wide" data-i18n-title="titleBmseIn" data-i18n="bmseIn"></button>
+        <button id="btn-save-wos" class="cmd-btn wide" data-i18n-title="saveWos" data-i18n="saveWos"></button>
+        <button id="btn-load-wos" class="cmd-btn wide" data-i18n-title="loadWos" data-i18n="loadWos"></button>
+        <button id="btn-edge" class="cmd-btn wide" data-i18n-title="titleEdgeDetect" data-i18n="edgeDetect"></button>
+        <button id="btn-clear" class="cmd-btn wide danger" data-i18n-title="titleClearMarkers" data-i18n="clearMarkers"></button>
       </div>
     </aside>
 
@@ -166,8 +161,8 @@
         <canvas id="wave-canvas" class="wave"></canvas>
         <canvas id="overlay-canvas" class="overlay"></canvas>
         <div id="empty-hint" class="empty-hint">
-          <div class="empty-title">No source loaded</div>
-          <div class="empty-sub">Drop a WAV / OGG here or press Open</div>
+          <div class="empty-title" data-i18n="emptyTitle"></div>
+          <div class="empty-sub" data-i18n="emptySub"></div>
         </div>
       </div>
       <canvas id="overview-canvas" class="overview" height="36"></canvas>
@@ -176,28 +171,27 @@
   </main>
 
   <footer id="status-bar" class="status-bar">
-    <span id="status-main" class="status-main">Empty: drop a WAV/OGG file to begin</span>
+    <span id="status-main" class="status-main"></span>
     <span id="status-right" class="status-right mono"></span>
   </footer>
 
   <div id="calibration-modal" class="modal-backdrop hidden">
     <div class="modal">
-      <h2>Tap calibration</h2>
+      <h2 data-i18n="calibrationTitle"></h2>
       <p class="hint">
-        Continuous quarter-note clicks at <b id="calibration-bpm">120</b> BPM (no beat limit). Tap
-        <b>Enter</b>, <b>,</b> or <b>.</b> on every click — the median updates live. Press
-        <b>Finish</b> when it is stable; Apply subtracts it from Enter / , / . break points during playback.
+        <span data-i18n="calibrationHintPrefix"></span> <b id="calibration-bpm">120</b>
+        <span data-i18n="calibrationHintBody"></span>
       </p>
       <div class="calibration-progress mono">
-        <span>Beat <b id="calibration-beat">0</b></span>
-        <span>Taps <b id="calibration-taps">0</b></span>
+        <span><span data-i18n="beat"></span> <b id="calibration-beat">0</b></span>
+        <span><span data-i18n="taps"></span> <b id="calibration-taps">0</b></span>
       </div>
       <div id="calibration-result" class="calibration-result mono hidden"></div>
       <div class="modal-actions">
-        <button id="btn-calibration-retry" class="cmd-btn">Restart</button>
-        <button id="btn-calibration-finish" class="cmd-btn">Finish</button>
-        <button id="btn-calibration-apply" class="cmd-btn primary hidden">Apply</button>
-        <button id="btn-calibration-close" class="cmd-btn">Close</button>
+        <button id="btn-calibration-retry" class="cmd-btn" data-i18n="restart"></button>
+        <button id="btn-calibration-finish" class="cmd-btn" data-i18n="finish"></button>
+        <button id="btn-calibration-apply" class="cmd-btn primary hidden" data-i18n="apply"></button>
+        <button id="btn-calibration-close" class="cmd-btn" data-i18n="close"></button>
       </div>
     </div>
   </div>
