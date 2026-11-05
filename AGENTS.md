@@ -38,5 +38,6 @@ These rules apply to all work in this repository. Keep this file in English.
 ## Commit messages
 
 - Use Conventional Commits: <type>(optional-scope): <imperative summary>. Keep subjects concise and describe the change.
+- Keep messages to the single subject line. Write a body only when it is genuinely necessary to explain the change; the default is one line.
 - Choose the most specific type: feat for user functionality, fix for behavior defects, docs for documentation, test for tests, refactor for behavior-preserving restructuring, perf for performance, build for build and packaging, ci for CI, and chore for other maintenance.
 - Use ! or a BREAKING CHANGE: footer only for an actual breaking change.
