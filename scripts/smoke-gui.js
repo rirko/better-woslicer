@@ -213,6 +213,50 @@ async function main() {
       bridgeKeys.join(',')
     );
 
+    // --- Empty state: a marker placed with Z must render on the timeline ---
+    // Regression: drawWave returned before the lane/grid/marker passes when
+    // no source was loaded, so Z (or a paint drag) updated the doc, the status
+    // bar and the cut list while the timeline canvas stayed blank.
+    // Witness: the marker line is a full-height accent (#F2B24C = 242,178,76)
+    // vertical run; nothing else paints accent on the wave canvas in the
+    // empty state (the cursor line lives on the overlay canvas).
+    const emptyStateMarker = await evaluate(`(function(){
+      const scan = () => {
+        const c = document.getElementById('wave-canvas');
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let columns = 0;
+        for (let x = 0; x < c.width; x++) {
+          let run = 0;
+          for (let y = 0; y < c.height; y++) {
+            const i = (y * c.width + x) * 4;
+            const near = Math.abs(d[i] - 242) <= 30 && Math.abs(d[i + 1] - 178) <= 30 && Math.abs(d[i + 2] - 76) <= 30;
+            run = near ? run + 1 : 0;
+            if (run >= 30) { columns++; break; }
+          }
+        }
+        return columns;
+      };
+      const key = (k, shift) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, shiftKey: !!shift, bubbles: true }));
+      const before = scan();
+      key('ArrowRight');          // tick 24 (grid 8 -> one cell)
+      key('ArrowRight', true); key('ArrowRight', true); key('ArrowRight', true); // off-grid tick 27
+      key('z');                   // marker at 27: no snap in toggleMarkerAtCursor
+      const after = scan();
+      const cuts = Array.from(document.querySelectorAll('#cut-list .cut-time'), el => el.textContent);
+      key('z');                   // toggle the marker back off
+      key('ArrowUp'); key('ArrowUp'); // clamp the cursor to tick 0
+      const cutsAfterCleanup = document.querySelectorAll('#cut-list li').length;
+      return { before, after, cuts: JSON.stringify(cuts), cutsAfterCleanup,
+               status: document.getElementById('status-main').textContent };
+    })()`);
+    check(
+      "empty state: Z places a marker that renders on the timeline",
+      emptyStateMarker.before === 0 && emptyStateMarker.after >= 1 &&
+        emptyStateMarker.cuts.includes("t27") &&
+        emptyStateMarker.cutsAfterCleanup === 0,
+      JSON.stringify(emptyStateMarker)
+    );
+
     // Build a small deterministic WAV (3s, 440Hz) in the page and load it via
     // a real drag-and-drop event (the same path a user file drop takes).
     // 3s so the follow-scroll page check later has room to page at the

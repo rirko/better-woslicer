@@ -120,9 +120,12 @@ export class TimelineView {
     const s = this.store.state;
     ctx.fillStyle = COLORS.app;
     ctx.fillRect(0, 0, width, height);
-    if (!s.source || !s.peaks) return;
-
-    const laneHeight = height / s.source.channels;
+    // The timeline is pure tick space and stays editable with no source: the
+    // lane scaffolding, grid lines and slice bars must draw so markers placed
+    // with Z or a paint drag are visible before any audio is loaded. Only the
+    // waveform and band envelopes need a source (guard inside the lane loop).
+    const lanes = s.source ? s.source.channels : 1;
+    const laneHeight = height / lanes;
     const ticks = markerTicks(s.doc.markers);
     const { scrollTick, pxPerTick } = s;
     const fromTick = scrollTick;
@@ -139,7 +142,7 @@ export class TimelineView {
       ctx.stroke();
     }
 
-    for (let c = 0; c < s.source.channels; c++) {
+    for (let c = 0; c < lanes; c++) {
       const laneTop = c * laneHeight;
       const mid = laneTop + laneHeight / 2;
       const half = laneHeight / 2 - 4;
@@ -168,6 +171,7 @@ export class TimelineView {
       // Waveform from the peak cache (never rescans the source).
       // The view axis is ticks; frames are derived through the time base so
       // the waveform stays aligned with markers at any BPM/shift.
+      if (!s.source || !s.peaks) continue; // audio passes only; lanes drew above
       const step = Math.max(1, Math.round(1 / pxPerTick));
       const timeBase = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate };
       const bandsOn = s.bandsVisible && s.bandAnalysis !== null;
