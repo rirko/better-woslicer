@@ -12,9 +12,20 @@ function createSession(profile) {
 }
 function removeSession(directory) {
   const resolved = path.resolve(directory);
-  const rawDirectory = path.resolve(directory);
-  if (path.dirname(resolved) !== tmpRoot || path.dirname(rawDirectory) !== rawTmpRoot ||
-      !path.basename(resolved).startsWith(prefix) ||
+  // Ownership is compared only in the canonical, symlink-resolved namespace:
+  // macOS keeps os.tmpdir() behind /private/var, so sessions created under
+  // tmpRoot (the resolved tmpdir) never match the raw prefix. A session path
+  // that is itself a symlink is still rejected below even though its
+  // canonical form is owned.
+  let canonical;
+  try {
+    canonical = fs.realpathSync(resolved);
+  } catch {
+    canonical = null;
+  }
+  if (canonical === null ||
+      path.dirname(canonical) !== tmpRoot ||
+      !path.basename(canonical).startsWith(prefix) ||
       fs.lstatSync(resolved, { throwIfNoEntry: false })?.isSymbolicLink()) {
     throw new Error("Refusing to remove unowned UI session: " + resolved);
   }
