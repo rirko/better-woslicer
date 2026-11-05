@@ -118,23 +118,16 @@ for (const found of fs.readdirSync(path.join(packDir, "src", "main"))) {
 const preloadSource = fs.readFileSync(path.join(packDir, "src", "main", "preload.bundle.js"), "utf8");
 if (/require\(['"]\.\//.test(preloadSource)) fail("preload bundle still requires a relative module");
 
-// Archive the maps as tar.xz: the system tar builds the container (portable
-// forward-slash entries on every platform) and 7za (from 7zip-bin, available
-// everywhere) only applies the xz compression layer, which never sees paths.
+// Archive the maps as tar.xz with the system tar (-J applies the xz filter;
+// available on Linux, macOS and the Git Bash that ships with Windows). This
+// avoids spawning the 7zip-bin binary, whose executable bit is not preserved
+// by npm on Linux runners. NB: the archive name stays relative — GNU tar
+// reads "A:\..." style absolute names as host:device tape specs, so -C
+// carries the paths instead.
 fs.mkdirSync(releaseRoot, { recursive: true });
 const archive = path.join(releaseRoot, `${mapsName}.tar.xz`);
 fs.rmSync(archive, { force: true });
-const { path7za } = require("7zip-bin");
-const tarPath = path.join(releaseRoot, `${mapsName}.tar`);
-fs.rmSync(tarPath, { force: true });
-// NB: the archive name stays relative — GNU tar reads "A:\..." style absolute
-// names as host:device tape specs, so -C carries the paths instead.
-execFileSync("tar", ["-cf", path.basename(tarPath), "-C", path.join(root, "dist"), mapsName], { cwd: releaseRoot, stdio: "ignore" });
-try {
-  execFileSync(path7za, ["a", "-bd", "-txz", archive, path.basename(tarPath)], { cwd: releaseRoot, stdio: "ignore" });
-} finally {
-  fs.rmSync(tarPath, { force: true });
-}
+execFileSync("tar", ["-cJf", path.basename(archive), "-C", path.join(root, "dist"), mapsName], { cwd: releaseRoot, stdio: "ignore" });
 const digest = createHash("sha256").update(fs.readFileSync(archive)).digest("hex");
 fs.writeFileSync(archive + ".sha256", `${digest}  ${path.basename(archive)}\n`);
 
