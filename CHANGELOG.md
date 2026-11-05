@@ -2,6 +2,23 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
+## 0.1.2 — 2026-11-06
+
+### Added
+
+- The product is renamed to **woslicer-dx**; the executable, folders, archives and window title follow.
+- Downloads and installs are much smaller.
+- The whole interface is translated in English, Chinese, Japanese and Korean, including status messages, file-dialog titles and file-type filters; the language selector shows each language's name in its own script and font.
+- Japanese and Korean READMEs.
+
+### Fixed
+
+- Arrow Left now steps the cursor left, and the cursor line stays visible and follows the view while you scroll or zoom.
+- Previewing a slice again replays it from the start instead of layering a second copy on top.
+- Markers placed before loading audio are now visible on the timeline.
+- Cycling the grid with Q/W keeps the Grid selector in step.
+- Markers that are deleted no longer stay selected, so copy, cut and quantize keep working on markers that still exist.
+
 ## 0.1.1 — 2026-11-04
 
 - About now shows the version, commit and build date to help identify your copy when reporting an issue.
