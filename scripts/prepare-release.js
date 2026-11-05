@@ -6,9 +6,9 @@ const path = require("node:path");
 function expectedAssets(version, name) {
   const prefix = name + "-" + version;
   return [
-    { platform: "Windows x64", required: true, name: prefix + "-win32-x64.7z" },
+    { platform: "Windows x64", required: true, name: prefix + "-windows-x64.7z" },
     { platform: "Linux x64", required: false, name: prefix + "-linux-x64.tar.xz" },
-    { platform: "Windows ARM64", required: false, name: prefix + "-win32-arm64.7z" },
+    { platform: "Windows ARM64", required: false, name: prefix + "-windows-arm64.7z" },
     { platform: "Linux ARM64", required: false, name: prefix + "-linux-arm64.tar.xz" },
     { platform: "macOS Intel", required: false, name: prefix + "-darwin-x64.zip" },
     { platform: "macOS ARM64", required: false, name: prefix + "-darwin-arm64.zip" },

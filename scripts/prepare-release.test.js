@@ -13,7 +13,7 @@ function fixture(t, { missing = [], tamper = false } = {}) {
   const version = pkg.version;
   const prefix = pkg.name + "-" + version;
   const assets = [
-    [prefix + "-win32-x64.7z", "Windows x64"],
+    [prefix + "-windows-x64.7z", "Windows x64"],
     [prefix + "-linux-x64.tar.xz", "Linux x64"],
     [prefix + "-maps.tar.xz", "Debug source maps"],
   ];
@@ -45,7 +45,7 @@ test("rejects a tag that differs from the package version", t => {
 
 test("requires the Windows x64 archive and checksum", t => {
   const { name, version } = require("../package.json");
-  const data = fixture(t, { missing: [name + "-" + version + "-win32-x64.7z"] });
+  const data = fixture(t, { missing: [name + "-" + version + "-windows-x64.7z"] });
   assert.throws(() => prepareRelease({ tag: "v" + data.version, artifactDir: data.directory, notesPath: data.notes }), /Required release asset/);
 });
 

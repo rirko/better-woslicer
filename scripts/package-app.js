@@ -11,7 +11,8 @@ require("./check-version.js");
 const pkg = require("../package.json");
 const platform = process.platform;
 if (!["win32", "linux", "darwin"].includes(platform)) throw new Error("Unsupported platform");
-const name = `${pkg.name}-${platform}-${process.arch}`;
+const platformName = require("./platform-name.js");
+const name = `${pkg.name}-${platformName(platform)}-${process.arch}`;
 const output = path.join(releaseRoot, name);
 function clean(target) {
   const resolved = path.resolve(target);
@@ -145,7 +146,7 @@ if (platform === "darwin") {
   execFileSync("codesign", ["--force", "--deep", "--sign", "-", path.join(output, `${pkg.productName}.app`)], { stdio: "inherit" });
 }
 const extension = platform === "win32" ? "7z" : platform === "linux" ? "tar.xz" : "zip";
-const archive = path.join(releaseRoot, `${pkg.name}-${pkg.version}-${platform}-${process.arch}.${extension}`);
+const archive = path.join(releaseRoot, `${pkg.name}-${pkg.version}-${platformName(platform)}-${process.arch}.${extension}`);
 fs.rmSync(archive, { force: true });
 if (platform === "win32") {
   const { path7za } = require("7zip-bin");

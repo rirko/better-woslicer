@@ -6,7 +6,8 @@ const { createSession, removeSession, killTree, stopChild } = require("./ui-proc
 const packaged = process.argv.includes("--packaged");
 if (packaged) {
   const pkg = require("../package.json");
-  const folder = path.resolve("release", pkg.name + "-" + process.platform + "-" + process.arch);
+  const platformName = require("./platform-name.js");
+  const folder = path.resolve("release", pkg.name + "-" + platformName(process.platform) + "-" + process.arch);
   process.env.SMOKE_APP = process.platform === "darwin"
     ? path.join(folder, pkg.productName + ".app", "Contents", "MacOS", "Electron")
     : path.join(folder, pkg.name + (process.platform === "win32" ? ".exe" : ""));
