@@ -506,6 +506,12 @@ let lastRenderedError: boolean | null = null;store.subscribe(() => {
     }
     redraw();
   }
+  // A selection must never outlive its markers: Z, the erase drag and undo can
+  // delete a selected marker without touching selectedTicks, which kept the
+  // Quantize button enabled and let copy/cut address a marker that was gone.
+  if (s.selectedTicks.some((t) => s.doc.markers[t] !== 1)) {
+    store.update({ selectedTicks: s.selectedTicks.filter((t) => s.doc.markers[t] === 1) });
+  }
   // A change of the blue time range re-scopes the band-detect estimate.
   const scopeKey = `${s.selectionStartTick}:${s.selectionEndTick}`;
   if (scopeKey !== lastScopeKey) {

@@ -62,6 +62,22 @@ test("quantizeSelection already-on-grid selection reports no change", () => {
   assert.ok(!doc.quantizeSelection([0, 8, 16], 8));
 });
 
+test("quantizeSelection ignores selected ticks that no longer hold a marker", () => {
+  const doc = docWith([10, 100]);
+  doc.markers[10] = 0; // stale selection: the marker was deleted, the tick is still listed
+  assert.ok(!doc.quantizeSelection([10], 8), "a stale tick must not resurrect a marker");
+  assert.deepEqual(doc.ticks(), [100]);
+  assert.ok(!doc.canUndo(), "the no-op must not push an undo entry");
+});
+
+test("quantizeSelection still snaps the surviving markers of a stale selection", () => {
+  const doc = docWith([10, 26]);
+  doc.markers[26] = 0;
+  assert.ok(doc.quantizeSelection([10, 26], 8));
+  assert.deepEqual(doc.ticks(), [8]);
+});
+
+
 test("moveSelection clamps the WHOLE group preserving relative spacing", () => {
   const doc = docWith([10, 20, 30]);
   // 1000 fits without hitting the boundary: applied as-is.

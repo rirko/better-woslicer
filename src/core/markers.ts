@@ -365,7 +365,11 @@ export class MarkerDoc {
     if (!Number.isInteger(grid) || grid <= 0 || grid > MAX_TICKS) {
       throw new RangeError(`grid must be a positive integer <= ${MAX_TICKS}`);
     }
-    const sorted = normalizeSelection(selected);
+    // A selection can outlive its markers (Z, the erase drag or undo can remove
+    // one without pruning the selection), so only ticks that still hold a
+    // marker may be snapped — otherwise quantize would recreate a deleted
+    // marker at the nearest grid line.
+    const sorted = normalizeSelection(selected).filter((t) => this.markers[t] === 1);
     if (!sorted.length) return false;
     const moved = sorted.filter((t) => Math.round(t / grid) * grid !== t);
     if (!moved.length) return false;
