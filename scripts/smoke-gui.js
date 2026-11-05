@@ -488,6 +488,36 @@ async function main() {
       (await evaluate(`document.getElementById('select-rate').value`)) === "1.5"
     );
 
+    // --- Q / W grid cycling: the Grid select must follow the store ----------
+    // Regression: cycleGrid (keys.ts) wrote store.grid only; the command-bar
+    // Grid select had no store -> DOM path, so after a keyboard change it kept
+    // showing the previous density while snapping already used the new one.
+    await kd("q");
+    const gridDown = await evaluate(`document.getElementById('select-grid').value`);
+    await kd("w");
+    const gridRestored = await evaluate(`document.getElementById('select-grid').value`);
+    check(
+      "Q/W cycle the grid and the Grid select follows the store",
+      gridDown === "6" && gridRestored === "8" && (await statusNow()).includes("Grid: 8 per measure"),
+      `select ${gridDown} -> ${gridRestored}, status=${await statusNow()}`
+    );
+    // Clamping at both ladder ends must not desync the select either, and the
+    // density must end back at 8: later checks (marker spacing, snap ticks)
+    // assume the default density.
+    for (let i = 0; i < 6; i++) await kd("q"); // 8 -> 1; extra presses clamp low
+    const gridFloor = await evaluate(`document.getElementById('select-grid').value`);
+    for (let i = 0; i < 12; i++) await kd("w"); // 1 -> 32; extra presses clamp high
+    const gridCeil = await evaluate(`document.getElementById('select-grid').value`);
+    for (let i = 0; i < 4; i++) await kd("w"); // clamped at 32
+    const gridCeilClamped = await evaluate(`document.getElementById('select-grid').value`);
+    for (let i = 0; i < 4; i++) await kd("q"); // 32 -> 8 (back to the default)
+    const gridBack = await evaluate(`document.getElementById('select-grid').value`);
+    check(
+      "grid cycling clamps at 1 and 32 without desyncing the Grid select",
+      gridFloor === "1" && gridCeil === "32" && gridCeilClamped === "32" && gridBack === "8",
+      `floor=${gridFloor} ceil=${gridCeil}/${gridCeilClamped} restored=${gridBack}`
+    );
+
     // --- Slice preview (P): a retrigger replaces the previous preview ---------
     // Preview nodes are independent of the whole-track node, so the only way to
     // observe them from the renderer is to track every source that starts and

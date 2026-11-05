@@ -83,7 +83,9 @@ let lastDrawnDpr = Number.NaN;
    repaints on viewport/scroll/zoom changes, so a Grid select or Q/W change
    would otherwise leave the ruler and the waveform showing the PREVIOUS cell
    width while snapping already used the new one — the "ruler does not match
-   the grid" report. NaN starts "dirty" so the first change always repaints. */
+   the grid" report. The subscription also mirrors the density into the
+   command-bar Grid select here. NaN starts "dirty" so the first change
+   always repaints. */
 let lastDrawnGrid = Number.NaN;
 
 /* Cursor tick the overlay was last drawn with. keys.ts moves the cursor by
@@ -223,6 +225,13 @@ function syncRateSelect(): void {
   const active = store.state.playbackRate !== DEFAULT_PLAYBACK_RATE;
   select.classList.toggle("rate-active", active);
   el<HTMLSpanElement>("rate-wrap").classList.toggle("rate-active", active);
+}
+
+/** Mirrors store.grid into the command-bar Grid select: Q/W (keys.ts) write
+ *  the store directly and cannot touch the DOM, so without this the select
+ *  kept the previous density after a keyboard change. */
+function syncGridSelect(): void {
+  el<HTMLSelectElement>("select-grid").value = String(store.state.grid);
 }
 
 /* ------------------------------------------------------------------ */
@@ -486,10 +495,14 @@ let lastRenderedError: boolean | null = null;store.subscribe(() => {
   }
   updateCommandStates();
   // Grid density changes the drawn line set AND the snap targets: repaint the
-  // canvas layers so the ruler can never show a grid the clicks no longer use.
+  // canvas layers so the ruler can never show a grid the clicks no longer use,
+  // and mirror the new density into the command-bar Grid select (the select's
+  // own change listener only ever wrote select -> store, so a Q/W change left
+  // it showing the previous density).
   if (s.grid !== lastDrawnGrid) {
     lastDrawnGrid = s.grid;
     redrawCanvases();
+    syncGridSelect();
   }
   // Cursor moves (arrow keys, Shift+arrows, cut-list clicks) repaint the
   // overlay cursor line, the readout and the active cut-list row. Paging keeps
