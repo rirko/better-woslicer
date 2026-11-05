@@ -111,9 +111,53 @@ test("status and scope placeholders are camelCase names", () => {
   }
 });
 
+test("Japanese strings keep the original woslicerIII terminology", () => {
+  // Regression anchors from the decompiled original (Form1/2/3.cs): these are
+  // the words the original author chose, restored after AI translation drift.
+  const anchors: { section: "chrome" | "menu" | "status"; key: string; term: string }[] = [
+    { section: "chrome", key: "open", term: "読込" },
+    { section: "chrome", key: "export", term: "出力" },
+    { section: "chrome", key: "shiftLabel", term: "ずらし" },
+    { section: "chrome", key: "gateCheckbox", term: "ノイズゲート" },
+    { section: "chrome", key: "ffNumberingLabel", term: "FF定義" },
+    { section: "chrome", key: "clipStartNoLabel", term: "出力番号" },
+    { section: "chrome", key: "clearMarkers", term: "切断位置をクリア" },
+    { section: "chrome", key: "bmseOut", term: "クリップボードへ出力" },
+    { section: "chrome", key: "saveWos", term: ".wos を出力" },
+    { section: "menu", key: "openAudio", term: "waveファイル読込" },
+    { section: "menu", key: "saveWos", term: "wosファイル出力" },
+    { section: "menu", key: "exportAll", term: "全スライスを出力" },
+    { section: "menu", key: "clearMarkers", term: "切断位置のクリア" },
+    { section: "status", key: "exportingSlices", term: "出力中" },
+    { section: "status", key: "paintedMarkers", term: "切断位置を描画" },
+    { section: "status", key: "breakPointAtTick", term: "切断位置を配置" },
+    { section: "status", key: "bmseClipboardOut", term: "出力番号" },
+    { section: "status", key: "bmseClipboardImported", term: "読み込みました" },
+    { section: "status", key: "savedWos", term: "出力しました" },
+  ];
+  for (const { section, key, term } of anchors) {
+    const actual = DATA.ja[section][key];
+    assert.ok(
+      typeof actual === "string" && actual.includes(term),
+      `ja ${section}.${key} lost the original term "${term}" (got: ${String(actual)})`
+    );
+  }
+  // The AI-translation drift must not come back either.
+  for (const banned of ["マーカー", "書き出し", "開く"]) {
+    const occurrences: string[] = [];
+    for (const [section, data] of Object.entries(DATA.ja)) {
+      if (section === "scopeRange") continue;
+      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+        if (typeof value === "string" && value.includes(banned)) occurrences.push(`${section}.${key}`);
+      }
+    }
+    assert.deepEqual(occurrences, [], `ja still carries the drifted term "${banned}" in: ${occurrences.join(", ")}`);
+  }
+});
+
 test("translateText resolves chrome keys with English as the fallback language", () => {
   assert.equal(translateText("zh", "open"), "打开");
-  assert.equal(translateText("ja", "open"), "開く");
+  assert.equal(translateText("ja", "open"), "読込");
   assert.equal(translateText("ko", "open"), "열기");
   assert.equal(translateText("zh", "bandLow"), "低频");
   // fill {name} slots when given
