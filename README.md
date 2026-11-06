@@ -23,8 +23,11 @@ Download a build from the repository's Actions artifacts and extract it:
 | Windows | `.7z` | `woslicer-dx.exe` |
 | Linux | `.tar.xz` | `woslicer-dx` |
 | macOS | `.zip` | `woslicer-dx.app` |
+| Web (offline) | `.7z` | static site — serve over http |
 
 macOS CI builds are not notarized. The application processes files locally and does not require a network connection.
+
+The offline web build (`*-web-any.7z`) unpacks to a static site: serve the folder with any static http server and open it in a browser (`file://` will not run it). Tagged releases are also published to Cloudflare Pages.
 
 For source builds, use Node.js 24, npm and Git:
 

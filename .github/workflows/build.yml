@@ -75,6 +75,16 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+      - name: Upload offline web build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: woslicer-web-any-${{ github.sha }}
+          path: |
+            release/*-web-any.7z
+            release/*-web-any.7z.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   build:
     name: ${{ matrix.label }}
