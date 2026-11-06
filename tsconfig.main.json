@@ -10,5 +10,6 @@
     "sourceMap": false,
     "declaration": false
   },
-  "include": ["src/core/**/*.ts", "src/main/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/core/**/*.ts", "src/main/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["tests/web"]
 }

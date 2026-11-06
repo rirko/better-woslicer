@@ -8,5 +8,5 @@
     "sourceMap": true,
     "declaration": false
   },
-  "include": ["src/core/**/*.ts", "src/renderer/**/*.ts"]
+  "include": ["src/core/**/*.ts", "src/renderer/**/*.ts", "src/web/**/*.ts"]
 }
