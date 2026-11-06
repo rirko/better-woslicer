@@ -2,9 +2,10 @@ name: Build and test
 
 on:
   push:
-    branches: ['**']
+    branches:
+      - main
+      - dev
   pull_request:
-    branches: ['**']
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,11 @@ jobs:
     name: precompile-payload
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # The platform matrix is decided here (official dynamic-matrix pattern):
+    # only pushes to main get the full platform set; dev pushes, pull requests
+    # and manual dispatches build Windows x64 alone.
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,6 +35,22 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Decide the platform matrix (full only on main)
+        id: matrix
+        run: |
+          # The matrix bodies live in the JSON files next to this workflow and
+          # are edited as ordinary JSON; multi-line output needs the heredoc
+          # form so fromJSON sees the file verbatim.
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            chosen=".github/workflows/matrix-full.json"
+          else
+            chosen=".github/workflows/matrix-windows.json"
+          fi
+          {
+            echo "matrix<<EOF"
+            cat "$chosen"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Build (tsc + build metadata)
         run: npm run build
       - name: Precompile minified payload and source maps
@@ -63,25 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-2025
-            label: windows-x64
-            required: true
-          - os: ubuntu-24.04
-            label: linux-x64
-            required: false
-          - os: windows-11-arm
-            label: windows-arm64
-            required: false
-          - os: ubuntu-24.04-arm
-            label: linux-arm64
-            required: false
-          - os: macos-15-intel
-            label: macos-intel
-            required: false
-          - os: macos-15
-            label: macos-arm64
-            required: false
+        include: ${{ fromJSON(needs.bundle.outputs.matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
