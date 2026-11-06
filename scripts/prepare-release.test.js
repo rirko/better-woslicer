@@ -15,6 +15,7 @@ function fixture(t, { missing = [], tamper = false } = {}) {
   const assets = [
     [prefix + "-windows-x64.7z", "Windows x64"],
     [prefix + "-linux-x64.tar.xz", "Linux x64"],
+    [prefix + "-web-any.7z", "Web (offline)"],
     [prefix + "-maps.tar.xz", "Debug source maps"],
   ];
   for (const [name] of assets) {
@@ -30,7 +31,7 @@ function fixture(t, { missing = [], tamper = false } = {}) {
 test("prepares versioned notes and verifies available optional assets", t => {
   const data = fixture(t);
   const result = prepareRelease({ tag: "v" + data.version, artifactDir: data.directory, notesPath: data.notes });
-  assert.equal(result.available.length, 3);
+  assert.equal(result.available.length, 4);
   assert.deepEqual(result.unavailable, ["Windows ARM64", "Linux ARM64", "macOS Intel", "macOS ARM64"]);
   const notes = fs.readFileSync(data.notes, "utf8");
   assert.match(notes, /## Downloads/);

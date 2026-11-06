@@ -12,6 +12,9 @@ function expectedAssets(version, name) {
     { platform: "Linux ARM64", required: false, name: prefix + "-linux-arm64.tar.xz" },
     { platform: "macOS Intel", required: false, name: prefix + "-darwin-x64.zip" },
     { platform: "macOS ARM64", required: false, name: prefix + "-darwin-arm64.zip" },
+    // Platform-independent offline web build; produced once per commit by the
+    // bundle job. Serve it over http (any static server) — file:// will not run.
+    { platform: "Web (offline)", required: true, name: prefix + "-web-any.7z" },
     // Debug source maps for the minified payload; produced once per commit by
     // the bundle job and attached alongside the platform archives.
     { platform: "Debug source maps", required: true, name: prefix + "-maps.tar.xz" },
