@@ -18,8 +18,9 @@ These rules apply to all work in this repository. Keep this file in English.
 
 ## Documentation and licensing
 
-- Keep the English, Chinese, Japanese and Korean READMEs consistent, and the English and Chinese changelogs consistent. READMEs cover product purpose, common usage, and development commands. Changelogs describe user-visible features, fixes, and practical changes; keep implementation details in docs/.
-- Changelog entries are user-facing only: describe what users can see and do (UX). Never include implementation details or anything only a developer would know; those belong in docs/.
+- Keep the English, Chinese, Japanese and Korean READMEs consistent, and the English and Chinese changelogs consistent. READMEs cover product purpose, common usage, and development commands. Changelogs describe user-visible features and fixes; keep implementation details in docs/.
+- README and changelog entries are user-facing and written as UX only: describe what users can see and do; never include implementation details or anything only a developer would know (that belongs in docs/). If end users cannot perceive something, do not write it; if you are unsure whether they can perceive it, leave it out.
+- Scope each changelog release by blaming the changelog: it covers the commits made since the previous changelog revision. Walk that history and write an entry only for what end users can perceive in those commits.
 - Structure every changelog release section with Added and Fixed headings (Keep a Changelog style).
 - Keep claims supported by evidence. Report unavailable oracle fixtures as skipped, not passed; do not describe unverified compatibility as verified.
 - Preserve LICENSE and NOTICE. MIT applies only to material contributors may license; it does not relicense original-derived code or third-party dependencies.

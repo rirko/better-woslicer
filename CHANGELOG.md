@@ -2,7 +2,17 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
-## 0.1.2 — 2026-11-06
+## 0.1.3 — 2026-11-06
+
+### Added
+
+- A browser version of the app is available as [woslicer-dx app](https://woslicer-dx.sgqy.workers.dev/) — no installation needed.
+
+### Fixed
+
+- The Japanese interface now uses the original woslicerIII terminology, such as 切断位置 for cut markers and 出力 for export.
+
+## 0.1.2 — 2026-11-05
 
 ### Added
 
@@ -21,13 +31,20 @@
 
 ## 0.1.1 — 2026-11-04
 
+### Added
+
 - About now shows the version, commit and build date to help identify your copy when reporting an issue.
 - Portable packages include the complete OGG decoder, with no separate installation required.
 - Download formats: `.7z` for Windows, `.tar.xz` for Linux, and `.zip` for macOS.
 - Simplify the English and Chinese guides for installation and everyday use.
 
-## Earlier changes
+## 0.1.0 — 2026-11-02
+
+### Added
+
+- Introduce WAV/OGG import, timeline editing, WAV slice export, `.wos` projects and BMSE clipboard support.
+
+## Fixed
 
 - Fix grid spacing so the displayed lines, snapping and keyboard movement agree. Add Japanese and Korean interface and menu translations.
 - Add English/Chinese interface options, tap calibration, frequency-band display and automatic cut detection.
-- Introduce WAV/OGG import, timeline editing, WAV slice export, `.wos` projects and BMSE clipboard support.
