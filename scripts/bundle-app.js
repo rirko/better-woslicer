@@ -121,7 +121,24 @@ build(path.join(root, "src", "renderer", "styles.css"), path.join(packDir, "rend
 minifyHtml(path.join(packDir, "renderer", "index.html"));
 fs.copyFileSync(buildInfoPath, path.join(packDir, "src", "main", "build-info.json"));
 
-// Split the source maps out of the payload, mirroring the directory layout.
+// Web build: the pure-browser payload (no preload, no main process). The
+// decoder is bundled into app.js (its wasm is inline), so dist/web is the
+// complete offline site; its source map joins the shared symbols archive.
+const webDir = path.join(root, "dist", "web");
+fs.rmSync(webDir, { recursive: true, force: true });
+build(path.join(root, "src", "web", "main.ts"), path.join(webDir, "app.js"), {
+  platform: "browser",
+  format: "esm",
+});
+fs.mkdirSync(webDir, { recursive: true });
+const webHtml = fs.readFileSync(path.join(root, "src", "web", "index.html"), "utf8").split("{{APP_NAME}}").join(pkg.productName || pkg.name);
+fs.writeFileSync(path.join(webDir, "index.html"), webHtml);
+minifyHtml(path.join(webDir, "index.html"));
+build(path.join(root, "src", "renderer", "styles.css"), path.join(webDir, "styles.css"), {
+  platform: "browser",
+});
+
+// Split the source maps out of the payloads, mirroring the directory layout.
 const moved = [];
 (function moveMaps(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -138,6 +155,15 @@ const moved = [];
   }
 })(packDir);
 if (moved.length === 0) fail("no source maps were generated; check the esbuild sourcemap settings");
+// Also lift the web bundle's map into the shared symbols archive.
+const webMap = path.join(webDir, "app.js.map");
+if (!fs.existsSync(webMap)) fail("the web build produced no source map");
+{
+  const target = path.join(mapsDir, "web", "app.js.map");
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.renameSync(webMap, target);
+  moved.push(path.join("web", "app.js.map"));
+}
 
 // Sanity: the payload must be map-free and the preload must not require
 // relative modules at runtime (sandboxed preloads cannot).
@@ -159,6 +185,17 @@ fs.rmSync(archive, { force: true });
 execFileSync("tar", ["-cJf", path.basename(archive), "-C", path.join(root, "dist"), mapsName], { cwd: releaseRoot, stdio: "ignore" });
 const digest = createHash("sha256").update(fs.readFileSync(archive)).digest("hex");
 fs.writeFileSync(archive + ".sha256", `${digest}  ${path.basename(archive)}\n`);
+
+// Pack the web payload as the platform-independent web-any archive (7z, like
+// the Windows desktop archive). npm does not preserve the executable bit on
+// 7zip-bin's Linux binary, so restore it before spawning.
+const { path7za } = require("7zip-bin");
+fs.chmodSync(path7za, 0o755);
+const webArchive = path.join(releaseRoot, `${pkg.name}-${pkg.version}-web-any.7z`);
+fs.rmSync(webArchive, { force: true });
+execFileSync(path7za, ["a", "-bd", "-t7z", "-mx=5", webArchive, "web"], { cwd: path.join(root, "dist"), stdio: "ignore" });
+const webDigest = createHash("sha256").update(fs.readFileSync(webArchive)).digest("hex");
+fs.writeFileSync(webArchive + ".sha256", `${webDigest}  ${path.basename(webArchive)}\n`);
 
 for (const warning of warnings) console.warn(warning.text);
 console.log(`payload: ${path.relative(root, packDir)} (${moved.length} maps split out)`);
