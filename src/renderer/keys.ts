@@ -58,6 +58,8 @@ export type ActionId =
   | "export-all"
   | "save-wos"
   | "load-wos"
+  | "open-audio"
+  | "open-wos"
   | "toggle-marker"
   | "preview"
   | "preview-previous"
@@ -160,6 +162,10 @@ export function resolveAction(focus: FocusKind, event: KeyEventShape): ActionId 
         return shift ? "export-all" : "export-slice";
       case "s":
         return "save-wos";
+      case "o":
+        // Mirrors the native menu accelerators; a browser host has no menu
+        // and relies on these bindings for the file actions.
+        return shift ? "open-wos" : "open-audio";
       default:
         return null;
     }
@@ -229,6 +235,8 @@ export function resolveAction(focus: FocusKind, event: KeyEventShape): ActionId 
 }
 
 export interface KeyActions {
+  openAudio(): void;
+  openWos(): void;
   toggleMarkerAtCursor(): void;
   previewAtCursor(): void;
   previewPrevious(): void;
@@ -315,6 +323,12 @@ export function handleKeyDown(store: Store, actions: KeyActions, e: KeyEventLike
       return;
     case "save-wos":
       actions.saveWos();
+      return;
+    case "open-audio":
+      actions.openAudio();
+      return;
+    case "open-wos":
+      actions.openWos();
       return;
     case "toggle-marker":
       actions.toggleMarkerAtCursor();
