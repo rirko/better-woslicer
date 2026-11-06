@@ -70,9 +70,7 @@ function prepareRelease({ tag, artifactDir, notesPath, packagePath, changelogPat
     if (actual !== checksumMatch[1]) throw new Error("SHA-256 mismatch: " + asset.name);
     available.push(asset);
   }
-  const tick = String.fromCharCode(96);
-  const notes = ["# " + pkg.name + " " + pkg.version, releaseNotes, "## Downloads"];
-  for (const asset of available) notes.push("- " + asset.platform + ": " + tick + asset.name + tick);
+  const notes = ["# " + pkg.name + " " + pkg.version, releaseNotes];
   if (unavailable.length) {
     notes.push("## Optional platform builds not included");
     for (const platform of unavailable) notes.push("- " + platform + " was unavailable in this run.");
