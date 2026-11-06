@@ -1,0 +1,8 @@
+[
+  { "os": "windows-2025", "label": "windows-x64", "required": true },
+  { "os": "ubuntu-24.04", "label": "linux-x64", "required": false },
+  { "os": "windows-11-arm", "label": "windows-arm64", "required": false },
+  { "os": "ubuntu-24.04-arm", "label": "linux-arm64", "required": false },
+  { "os": "macos-15-intel", "label": "macos-intel", "required": false },
+  { "os": "macos-15", "label": "macos-arm64", "required": false }
+]
