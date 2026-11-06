@@ -810,6 +810,12 @@ async function bmseIn(): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 const actions: KeyActions = {
+  openAudio(): void {
+    void loadFromPath();
+  },
+  openWos(): void {
+    void loadWos();
+  },
   toggleMarkerAtCursor(): void {
     if (store.state.doc.toggleMarker(store.state.cursorTick)) {
       store.setStatus("markerToggledAtTick", { tick: store.state.cursorTick });

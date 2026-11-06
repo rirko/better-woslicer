@@ -1,4 +1,8 @@
-/** Typed accessor for the preload-exposed API (single allowlisted surface). */
+/**
+ * Host access for the renderer. The application logic never talks to Electron
+ * directly: it resolves a WoslicerApi implementation injected by the platform
+ * entry point (the Electron preload bridge, or the browser host).
+ */
 
 export interface LoadedAudioInfo {
   path: string;
@@ -44,10 +48,19 @@ export interface WoslicerApi {
   onStateChanged(handler: (state: { hasSource: boolean; sourcePath: string | null }) => void): () => void;
 }
 
+let currentHost: WoslicerApi | null = null;
+
+/** Registers the platform host. The entry point calls this before any use. */
+export function provideHost(host: WoslicerApi): void {
+  currentHost = host;
+}
+
 export function api(): WoslicerApi {
+  if (currentHost) return currentHost;
   const w = window as unknown as { woslicer?: WoslicerApi };
   if (!w.woslicer) {
     throw new Error("preload bridge unavailable: window.woslicer is missing");
   }
-  return w.woslicer;
+  currentHost = w.woslicer;
+  return currentHost;
 }

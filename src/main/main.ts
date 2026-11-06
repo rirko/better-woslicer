@@ -20,10 +20,10 @@ import {
   validateWavOutputPath,
   validateWosFilePath,
 } from "./channels.js";
-import { parseWav, encodeWav16 } from "../core/wav.js";
-import { decodeOgg } from "../core/ogg.js";
+import { encodeWav16 } from "../core/wav.js";
 import { renderSlice } from "../core/slicer.js";
-import { TimeBase, tickToSampleExport } from "../core/timebase.js";
+import { renderSliceFiles, type SliceFileRequest } from "../core/slices.js";
+import { decodeAudio } from "../core/decode.js";
 import { BMSE_CLIPBOARD_FORMAT_NAME, bmseBufferToText, bmseTextToBuffer } from "../core/bmse.js";
 import { isLanguage, languageFromLocale, type Language } from "../core/language.js";
 import { DIALOG_STRINGS, MENU_STRINGS, menuTemplate } from "./menu-i18n.js";
@@ -144,10 +144,7 @@ async function loadAudioFile(filePath: unknown): Promise<unknown> {
   }
   const resolved = path.resolve(filePath);
   const bytes = await fs.readFile(resolved);
-  const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  const decoded = resolved.toLowerCase().endsWith(".ogg")
-    ? await decodeOgg(new Uint8Array(arrayBuffer))
-    : parseWav(arrayBuffer);
+  const decoded = await decodeAudio(resolved, bytes);
 
   currentSource = {
     path: resolved,
@@ -290,13 +287,7 @@ function registerIpcHandlers(): void {
           ? new Uint8Array((buffer as unknown as ArrayBufferView).buffer)
           : null;
     if (!bytes) throw new Error("audio payload must be an ArrayBuffer");
-    const lower = name.toLowerCase();
-    const decoded = lower.endsWith(".ogg")
-      ? await decodeOgg(bytes)
-      : parseWav(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
-    if (!lower.endsWith(".ogg") && !lower.endsWith(".wav")) {
-      throw new Error(`unsupported audio file: ${name}`);
-    }
+    const decoded = await decodeAudio(name, bytes);
     currentSource = {
       path: `dropped:${name}`,
       sampleRate: decoded.sampleRate,
@@ -357,27 +348,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.exportAll, async (_event, request: unknown) => {
     const parsed = parseExportAllRequest(request);
     const src = requireSource();
-    const base: TimeBase = { bpm: parsed.bpm, shift: parsed.shift, sampleRate: src.sampleRate };
     const written: string[] = [];
-    const sorted = [...parsed.markers].sort((a, b) => a - b);
-    for (let i = 0; i < sorted.length; i++) {
-      const startSample = tickToSampleExport(sorted[i], base);
-      if (startSample > src.length) {
-        // Original DoPrev: "元waveファイルの参照外です。" (start out of range).
-        throw new Error(
-          `slice ${i} (tick ${sorted[i]}) starts at sample ${startSample}, beyond the end of the source (${src.length} frames)`
-        );
-      }
-      const endSample = i + 1 < sorted.length ? tickToSampleExport(sorted[i + 1], base) : src.length;
-      const rendered = renderSlice(asSource(src), {
-        start: startSample,
-        end: endSample,
-        fadeoutMs: parsed.fadeoutMs,
-        noisegateDb: parsed.noisegateDb,
-      });
-      const fileName = `${parsed.baseName}_${String(i).padStart(3, "0")}.wav`;
-      await fs.writeFile(path.join(parsed.dirPath, fileName), encodeWav16(rendered.channelsData, rendered.sampleRate, rendered.length));
-      written.push(fileName);
+    for (const file of renderSliceFiles(asSource(src), parsed)) {
+      await fs.writeFile(path.join(parsed.dirPath, file.name), file.data);
+      written.push(file.name);
     }
     return { written };
   });
