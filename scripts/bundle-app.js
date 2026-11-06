@@ -69,6 +69,26 @@ function build(entry, outfile, options) {
   warnings.push(...result.warnings);
 }
 
+/**
+ * Minifies index.html in place with html-minifier-terser (its CLI keeps this
+ * script synchronous). Conservative options only: whitespace collapses to a
+ * single space between tags, comments go, boolean attributes shrink; no
+ * attribute-quote removal and no inline JS/CSS processing (none is inline),
+ * so inline spacing and the strict CSP meta cannot change meaning.
+ */
+function minifyHtml(file) {
+  const cli = path.join(path.dirname(require.resolve("html-minifier-terser/package.json")), "cli.js");
+  execFileSync(process.execPath, [
+    cli,
+    file,
+    "--output",
+    file,
+    "--collapse-whitespace",
+    "--remove-comments",
+    "--collapse-boolean-attributes",
+  ], { stdio: "ignore" });
+}
+
 // Main process: CommonJS, electron and the decoder stay external. The decoder
 // import is dynamic and lazy in core/ogg.ts; esbuild's cjs output keeps that
 // laziness through a require-based helper.
@@ -89,7 +109,16 @@ build(path.join(root, "src", "renderer", "app.ts"), path.join(packDir, "renderer
 });
 
 // Static assets and build metadata, at the paths main.js resolves at runtime.
+// copyRendererAssets writes the plain stylesheet first; the esbuild pass below
+// then OVERWRITES it with the minified form, so the order matters.
 copyRendererAssets(path.join(packDir, "renderer"));
+
+// The stylesheet is precompiled like the JavaScript: minified with a linked
+// source map, which the map-splitting pass below moves into the symbols tree.
+build(path.join(root, "src", "renderer", "styles.css"), path.join(packDir, "renderer", "styles.css"), {
+  platform: "browser",
+});
+minifyHtml(path.join(packDir, "renderer", "index.html"));
 fs.copyFileSync(buildInfoPath, path.join(packDir, "src", "main", "build-info.json"));
 
 // Split the source maps out of the payload, mirroring the directory layout.
