@@ -6,7 +6,7 @@
 
 ### Added
 
-- A browser version of the app is available as [woslicer-dx app](https://woslicer-dx.sgqy.workers.dev/) — no installation needed.
+- A browser version of the app is available as [woslicer-dx app](https://woslicer-dx.pages.dev/) — no installation needed.
 
 ### Fixed
 

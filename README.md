@@ -26,7 +26,7 @@ Download a build from the repository's Actions artifacts and extract it:
 
 macOS CI builds are not notarized. The application processes files locally and does not require a network connection.
 
-The web version runs directly in the browser: [woslicer-dx app](https://woslicer-dx.sgqy.workers.dev/) — no installation needed.
+The web version runs directly in the browser: [woslicer-dx app](https://woslicer-dx.pages.dev/) — no installation needed.
 
 For source builds, use Node.js 24, npm and Git:
 

@@ -6,7 +6,7 @@
 
 ### 新增
 
-- 新增浏览器版本 [woslicer-dx app](https://woslicer-dx.sgqy.workers.dev/)，访问即可使用，无需安装。
+- 新增浏览器版本 [woslicer-dx app](https://woslicer-dx.pages.dev/)，访问即可使用，无需安装。
 
 ### 修复
 

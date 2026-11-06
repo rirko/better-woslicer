@@ -26,7 +26,7 @@ wosderge の woslicerIII をベースにした、BMS 向けのオフライン音
 
 macOS の CI ビルドは公証されていません。本アプリはファイルをローカルで処理し、実行時にネットワーク接続は不要です。
 
-Web 版はブラウザーで直接動作します：[woslicer-dx app](https://woslicer-dx.sgqy.workers.dev/) （インストール不要）。
+Web 版はブラウザーで直接動作します：[woslicer-dx app](https://woslicer-dx.pages.dev/) （インストール不要）。
 
 ソースから実行する場合は Node.js 24、npm、Git が必要です。
 
