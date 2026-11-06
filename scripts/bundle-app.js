@@ -137,12 +137,9 @@ minifyHtml(path.join(webDir, "index.html"));
 build(path.join(root, "src", "renderer", "styles.css"), path.join(webDir, "styles.css"), {
   platform: "browser",
 });
-// Ship the local launcher with the archive: a stdlib-only server plus
-// double-click entry points, so the unpacked folder starts like the
-// Electron release folder does (see README).
-for (const launcher of ["server.mjs", "start.cmd", "start.sh"]) {
-  fs.copyFileSync(path.join(root, "src", "web", launcher), path.join(webDir, launcher));
-}
+// The web archive is a pure static distribution: exactly index.html, one
+// script and one stylesheet. The local launcher (src/web/server.mjs) stays a
+// repository tool — npm run web — and never ships.
 
 // Split the source maps out of the payloads, mirroring the directory layout.
 const moved = [];
@@ -161,14 +158,20 @@ const moved = [];
   }
 })(packDir);
 if (moved.length === 0) fail("no source maps were generated; check the esbuild sourcemap settings");
-// Also lift the web bundle's map into the shared symbols archive.
-const webMap = path.join(webDir, "app.js.map");
-if (!fs.existsSync(webMap)) fail("the web build produced no source map");
-{
-  const target = path.join(mapsDir, "web", "app.js.map");
+// Also lift the web build's maps (script and stylesheet) into the shared
+// symbols archive, leaving dist/web as pure static files.
+const webMaps = fs.readdirSync(webDir).filter((name) => name.endsWith(".map"));
+if (webMaps.length === 0) fail("the web build produced no source maps");
+for (const map of webMaps) {
+  const target = path.join(mapsDir, "web", map);
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.renameSync(webMap, target);
-  moved.push(path.join("web", "app.js.map"));
+  fs.renameSync(path.join(webDir, map), target);
+  moved.push(path.join("web", map));
+}
+// Guard the pure-static contract on the archive contents.
+const webFiles = fs.readdirSync(webDir).sort().join(",");
+if (webFiles !== "app.js,index.html,styles.css") {
+  fail("the web payload has unexpected files: " + webFiles);
 }
 
 // Sanity: the payload must be map-free and the preload must not require
