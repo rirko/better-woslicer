@@ -23,11 +23,11 @@ wosderge의 woslicerIII를 기반으로 만든 BMS용 오프라인 오디오 슬
 | Windows | `.7z` | `woslicer-dx.exe` |
 | Linux | `.tar.xz` | `woslicer-dx` |
 | macOS | `.zip` | `woslicer-dx.app` |
-| 웹 (오프라인) | `.7z` | 정적 사이트 — http으로 서비스 |
+| 웹 (오프라인) | `.7z` | 로컬 서버 — `start.cmd` / `start.sh` 실행 |
 
 macOS CI 빌드는 공증되지 않았습니다. 이 앱은 파일을 로컬에서 처리하며 실행할 때 네트워크 연결이 필요하지 않습니다.
 
-오프라인 웹 빌드(`*-web-any.7z`)는 정적 사이트로 풀립니다. 임의의 정적 http 서버로 폴더를 서비스하고 브라우저에서 여세요(`file://`에서는 실행되지 않습니다). 정식 태그 릴리스는 Cloudflare Pages에도 게시됩니다.
+오프라인 웹 빌드(`*-web-any.7z`)에는 작은 로컬 서버가 포함되어 있습니다. `start.cmd`(Windows) 또는 `sh start.sh`(Linux/macOS)를 실행하면(Node.js 필요) 로컬 `http://127.0.0.1` 주소로 열립니다. 임의의 정적 http 서버도 사용할 수 있으며, `file://`에서는 실행되지 않습니다. 정식 태그 릴리스는 Cloudflare Pages에도 게시됩니다.
 
 소스에서 실행하려면 Node.js 24, npm, Git이 필요합니다.
 
