@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README.zh-CN.md) · **日本語** · [한국어](README.ko.md)
 
-wosderge の woslicerIII をベースにした、BMS 向けのオフライン音声スライサー（Electron + TypeScript）。
+wosderge の woslicerIII をベースにした、BMS 向けのオフライン音声スライサー。
 
 ![タイムライン](screenshots/timeline.png)
 
@@ -23,11 +23,10 @@ wosderge の woslicerIII をベースにした、BMS 向けのオフライン音
 | Windows | `.7z` | `woslicer-dx.exe` |
 | Linux | `.tar.xz` | `woslicer-dx` |
 | macOS | `.zip` | `woslicer-dx.app` |
-| Web（オフライン） | `.7z` | ローカルサーバー — `start.cmd` / `start.sh` を実行 |
 
 macOS の CI ビルドは公証されていません。本アプリはファイルをローカルで処理し、実行時にネットワーク接続は不要です。
 
-オフライン Web 版（`*-web-any.7z`）には小さなローカルサーバーが同梱されています。`start.cmd`（Windows）または `sh start.sh`（Linux/macOS）を実行すると（Node.js が必要）、ローカルの `http://127.0.0.1` アドレスで開きます。任意の静的 http サーバーも使用できますが、`file://` では動作しません。正式なタグリリースでは Cloudflare Pages にも公開されます。
+Web 版はブラウザーで直接動作します：[woslicer-dx app](https://woslicer-dx.sgqy.workers.dev/) （インストール不要）。
 
 ソースから実行する場合は Node.js 24、npm、Git が必要です。
 
