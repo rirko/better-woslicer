@@ -102,8 +102,8 @@ build(path.join(root, "src", "main", "main.ts"), path.join(packDir, "src", "main
 // except "electron").
 buildPreloadBundle(path.join(packDir, "src", "main", "preload.bundle.js"), { minify: true, sourcemap: "linked" });
 
-// Renderer: one ESM bundle; index.html references renderer/app.js next to it.
-build(path.join(root, "src", "renderer", "app.ts"), path.join(packDir, "renderer", "renderer", "app.js"), {
+// Renderer: one ESM bundle; index.html references renderer/main.js next to it.
+build(path.join(root, "src", "renderer", "main.ts"), path.join(packDir, "renderer", "renderer", "main.js"), {
   platform: "browser",
   format: "esm",
 });
