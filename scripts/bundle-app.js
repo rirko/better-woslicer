@@ -137,6 +137,12 @@ minifyHtml(path.join(webDir, "index.html"));
 build(path.join(root, "src", "renderer", "styles.css"), path.join(webDir, "styles.css"), {
   platform: "browser",
 });
+// Ship the local launcher with the archive: a stdlib-only server plus
+// double-click entry points, so the unpacked folder starts like the
+// Electron release folder does (see README).
+for (const launcher of ["server.mjs", "start.cmd", "start.sh"]) {
+  fs.copyFileSync(path.join(root, "src", "web", launcher), path.join(webDir, launcher));
+}
 
 // Split the source maps out of the payloads, mirroring the directory layout.
 const moved = [];

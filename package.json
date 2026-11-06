@@ -14,6 +14,7 @@
     "test": "npm run build:main && node --test dist/tests/*.test.js",
     "test:oracle": "npm run build:main && node --test dist/tests/oracle.test.js",
     "start": "npm run build && electron .",
+    "web": "npm run bundle && node src/web/server.mjs dist/web",
     "test:ui": "node scripts/test-ui.js",
     "bundle": "node scripts/bundle-app.js",
     "package": "npm run bundle && node scripts/package-app.js",

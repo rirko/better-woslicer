@@ -23,11 +23,11 @@
 | Windows | `.7z` | `woslicer-dx.exe` |
 | Linux | `.tar.xz` | `woslicer-dx` |
 | macOS | `.zip` | `woslicer-dx.app` |
-| Web（离线） | `.7z` | 静态站点 — 需通过 http 服务打开 |
+| Web（离线） | `.7z` | 本地服务器 — 运行 `start.cmd` / `start.sh` |
 
 macOS CI 构建未公证。应用在本地处理文件，运行时无需联网。
 
-离线网页版（`*-web-any.7z`）解压后为静态站点：用任意静态 http 服务器提供该目录并在浏览器中打开（`file://` 无法运行）。正式 tag 发布时会同步发布到 Cloudflare Pages。
+离线网页版（`*-web-any.7z`）解压后自带一个小型本地服务器：运行 `start.cmd`（Windows）或 `sh start.sh`（Linux/macOS）——需要 Node.js——应用会在本地 `http://127.0.0.1` 地址打开。也可以使用任意静态 http 服务器；`file://` 无法运行。正式 tag 发布时会同步发布到 Cloudflare Pages。
 
 源码运行需要 Node.js 24、npm 和 Git：
 
