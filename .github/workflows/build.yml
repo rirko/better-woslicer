@@ -86,6 +86,41 @@ jobs:
           compression-level: 0
           retention-days: 14
 
+  # Required on every run: the offline web build is platform-independent and
+  # ships from this workflow, so its suite gates all triggers. It tests the
+  # actual web-any artifact, not a fresh rebuild.
+  web:
+    name: web (chromium + firefox)
+    needs: bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox
+      - name: Download the offline web build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: woslicer-web-any-${{ github.sha }}
+          path: web-package
+      - name: Unpack the web payload
+        run: |
+          path7za="$(node -p "require('7zip-bin').path7za")"
+          chmod +x "$path7za"
+          "$path7za" x -y "web-package/*-web-any.7z"
+          mkdir -p dist
+          mv web dist/web
+      - name: Browser tests (Chromium + Firefox)
+        run: npm run test:web
+
   build:
     name: ${{ matrix.label }}
     needs: bundle
