@@ -23,11 +23,11 @@ wosderge の woslicerIII をベースにした、BMS 向けのオフライン音
 | Windows | `.7z` | `woslicer-dx.exe` |
 | Linux | `.tar.xz` | `woslicer-dx` |
 | macOS | `.zip` | `woslicer-dx.app` |
-| Web（オフライン） | `.7z` | 静的サイト — http 経由で開く |
+| Web（オフライン） | `.7z` | ローカルサーバー — `start.cmd` / `start.sh` を実行 |
 
 macOS の CI ビルドは公証されていません。本アプリはファイルをローカルで処理し、実行時にネットワーク接続は不要です。
 
-オフライン Web 版（`*-web-any.7z`）は静的サイトとして展開されます。任意の静的 http サーバーでフォルダーを提供してブラウザーで開いてください（`file://` では動作しません）。正式なタグリリースでは Cloudflare Pages にも公開されます。
+オフライン Web 版（`*-web-any.7z`）には小さなローカルサーバーが同梱されています。`start.cmd`（Windows）または `sh start.sh`（Linux/macOS）を実行すると（Node.js が必要）、ローカルの `http://127.0.0.1` アドレスで開きます。任意の静的 http サーバーも使用できますが、`file://` では動作しません。正式なタグリリースでは Cloudflare Pages にも公開されます。
 
 ソースから実行する場合は Node.js 24、npm、Git が必要です。
 

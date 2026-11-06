@@ -14,7 +14,8 @@ export default defineConfig({
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },
   ],
   webServer: {
-    command: "node scripts/web-test-server.js",
+    // The same stdlib server that ships in the web-any archive.
+    command: "node src/web/server.mjs dist/web --port 4173 --no-open",
     url: "http://127.0.0.1:4173/index.html",
     reuseExistingServer: true,
     timeout: 10_000,
