@@ -34,8 +34,8 @@ test("prepares versioned notes and verifies available optional assets", t => {
   assert.equal(result.available.length, 4);
   assert.deepEqual(result.unavailable, ["Windows ARM64", "Linux ARM64", "macOS Intel", "macOS ARM64"]);
   const notes = fs.readFileSync(data.notes, "utf8");
-  assert.match(notes, /## Downloads/);
-  assert.match(notes, /Linux x64/);
+  assert.doesNotMatch(notes, /## Downloads/);
+  assert.match(notes, /Linux ARM64 was unavailable/);
   assert.match(notes, /Optional platform builds not included/);
 });
 

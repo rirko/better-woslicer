@@ -26,7 +26,7 @@ wosderge의 woslicerIII를 기반으로 만든 BMS용 오프라인 오디오 슬
 
 macOS CI 빌드는 공증되지 않았습니다. 이 앱은 파일을 로컬에서 처리하며 실행할 때 네트워크 연결이 필요하지 않습니다.
 
-웹 버전은 브라우저에서 직접 실행됩니다: [woslicer-dx app](https://woslicer-dx.sgqy.workers.dev/) (설치 불필요).
+웹 버전은 브라우저에서 직접 실행됩니다: [woslicer-dx app](https://woslicer-dx.pages.dev/) (설치 불필요).
 
 소스에서 실행하려면 Node.js 24, npm, Git이 필요합니다.
 

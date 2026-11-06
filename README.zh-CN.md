@@ -26,7 +26,7 @@
 
 macOS CI 构建未公证。应用在本地处理文件，运行时无需联网。
 
-网页版在浏览器中直接运行：[woslicer-dx app](https://woslicer-dx.sgqy.workers.dev/) ，无需安装。
+网页版在浏览器中直接运行：[woslicer-dx app](https://woslicer-dx.pages.dev/) ，无需安装。
 
 源码运行需要 Node.js 24、npm 和 Git：
 
