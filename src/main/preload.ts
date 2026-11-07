@@ -54,6 +54,9 @@ const api = {
   setLanguage: (lang: string): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.setLanguage, String(lang)),
 
+  setTheme: (theme: string): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setTheme, String(theme)),
+
   onMenuAction: (handler: (action: string) => void): (() => void) => {
     const wrapped = (_event: unknown, action: string): void => handler(String(action));
     ipcRenderer.on(CHANNELS.menuAction, wrapped);

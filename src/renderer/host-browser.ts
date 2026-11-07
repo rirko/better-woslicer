@@ -291,6 +291,11 @@ export const browserHost: WoslicerApi = {
     // No native menu to mirror in a browser.
   },
 
+  async setTheme() {
+    // The browser applies color schemes itself; "system" follows it via the
+    // matchMedia listener in the renderer.
+  },
+
   onMenuAction() {
     // No native menu in a browser; keyboard shortcuts cover the actions.
     return () => undefined;

@@ -67,6 +67,14 @@ async function main() {
     `--user-data-dir=${userData}`,
     "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=0",
+    // The suite asserts the English chrome verbatim; pin the UI language so
+    // the app's auto detection (which follows the machine's display
+    // language) cannot flip the assertions on a localized machine.
+    "--lang=en-US",
+    // Canvas pixel probes match dark-palette colors (e.g. the amber marker
+    // accent); pin Chromium's preferred color scheme to dark so the app's
+    // "system" theme resolution cannot flip them on a light-mode machine.
+    "--force-dark-mode",
     // The smoke window can open behind other windows; without these flags
     // Chromium throttles/parks requestAnimationFrame for occluded windows and
     // the animation-dependent checks (follow-scroll, viewport self-check)

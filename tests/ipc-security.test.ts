@@ -33,6 +33,7 @@ test("preload API surface stays exactly on the documented allowlist", () => {
     "saveMidiDialog",
     "saveWosDialog",
     "setLanguage",
+    "setTheme",
     "writeBmhFile",
     "writeBmseClipboard",
     "writeMidiFile",

@@ -19,7 +19,9 @@ import {
   bandScopeWhole,
   getLanguage,
   initLanguage,
+  languageSelection,
   renderStatus,
+  setAutoLanguage,
   setLanguage,
   tr,
   LANGUAGES,
@@ -28,6 +30,7 @@ import {
   type Language,
 } from "./i18n.js";
 import type { ChromeKey, FormatParams, StatusKey } from "../core/messages.js";
+import { applyTheme, palette, setThemeName, themeSelection, watchSystemTheme, type ThemeName } from "./theme.js";
 import type { StatusEntry, StatusSegment } from "./store.js";
 import { gridStepTicks } from "../core/gridlines.js";
 import { MAX_TICKS, MEASURE_TICKS, resolveBreakpointTick, sampleToTickNearest, tickToSampleExport } from "../core/timebase.js";
@@ -1222,11 +1225,19 @@ function wireDom(): void {
     store.setStatus("tapOffsetApplied", { offset: `${median >= 0 ? "+" : ""}${median.toFixed(1)}` });
   });
 
-  // UI language, persisted in localStorage. The options come from the i18n
+  // UI language: an explicit choice is persisted; "auto" follows the
+  // platform language (the system display language under Electron; the
+  // browser's preferred languages — the same preference Accept-Language is
+  // built from — under the web host). The options come from the i18n
   // language manifest so the selector can never drift from the shipped set.
   // Each option carries its own lang attribute (its manifest docLang) so the
   // browser renders every native name with that language's font fallback.
   const languageSelect = el<HTMLSelectElement>("select-language");
+  const autoOption = document.createElement("option");
+  autoOption.value = "auto";
+  autoOption.dataset.i18n = "languageAuto";
+  autoOption.textContent = tr("languageAuto");
+  languageSelect.append(autoOption);
   for (const lang of LANGUAGES) {
     const option = document.createElement("option");
     option.value = lang;
@@ -1234,16 +1245,42 @@ function wireDom(): void {
     option.textContent = LANGUAGE_LABELS[lang];
     languageSelect.append(option);
   }
-  languageSelect.value = getLanguage();
+  languageSelect.value = languageSelection();
   languageSelect.addEventListener("change", (e) => {
-    const lang = (e.target as HTMLSelectElement).value as Language;
-    setLanguage(lang);
+    const value = (e.target as HTMLSelectElement).value;
+    if (value === "auto") {
+      setAutoLanguage();
+    } else {
+      setLanguage(value as Language);
+    }
     // Keep the native menu bar in step with the renderer chrome.
     void api()
-      .setLanguage(lang)
+      .setLanguage(getLanguage())
       .catch(() => undefined);
     renderStatusBar();
     updateBandPanel();
+  });
+
+  // Color theme: light / dark / follow the system scheme (live — a flip of
+  // the OS scheme repaints while "system" is selected). Canvas layers read
+  // the palette on every draw, so applying a theme only needs one redraw.
+  // The selection also mirrors into the native chrome (title bar, menus).
+  const themeSelect = el<HTMLSelectElement>("select-theme");
+  themeSelect.value = themeSelection();
+  const applyThemeSelection = (): void => {
+    applyTheme(themeSelect.value as ThemeName);
+    void api()
+      .setTheme(themeSelect.value)
+      .catch(() => undefined);
+    redraw();
+    bmhSync();
+  };
+  themeSelect.addEventListener("change", () => {
+    setThemeName(themeSelect.value as ThemeName);
+    applyThemeSelection();
+  });
+  watchSystemTheme(() => {
+    if (themeSelect.value === "system") applyThemeSelection();
   });
 
   // Play button toggles playback ONLY — the break point moved to Enter, so a
@@ -1455,7 +1492,7 @@ function wireDom(): void {
     canvas.width = Math.max(1, width * (window.devicePixelRatio || 1));
     canvas.height = Math.max(1, height * (window.devicePixelRatio || 1));
     context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
-    context.fillStyle = "#14171b";
+    context.fillStyle = palette().panel;
     context.fillRect(0, 0, width, height);
     if (!division) return;
     const cell = 30;
@@ -1463,9 +1500,9 @@ function wireDom(): void {
       const x = (index % Math.max(1, Math.floor(width / cell))) * cell;
       const y = Math.floor(index / Math.max(1, Math.floor(width / cell))) * (height / 2);
       if (y >= height) return;
-      context.fillStyle = index % 2 === 0 ? "#1a1e23" : "#22272d";
+      context.fillStyle = index % 2 === 0 ? palette().surface1 : palette().surface2;
       context.fillRect(x, y, cell - 1, height / 2 - 1);
-      context.fillStyle = "#edeff2";
+      context.fillStyle = palette().text1;
       context.font = "9px monospace";
       context.fillText(zzStringOf(definition.zz), x + 3, y + 10);
       context.fillText(String(definition.div), x + 3, y + 22);
@@ -1821,10 +1858,16 @@ function animate(): void {
 
 window.addEventListener("DOMContentLoaded", () => {
   try {
+    // Theme before language: the CSS custom properties must be painted
+    // before anything renders, while the language choice only affects text.
+    applyTheme(themeSelection());
     initLanguage();
     applyStaticTranslations();
-    // The main process starts the menu in the OS locale; this makes the
-    // persisted choice authoritative on every launch.
+    // The main process starts the menu in the OS locale with system theme
+    // chrome; these make the persisted choices authoritative on every launch.
+    void api()
+      .setTheme(themeSelection())
+      .catch(() => undefined);
     void api()
       .setLanguage(getLanguage())
       .catch(() => undefined);

@@ -12,36 +12,10 @@ import { peakRange, PeakCache } from "../core/peaks.js";
 import { BAND_DRAW_MIN_ABS } from "../core/bands.js";
 import { gridLineTicks, gridStepTicks, measureLabelStep } from "../core/gridlines.js";
 import { Store } from "./store.js";
+import { activeTheme, palette } from "./theme.js";
 
 export const RULER_HEIGHT = 28;
 export const OVERVIEW_HEIGHT = 36;
-
-const COLORS = {
-  app: "#0E1013",
-  panel: "#14171B",
-  surface1: "#1A1E23",
-  surface2: "#22272D",
-  surface3: "#2B3138",
-  text3: "#8D97A1",
-  text2: "#B7BEC6",
-  wave: "#5FA79D",
-  waveBright: "#8FE3D6",
-  waveRms: "#2E5450",
-  waveRmsBright: "#456E68",
-  waveRmsDim: "rgba(46, 84, 80, 0.4)",
-  waveRmsBrightDim: "rgba(69, 110, 104, 0.4)",
-  playhead: "#F5F7FA",
-  selection: "#7FB3FF",
-  accent: "#F2B24C",
-  cue: "#58C7E8",
-  danger: "#FF6B6B",
-  /* Band overlay palette (frozen spec: violet / green / pink). */
-  bandLow: "rgba(177, 140, 255, 0.85)",
-  bandMid: "rgba(168, 212, 106, 0.75)",
-  bandHigh: "rgba(240, 143, 180, 0.85)",
-  waveDim: "rgba(95, 167, 157, 0.35)",
-  waveBrightDim: "rgba(143, 227, 214, 0.35)",
-};
 
 function setupCanvas(canvas: HTMLCanvasElement, cssWidth: number, cssHeight: number): CanvasRenderingContext2D {
   const dpr = window.devicePixelRatio || 1;
@@ -88,7 +62,7 @@ export class TimelineView {
     const ctx = setupCanvas(this.ruler, width, RULER_HEIGHT);
     const s = this.store.state;
     const { scrollTick, pxPerTick } = s;
-    ctx.fillStyle = COLORS.panel;
+    ctx.fillStyle = palette().panel;
     ctx.fillRect(0, 0, width, RULER_HEIGHT);
 
     ctx.font = "10px Consolas, monospace";
@@ -102,7 +76,7 @@ export class TimelineView {
     const toTick = scrollTick + width / pxPerTick;
     for (const line of gridLineTicks(scrollTick, toTick, gridStepTicks(s.grid), pxPerTick)) {
       const x = this.tickToX(line.tick, scrollTick, pxPerTick);
-      ctx.strokeStyle = line.isMeasure ? COLORS.text2 : COLORS.text3;
+      ctx.strokeStyle = line.isMeasure ? palette().text2 : palette().text3;
       ctx.beginPath();
       ctx.moveTo(x + 0.5, line.isMeasure ? 10 : 18);
       ctx.lineTo(x + 0.5, RULER_HEIGHT);
@@ -110,7 +84,7 @@ export class TimelineView {
       if (line.isMeasure) {
         const measure = line.tick / MEASURE_TICKS;
         if (measure % labelStep === 0) {
-          ctx.fillStyle = COLORS.text2;
+          ctx.fillStyle = palette().text2;
           ctx.fillText(String(measure + 1).padStart(3, "0"), x + 3, 12);
         }
       }
@@ -122,7 +96,7 @@ export class TimelineView {
     const height = (this.wave.parentElement as HTMLElement).clientHeight;
     const ctx = setupCanvas(this.wave, width, height);
     const s = this.store.state;
-    ctx.fillStyle = COLORS.app;
+    ctx.fillStyle = palette().app;
     ctx.fillRect(0, 0, width, height);
     // The timeline is pure tick space and stays editable with no source: the
     // lane scaffolding, grid lines and slice bars must draw so markers placed
@@ -136,7 +110,7 @@ export class TimelineView {
     const toTick = scrollTick + width / pxPerTick;
 
     // Slice bars: alternate surface tint per slice.
-    ctx.strokeStyle = COLORS.surface3;
+    ctx.strokeStyle = palette().surface3;
     for (const t of ticks) {
       if (t < fromTick - MEASURE_TICKS || t > toTick) continue;
       const x = this.tickToX(t, scrollTick, pxPerTick);
@@ -151,9 +125,9 @@ export class TimelineView {
       const mid = laneTop + laneHeight / 2;
       const half = laneHeight / 2 - 4;
 
-      ctx.fillStyle = COLORS.surface1;
+      ctx.fillStyle = palette().surface1;
       ctx.fillRect(0, laneTop, width, laneHeight);
-      ctx.strokeStyle = COLORS.surface3;
+      ctx.strokeStyle = palette().surface3;
       ctx.beginPath();
       ctx.moveTo(0, mid + 0.5);
       ctx.lineTo(width, mid + 0.5);
@@ -165,7 +139,7 @@ export class TimelineView {
       // at every zoom.
       for (const line of gridLineTicks(fromTick, toTick, gridStepTicks(s.grid), pxPerTick)) {
         const x = this.tickToX(line.tick, scrollTick, pxPerTick);
-        ctx.strokeStyle = line.isMeasure ? COLORS.surface2 : COLORS.surface1;
+        ctx.strokeStyle = line.isMeasure ? palette().surface2 : palette().surface1;
         ctx.beginPath();
         ctx.moveTo(x + 0.5, laneTop);
         ctx.lineTo(x + 0.5, laneTop + laneHeight);
@@ -185,7 +159,7 @@ export class TimelineView {
         // boundary line is danger-red: cutting past it is illegal.
         ctx.fillStyle = this.stripePattern(ctx);
         ctx.fillRect(Math.max(0, endX), laneTop, width - Math.max(0, endX), laneHeight);
-        ctx.strokeStyle = COLORS.danger;
+        ctx.strokeStyle = palette().danger;
         ctx.beginPath();
         ctx.moveTo(Math.floor(endX) + 0.5, laneTop);
         ctx.lineTo(Math.floor(endX) + 0.5, laneTop + laneHeight);
@@ -194,18 +168,18 @@ export class TimelineView {
       const bandsOn = s.bandsVisible && s.bandAnalysis !== null;
       const outerColor = bandsOn
         ? c === 0
-          ? COLORS.waveDim
-          : COLORS.waveBrightDim
+          ? palette().waveDim
+          : palette().waveBrightDim
         : c === 0
-          ? COLORS.wave
-          : COLORS.waveBright;
+          ? palette().wave
+          : palette().waveBright;
       const innerColor = bandsOn
         ? c === 0
-          ? COLORS.waveRmsDim
-          : COLORS.waveRmsBrightDim
+          ? palette().waveRmsDim
+          : palette().waveRmsBrightDim
         : c === 0
-          ? COLORS.waveRms
-          : COLORS.waveRmsBright;
+          ? palette().waveRms
+          : palette().waveRmsBright;
 
       // Per-pixel two-tone rendering (the classic DAW style): the min/max
       // envelope in the wave color with the RMS band darker inside it, so
@@ -383,9 +357,9 @@ export class TimelineView {
       // top because this block runs before those layers.
       if (bandsOn) {
         const analysis = s.bandAnalysis!;
-        this.drawBandEnvelope(ctx, analysis.low.peaks[c], COLORS.bandLow, 1, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
-        this.drawBandEnvelope(ctx, analysis.mid.peaks[c], COLORS.bandMid, 1, [4, 2], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
-        this.drawBandEnvelope(ctx, analysis.high.peaks[c], COLORS.bandHigh, 1.25, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
+        this.drawBandEnvelope(ctx, analysis.low.peaks[c], palette().bandLow, 1, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
+        this.drawBandEnvelope(ctx, analysis.mid.peaks[c], palette().bandMid, 1, [4, 2], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
+        this.drawBandEnvelope(ctx, analysis.high.peaks[c], palette().bandHigh, 1.25, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
       }
     }
 
@@ -394,13 +368,13 @@ export class TimelineView {
       if (t < fromTick || t > toTick) continue;
       const x = this.tickToX(t, scrollTick, pxPerTick);
       const selected = s.selectedTicks.includes(t);
-      ctx.strokeStyle = selected ? COLORS.selection : COLORS.accent;
+      ctx.strokeStyle = selected ? palette().selection : palette().accent;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x + 0.5, 0);
       ctx.lineTo(x + 0.5, height);
       ctx.stroke();
-      ctx.fillStyle = selected ? COLORS.selection : COLORS.accent;
+      ctx.fillStyle = selected ? palette().selection : palette().accent;
       ctx.beginPath();
       ctx.moveTo(x - 4, 0);
       ctx.lineTo(x + 4, 0);
@@ -415,9 +389,9 @@ export class TimelineView {
       const b = Math.max(s.selectionStartTick, s.selectionEndTick);
       const x0 = this.tickToX(a, scrollTick, pxPerTick);
       const x1 = this.tickToX(b, scrollTick, pxPerTick);
-      ctx.fillStyle = "rgba(127, 179, 255, 0.12)";
+      ctx.fillStyle = palette().selectionFill;
       ctx.fillRect(x0, 0, x1 - x0, height);
-      ctx.strokeStyle = COLORS.selection;
+      ctx.strokeStyle = palette().selection;
       ctx.strokeRect(x0 + 0.5, 0.5, x1 - x0, height - 1);
     }
   }
@@ -506,7 +480,7 @@ export class TimelineView {
 
     // Ghost preview while dragging markers.
     if (ghost && ghost.delta !== 0) {
-      ctx.fillStyle = "rgba(143, 227, 214, 0.25)";
+      ctx.fillStyle = palette().ghost;
       for (const t of ghost.ticks) {
         const x = this.tickToX(t + ghost.delta, scrollTick, pxPerTick);
         ctx.fillRect(x - 1, 0, 2, height);
@@ -520,12 +494,12 @@ export class TimelineView {
         ((s.playheadSample / (s.source.sampleRate * 5)) * 4 * s.doc.bpm - base);
       const x = this.tickToX(tickAtPlayhead, scrollTick, pxPerTick);
       if (x >= -2 && x <= width + 2) {
-        ctx.strokeStyle = COLORS.playhead;
+        ctx.strokeStyle = palette().playhead;
         ctx.beginPath();
         ctx.moveTo(x + 0.5, 0);
         ctx.lineTo(x + 0.5, height);
         ctx.stroke();
-        ctx.fillStyle = COLORS.playhead;
+        ctx.fillStyle = palette().playhead;
         ctx.beginPath();
         ctx.moveTo(x - 5, 0);
         ctx.lineTo(x + 5, 0);
@@ -541,7 +515,7 @@ export class TimelineView {
     const cursorX = this.tickToX(s.cursorTick, scrollTick, pxPerTick);
     if (cursorX >= -2 && cursorX <= width + 2) {
       ctx.save();
-      ctx.strokeStyle = COLORS.accent;
+      ctx.strokeStyle = palette().accent;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(cursorX + 0.5, 0);
@@ -555,7 +529,7 @@ export class TimelineView {
     const width = this.viewportWidth();
     const ctx = setupCanvas(this.overview, width, OVERVIEW_HEIGHT);
     const s = this.store.state;
-    ctx.fillStyle = COLORS.panel;
+    ctx.fillStyle = palette().panel;
     ctx.fillRect(0, 0, width, OVERVIEW_HEIGHT);
     if (!s.source || !s.peaks) return;
 
@@ -570,7 +544,7 @@ export class TimelineView {
     for (let c = 0; c < lanes; c++) {
       const mid = c * laneHeight + laneHeight / 2;
       const half = laneHeight / 2 - 2;
-      ctx.fillStyle = COLORS.wave;
+      ctx.fillStyle = palette().wave;
       for (let x = 0; x < width; x += 2) {
         const t0 = (x / width) * MAX_TICKS;
         const t1 = ((x + 2) / width) * MAX_TICKS;
@@ -587,9 +561,9 @@ export class TimelineView {
     // Viewport indicator (tick space — now the same space as the waveform).
     const viewX = s.scrollTick * pxPerTickOverview;
     const viewW = (width / s.pxPerTick) * pxPerTickOverview;
-    ctx.fillStyle = "rgba(242, 178, 76, 0.18)";
+    ctx.fillStyle = palette().viewportFill;
     ctx.fillRect(viewX, 0, Math.max(2, viewW), OVERVIEW_HEIGHT);
-    ctx.strokeStyle = COLORS.accent;
+    ctx.strokeStyle = palette().accent;
     ctx.strokeRect(viewX + 0.5, 0.5, Math.max(2, viewW), OVERVIEW_HEIGHT - 1);
 
     // No-audio region beyond the song's end (same hatching as the waveform).
@@ -598,7 +572,7 @@ export class TimelineView {
     if (endX < width) {
       ctx.fillStyle = this.stripePattern(ctx);
       ctx.fillRect(Math.max(0, endX), 0, width - Math.max(0, endX), OVERVIEW_HEIGHT);
-      ctx.strokeStyle = COLORS.danger;
+      ctx.strokeStyle = palette().danger;
       ctx.beginPath();
       ctx.moveTo(Math.floor(endX) + 0.5, 0);
       ctx.lineTo(Math.floor(endX) + 0.5, OVERVIEW_HEIGHT);
@@ -608,15 +582,15 @@ export class TimelineView {
 
   /** Cached diagonal-hatch tile for the no-audio region. */
   private stripePattern(ctx: CanvasRenderingContext2D): CanvasPattern {
-    if (!this.stripes) {
+    if (!this.stripes || this.stripesTheme !== activeTheme()) {
       const tile = document.createElement("canvas");
       tile.width = 12;
       tile.height = 12;
       const tileCtx = tile.getContext("2d");
       if (tileCtx) {
-        tileCtx.fillStyle = COLORS.panel;
+        tileCtx.fillStyle = palette().panel;
         tileCtx.fillRect(0, 0, 12, 12);
-        tileCtx.strokeStyle = "#39414C";
+        tileCtx.strokeStyle = palette().hatch;
         tileCtx.lineWidth = 3;
         tileCtx.beginPath();
         tileCtx.moveTo(-3, 15);
@@ -627,10 +601,12 @@ export class TimelineView {
         tileCtx.lineTo(21, 3);
         tileCtx.stroke();
         this.stripes = ctx.createPattern(tile, "repeat");
+        this.stripesTheme = activeTheme();
       }
     }
     return this.stripes as CanvasPattern;
   }
 
   private stripes: CanvasPattern | null = null;
+  private stripesTheme: string | null = null;
 }

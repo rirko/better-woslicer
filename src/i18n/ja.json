@@ -133,7 +133,12 @@
     "bmhDefsTitle": "WAV定義情報",
     "bmhFileNameLabel": "ファイル名",
     "titleVolume": "再生音量",
-    "titleRms": "RMS バンド（ピーク内の平均レベル）"
+    "titleRms": "RMS バンド（ピーク内の平均レベル）",
+    "titleTheme": "カラーテーマ",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeSystem": "システム",
+    "languageAuto": "自動"
   },
   "status": {
     "statusEmpty": "空：WAV/OGG ファイルをドロップして開始",

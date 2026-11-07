@@ -133,7 +133,12 @@
     "bmhDefsTitle": "WAV definitions",
     "bmhFileNameLabel": "File name",
     "titleVolume": "Playback volume",
-    "titleRms": "RMS band (mean level inside the peaks)"
+    "titleRms": "RMS band (mean level inside the peaks)",
+    "titleTheme": "Color theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "languageAuto": "Auto"
   },
   "status": {
     "statusEmpty": "Empty: drop a WAV/OGG file to begin",

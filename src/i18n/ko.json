@@ -133,7 +133,12 @@
     "bmhDefsTitle": "WAV 정의 정보",
     "bmhFileNameLabel": "파일 이름",
     "titleVolume": "재생 볼륨",
-    "titleRms": "RMS 밴드 (피크 내 평균 레벨)"
+    "titleRms": "RMS 밴드 (피크 내 평균 레벨)",
+    "titleTheme": "색 테마",
+    "themeLight": "라이트",
+    "themeDark": "다크",
+    "themeSystem": "시스템",
+    "languageAuto": "자동"
   },
   "status": {
     "statusEmpty": "비어 있음: WAV/OGG 파일을 놓아 시작",

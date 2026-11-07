@@ -57,14 +57,15 @@ const smokeEnvironment = configureSmokeEnvironment();
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
-  // Dark window chrome: the default frame follows the (light) system theme
-  // and showed a white title strip. Forcing the dark native theme turns the
-  // title bar, the File/Edit/View/Help menu bar and the window controls dark.
+  // The native chrome (title bar, File/Edit/View/Help menu bar, window
+  // controls) follows the theme the user picks in the app: the renderer
+  // pushes light/dark/system over IPC (setTheme) and "system" tracks the OS
+  // scheme live. Forcing one value here would desync the native chrome from
+  // the in-app theme (and once made a light-OS machine paint dark menus).
   // titleBarStyle "hidden" + titleBarOverlay was evaluated and rejected: on
   // Windows it removes the native menu bar entirely, and none of
   // setMenuBarVisibility(true), autoHideMenuBar: false or setMenu() bring it
   // back — which broke the "native menus stay visible and usable" rule.
-  nativeTheme.themeSource = "dark";
   mainWindow = new BrowserWindow({
     width: smokeEnvironment?.width ?? 1440,
     height: smokeEnvironment?.height ?? 900,
@@ -217,6 +218,15 @@ function registerIpcHandlers(): void {
     if (lang === uiLanguage) return;
     uiLanguage = lang;
     rebuildMenu();
+  });
+
+  // The renderer owns the persisted color theme; the native chrome (title
+  // bar, menu bar) follows it. "system" hands the decision back to the OS.
+  ipcMain.handle(CHANNELS.setTheme, (_event, theme: unknown) => {
+    if (theme !== "light" && theme !== "dark" && theme !== "system") {
+      throw new Error("unsupported color theme: " + String(theme));
+    }
+    nativeTheme.themeSource = theme;
   });
 
   ipcMain.handle(CHANNELS.openFileDialog, async () => {
