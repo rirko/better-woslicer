@@ -86,6 +86,12 @@ export interface Division {
   definitions: BmhDefinition[];
   /** Definition index per source note (source notes in position order). */
   src2def: number[];
+  /**
+   * Session-only flag of the id mode used at creation (drives the `<`/`>`/始番号
+   * wrap boundary). Not serialized — the original loses it on reload the same
+   * way; reopened projects default to the ZZ mode.
+   */
+  zzDefinition: boolean;
 }
 
 /** The default values of the original 新規分割 dialog. */
@@ -300,6 +306,7 @@ export function createDivision(source: MidiSequence, setting: DivisionSetting): 
     recording: work.map((note) => ({ position: note.recPos, gate: note.gate, nn: note.nn, vel: note.vel })),
     definitions,
     src2def,
+    zzDefinition: setting.zzDefinition,
   };
 }
 

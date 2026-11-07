@@ -62,6 +62,12 @@ export interface DialogStrings {
   chooseExportFolder: string;
   filterWave: string;
   filterWos: string;
+  loadMidi: string;
+  saveMidi: string;
+  loadProject: string;
+  saveProject: string;
+  filterMidi: string;
+  filterBmh: string;
 }
 
 /** File-dialog titles keyed by language, from the i18n data files. */

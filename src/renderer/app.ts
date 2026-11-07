@@ -37,6 +37,16 @@ import { TimelineView } from "./waveform.js";
 import { Transport } from "./transport.js";
 import { Interactions } from "./interactions.js";
 import { handleKeyDown, KeyActions } from "./keys.js";
+import { BmhController } from "./bmh.js";
+import { createPianoRoll } from "./pianoroll.js";
+import {
+  bmsSequenceClipboard,
+  cutPositionsClipboard,
+  defaultDivisionSetting,
+  wavDefinitionText,
+  type DivisionSetting,
+} from "../core/bmhelper.js";
+import { MAX_TICKS as BMH_MAX_TICKS } from "../core/timebase.js";
 
 const store = new Store();
 const transport = new Transport(store);
@@ -1046,6 +1056,16 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Parses a two-character base-36 definition id ("01".."ZZ") into its value. */
+function parseBmhStart(text: string): number {
+  const trimmed = text.trim();
+  if (!/^[0-9A-Za-z]{2}$/.test(trimmed)) throw new RangeError(`invalid definition id: ${text}`);
+  const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const value = digits.indexOf(trimmed[0].toUpperCase()) * 36 + digits.indexOf(trimmed[1].toUpperCase());
+  if (value < 0 || value > 1295) throw new RangeError(`invalid definition id: ${text}`);
+  return value;
+}
+
 /* ------------------------------------------------------------------ */
 /* DOM wiring                                                          */
 /* ------------------------------------------------------------------ */
@@ -1275,13 +1295,14 @@ function wireDom(): void {
     tab.addEventListener("click", () => {
       document.querySelectorAll<HTMLButtonElement>(".side-tab").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
-      for (const name of ["source", "cuts", "output"]) {
+      for (const name of ["source", "cuts", "output", "bmhelper"]) {
         el<HTMLDivElement>(`tab-${name}`).classList.toggle("hidden", tab.dataset.tab !== name);
       }
+      if (tab.dataset.tab === "bmhelper") bmhSync();
     });
   });
 
-  // Drag & drop.
+  // Drag & drop: audio to the slicer, MIDI/.bmh to the BMHelper panel.
   window.addEventListener("dragover", (e) => {
     e.preventDefault();
     waveWrap.classList.add("dragover");
@@ -1292,7 +1313,326 @@ function wireDom(): void {
     e.preventDefault();
     waveWrap.classList.remove("dragover");
     const file = e.dataTransfer?.files?.[0];
-    if (file) void loadFromDrop(file);
+    if (!file) return;
+    if (/\.(mid|midi|smf)$/i.test(file.name)) {
+      void importMidiFile(file);
+    } else if (/\.bmh$/i.test(file.name)) {
+      void openBmhFile(file);
+    } else {
+      void loadFromDrop(file);
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // BMHelper panel.
+  // ------------------------------------------------------------------
+  const bmh = new BmhController();
+  const pianoroll = createPianoRoll(el<HTMLCanvasElement>("bmh-pianoroll"), () => {
+    const division = bmh.selectedDivision;
+    return division ? { quantize: division.quantize, notes: division.recording } : null;
+  });
+  pianoroll.attach(el<HTMLCanvasElement>("bmh-pianoroll"));
+  bmh.subscribe(() => bmhSync());
+
+  function bmhSync(): void {
+    const project = bmh.state;
+    el<HTMLDivElement>("bmh-project").classList.toggle("hidden", !project);
+    if (!project) return;
+    el<HTMLElement>("bmh-source-info").textContent = `${bmh.name} · ${project.source.notes.length}n`;
+    const list = el<HTMLUListElement>("bmh-division-list");
+    list.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+    project.divisions.forEach((division, index) => {
+      const li = document.createElement("li");
+      if (index === bmh.selectedIndex) li.className = "active";
+      li.textContent = `${division.name} (${division.recording.length}n/${division.definitions.length}d)`;
+      li.addEventListener("click", () => bmh.selectDivision(index));
+      fragment.appendChild(li);
+    });
+    list.appendChild(fragment);
+    const division = bmh.selectedDivision;
+    el<HTMLDivElement>("bmh-editor").classList.toggle("hidden", !division);
+    el<HTMLButtonElement>("btn-bmh-delete").classList.toggle("hidden", !division);
+    if (division) {
+      drawDefinitionStrip();
+      pianoroll.draw();
+    }
+  }
+
+  function drawDefinitionStrip(): void {
+    const canvas = el<HTMLCanvasElement>("bmh-defs");
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const division = bmh.selectedDivision;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    canvas.width = Math.max(1, width * (window.devicePixelRatio || 1));
+    canvas.height = Math.max(1, height * (window.devicePixelRatio || 1));
+    context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
+    context.fillStyle = "#14171b";
+    context.fillRect(0, 0, width, height);
+    if (!division) return;
+    const cell = 30;
+    division.definitions.forEach((definition, index) => {
+      const x = (index % Math.max(1, Math.floor(width / cell))) * cell;
+      const y = Math.floor(index / Math.max(1, Math.floor(width / cell))) * (height / 2);
+      if (y >= height) return;
+      context.fillStyle = index % 2 === 0 ? "#1a1e23" : "#22272d";
+      context.fillRect(x, y, cell - 1, height / 2 - 1);
+      context.fillStyle = "#edeff2";
+      context.font = "9px monospace";
+      context.fillText(zzStringOf(definition.zz), x + 3, y + 10);
+      context.fillText(String(definition.div), x + 3, y + 22);
+    });
+  }
+
+  function zzStringOf(zz: number): string {
+    const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    return digits[Math.floor(zz / 36)] + digits[zz % 36];
+  }
+
+  function bmhGuard(ready: () => void, noDivision: boolean): boolean {
+    if (!bmh.state) {
+      store.setStatus("bmhNeedsProject", undefined, true);
+      return false;
+    }
+    if (noDivision && !bmh.selectedDivision) {
+      store.setStatus("bmhNoDivision", undefined, true);
+      return false;
+    }
+    ready();
+    return true;
+  }
+
+  async function importMidiFile(file: { name: string; arrayBuffer(): Promise<ArrayBuffer> }): Promise<void> {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const inspection = bmh.inspectMidi(bytes);
+      openBmhSettingModal(file.name, bytes, inspection.tracks);
+    } catch (err) {
+      store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true);
+    }
+  }
+
+  async function openBmhFile(file: { name: string; arrayBuffer(): Promise<ArrayBuffer> }): Promise<void> {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      bmh.openProject(bytes, file.name);
+      store.setStatus("bmhProjectOpened", { file: file.name });
+      bmhSync();
+    } catch (err) {
+      store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true);
+    }
+  }
+
+  function openBmhSettingModal(name: string, bytes: Uint8Array, tracks: { index: number; name: string; noteCount: number }[]): void {
+    pendingBmhImport = { name, bytes };
+    const select = el<HTMLSelectElement>("bmh-in-track");
+    select.innerHTML = "";
+    for (const track of tracks) {
+      const option = document.createElement("option");
+      option.value = String(track.index);
+      option.textContent = `${String(track.index).padStart(2, "0")}: ${track.name || "(no name)"} — ${track.noteCount}n`;
+      select.append(option);
+    }
+    const channelHost = el<HTMLSpanElement>("bmh-in-channels");
+    channelHost.innerHTML = "";
+    for (let c = 0; c < 16; c++) {
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = true;
+      box.id = `bmh-in-ch-${c}`;
+      const label = document.createElement("label");
+      label.style.marginRight = "4px";
+      label.append(box, document.createTextNode(String(c).padStart(2, "0")));
+      channelHost.append(label);
+    }
+    el<HTMLInputElement>("bmh-in-name").value = `division ${bmh.state?.divisions.length ? bmh.state.divisions.length + 1 : 1}`;
+    el<HTMLDivElement>("bmh-setting-modal").classList.remove("hidden");
+  }
+
+  let pendingBmhImport: { name: string; bytes: Uint8Array } | null = null;
+
+  el<HTMLButtonElement>("btn-bmh-open").addEventListener("click", () => {
+    void api()
+      .openMidiDialog()
+      .then(async (path) => {
+        if (path) await importMidiFile({ name: path.split(/[\\/]/).pop() ?? path, arrayBuffer: async () => {
+          const bytes = await api().readMidiFile(path);
+          return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        } });
+      })
+      .catch(() => undefined);
+  });
+  el<HTMLButtonElement>("btn-bmh-open-project").addEventListener("click", () => {
+    void api()
+      .openBmhDialog()
+      .then(async (path) => {
+        if (!path) return;
+        const bytes = await api().readBmhFile(path);
+        bmh.openProject(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), path.split(/[\\/]/).pop() ?? path);
+        store.setStatus("bmhProjectOpened", { file: path.split(/[\\/]/).pop() ?? path });
+        bmhSync();
+      })
+      .catch((err) => store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true));
+  });
+  el<HTMLButtonElement>("btn-bmh-save-project").addEventListener("click", () => {
+    if (!bmhGuard(() => undefined, false)) return;
+    void api()
+      .saveBmhDialog(`${bmh.name || "project"}.bmh`)
+      .then(async (path) => {
+        if (!path) return;
+        await api().writeBmhFile(path, bmh.saveProjectBytes());
+        store.setStatus("bmhProjectSaved", { file: path.split(/[\\/]/).pop() ?? path });
+      })
+      .catch((err) => store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true));
+  });
+  el<HTMLButtonElement>("btn-bmh-setting-ok").addEventListener("click", () => {
+    if (!pendingBmhImport || !bmh.state) return;
+    try {
+      const tpq = bmh.state.source.quantize;
+      const trackIndex = Number(el<HTMLSelectElement>("bmh-in-track").value);
+      const channels = new Set<number>();
+      for (let c = 0; c < 16; c++) {
+        if (el<HTMLInputElement>(`bmh-in-ch-${c}`).checked) channels.add(c);
+      }
+      const name = el<HTMLInputElement>("bmh-in-name").value.trim() || `division ${bmh.state.divisions.length + 1}`;
+      const setting: DivisionSetting = {
+        name,
+        srcCopy: el<HTMLInputElement>("bmh-in-src-copy").checked,
+        headMargin: Math.max(0, Math.trunc(Number(el<HTMLInputElement>("bmh-in-head").value) * tpq)),
+        minInterval: Math.max(0, Math.trunc(Number(el<HTMLInputElement>("bmh-in-interval").value) * tpq)),
+        sortType: el<HTMLSelectElement>("bmh-in-sort").value as DivisionSetting["sortType"],
+        gateThreshold: Math.max(0, Math.trunc(Number(el<HTMLInputElement>("bmh-in-gate").value) * tpq)),
+        velocityThreshold: Math.max(0, Math.trunc(Number(el<HTMLInputElement>("bmh-in-vel").value))),
+        zzDefinition: el<HTMLInputElement>("bmh-in-zz").checked,
+        mlDefinition: el<HTMLInputElement>("bmh-in-ml").checked,
+        startDefinition: parseBmhStart(el<HTMLInputElement>("bmh-in-start").value),
+        mlThreshold: Math.max(0, Math.trunc(Number(el<HTMLInputElement>("bmh-in-ml").value) * tpq)),
+      };
+      // The MIDI import defaults; re-create the division from the ORIGINAL
+      // source sequence (kept in the controller).
+      bmh.addDivision(bmh.state.source, setting);
+      store.setStatus("bmhDivisionCreated", { notes: bmh.selectedDivision?.recording.length ?? 0, defs: bmh.selectedDivision?.definitions.length ?? 0 });
+      el<HTMLDivElement>("bmh-setting-modal").classList.add("hidden");
+      pendingBmhImport = null;
+      bmhSync();
+    } catch (err) {
+      store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true);
+    }
+  });
+  el<HTMLButtonElement>("btn-bmh-setting-cancel").addEventListener("click", () => {
+    el<HTMLDivElement>("bmh-setting-modal").classList.add("hidden");
+    pendingBmhImport = null;
+  });
+  el<HTMLButtonElement>("btn-bmh-new").addEventListener("click", () => {
+    if (!bmhGuard(() => undefined, false)) return;
+    const tpq = bmh.state?.source.quantize ?? 480;
+    const defaults = defaultDivisionSetting(`division ${(bmh.state?.divisions.length ?? 0) + 1}`, tpq);
+    el<HTMLInputElement>("bmh-in-name").value = defaults.name;
+    el<HTMLInputElement>("bmh-in-head").value = String(defaults.headMargin / tpq);
+    el<HTMLInputElement>("bmh-in-interval").value = String(defaults.minInterval / tpq);
+    el<HTMLInputElement>("bmh-in-gate").value = String(defaults.gateThreshold / tpq);
+    el<HTMLInputElement>("bmh-in-vel").value = String(defaults.velocityThreshold);
+    el<HTMLInputElement>("bmh-in-start").value = zzStringOf(defaults.startDefinition);
+    el<HTMLInputElement>("bmh-in-ml").value = String(defaults.mlThreshold / tpq);
+    el<HTMLDivElement>("bmh-setting-modal").classList.remove("hidden");
+  });
+  el<HTMLButtonElement>("btn-bmh-delete").addEventListener("click", () => {
+    if (!bmhGuard(() => undefined, true)) return;
+    bmh.deleteDivision(bmh.selectedIndex);
+    store.setStatus("bmhDivisionDeleted");
+    bmhSync();
+  });
+  el<HTMLButtonElement>("btn-bmh-export-midi").addEventListener("click", () => {
+    if (!bmhGuard(() => undefined, true)) return;
+    void api()
+      .saveMidiDialog(`${bmh.selectedDivision?.name ?? "recording"}.mid`)
+      .then(async (path) => {
+        if (!path) return;
+        await api().writeMidiFile(path, bmh.exportMidiBytes());
+        store.setStatus("bmhMidiExported", { file: path.split(/[\\/]/).pop() ?? path });
+      })
+      .catch((err) => store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true));
+  });
+  el<HTMLButtonElement>("btn-bmh-apply").addEventListener("click", () => {
+    if (!bmhGuard(() => undefined, true)) return;
+    const division = bmh.selectedDivision;
+    if (!division) return;
+    const bitmap = new Uint8Array(BMH_MAX_TICKS);
+    let applied = 0;
+    let dropped = 0;
+    for (const note of division.recording) {
+      const tick = Math.trunc((note.position * 48) / division.quantize);
+      if (tick >= 0 && tick < BMH_MAX_TICKS) {
+        bitmap[tick] = 1;
+        applied += 1;
+      } else {
+        dropped += 1;
+      }
+    }
+    if (applied === 0) {
+      store.setStatus("bmhNoDivision", undefined, true);
+      return;
+    }
+    store.state.doc.replaceBitmap(bitmap);
+    store.update({ selectedTicks: [], selectionStartTick: null, selectionEndTick: null });
+    if (dropped > 0) store.setStatus("bmhAppliedDropped", { count: applied, dropped });
+    else store.setStatus("bmhApplied", { count: applied });
+    redraw();
+  });
+  el<HTMLButtonElement>("btn-bmh-copy-cuts").addEventListener("click", () => {
+    const division = bmh.selectedDivision;
+    if (!bmhGuard(() => undefined, true) || !division) return;
+    void api()
+      .writeBmseClipboard(cutPositionsClipboard(division))
+      .then(() => store.setStatus("bmhCutsCopied", { count: division.recording.length }))
+      .catch((err) => store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true));
+  });
+  el<HTMLButtonElement>("btn-bmh-copy-bms").addEventListener("click", () => {
+    if (!bmhGuard(() => undefined, true)) return;
+    const source = bmh.state?.source;
+    if (!source || !bmh.selectedDivision) return;
+    void api()
+      .writeBmseClipboard(bmsSequenceClipboard(bmh.selectedDivision, source))
+      .then(() => store.setStatus("bmhBmsCopied", { count: source.notes.length }))
+      .catch((err) => store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true));
+  });
+  el<HTMLButtonElement>("btn-bmh-copy-defs").addEventListener("click", () => {
+    const division = bmh.selectedDivision;
+    if (!bmhGuard(() => undefined, true) || !division) return;
+    el<HTMLInputElement>("bmh-in-filename").value = bmh.name;
+    el<HTMLTextAreaElement>("bmh-defs-text").value = wavDefinitionText(division, bmh.name);
+    el<HTMLDivElement>("bmh-defs-modal").classList.remove("hidden");
+  });
+  el<HTMLInputElement>("bmh-in-filename").addEventListener("input", (e) => {
+    const division = bmh.selectedDivision;
+    if (!division) return;
+    el<HTMLTextAreaElement>("bmh-defs-text").value = wavDefinitionText(division, (e.target as HTMLInputElement).value);
+  });
+  el<HTMLButtonElement>("btn-bmh-defs-copy").addEventListener("click", () => {
+    void api()
+      .writeBmseClipboard(el<HTMLTextAreaElement>("bmh-defs-text").value)
+      .then(() => store.setStatus("bmhDefsCopied", { count: bmh.selectedDivision?.definitions.length ?? 0 }))
+      .catch(() => undefined);
+  });
+  el<HTMLButtonElement>("btn-bmh-defs-close").addEventListener("click", () => {
+    el<HTMLDivElement>("bmh-defs-modal").classList.add("hidden");
+  });
+  el<HTMLButtonElement>("btn-bmh-shift-left").addEventListener("click", () => {
+    if (bmhGuard(() => undefined, true)) { bmh.transpose(-1); bmhSync(); }
+  });
+  el<HTMLButtonElement>("btn-bmh-shift-right").addEventListener("click", () => {
+    if (bmhGuard(() => undefined, true)) { bmh.transpose(1); bmhSync(); }
+  });
+  el<HTMLButtonElement>("btn-bmh-start-number").addEventListener("click", () => {
+    if (!bmhGuard(() => undefined, true)) return;
+    const current = bmh.selectedDivision?.definitions[0]?.zz ?? 1;
+    const entered = window.prompt(tr("bmhStartNumber"), zzStringOf(current));
+    if (entered === null) return;
+    const parsed = parseBmhStart(entered);
+    bmh.setStart(parsed);
+    bmhSync();
   });
 
   // Keyboard.
