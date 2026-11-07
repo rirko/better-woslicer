@@ -2,6 +2,17 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
+## 0.2.1 — 2026-11-07
+
+### Added
+
+- A monitor volume slider (left of the Bands toggle) for playback and slice previews; every volume slider now shows its level in dB in the status bar while dragging.
+
+### Fixed
+
+- Cuts at the edge of the audio: cuts beyond the end are rejected, a cut exactly at the end exports a valid zero-duration WAV instead of a garbage stub, slice tails no longer fabricate a reversed echo at the end of the file, and the region beyond the audio is hatched with a marked boundary line.
+- The "cut already exists" message now names the measure and states that nothing was changed.
+
 ## 0.2.0 — 2026-11-07
 
 ### Added
