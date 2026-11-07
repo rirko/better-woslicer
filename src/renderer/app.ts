@@ -1147,8 +1147,13 @@ function wireDom(): void {
 
   // Band overlay: display-only toggle, analysis computed lazily on first use.
   el<HTMLButtonElement>("btn-bands").addEventListener("click", (e) => {
+    const rmsWasOn = store.state.rmsVisible;
     const next = !store.state.bandsVisible;
-    store.update({ bandsVisible: next });
+    // The overlay and the RMS band cannot stack: turning the overlay on
+    // forces the RMS layer off and locks its toggle (syncRmsButton below).
+    store.update(next ? { bandsVisible: true, rmsVisible: false } : { bandsVisible: false });
+    syncRmsButton();
+    if (next && rmsWasOn) redraw();
     const button = e.currentTarget as HTMLButtonElement;
     button.classList.toggle("on", next);
     button.setAttribute("aria-pressed", String(next));
@@ -1287,12 +1292,19 @@ function wireDom(): void {
   el<HTMLInputElement>("input-volume").value = String(dbToSlider(ampToDb(store.state.volume)));
   el<HTMLInputElement>("input-cue-vol").value = String(dbToSlider(ampToDb(store.state.cueVolume)));
   // RMS band toggle (default off; the envelope alone shows the peaks).
-  el<HTMLButtonElement>("btn-rms").addEventListener("click", (e) => {
-    const next = !store.state.rmsVisible;
-    store.update({ rmsVisible: next });
-    const button = e.currentTarget as HTMLButtonElement;
-    button.classList.toggle("on", next);
-    button.setAttribute("aria-pressed", String(next));
+  // Disabled while the band overlay is on — the overlay owns the lane and
+  // the RMS band has nothing to add on top of it (see the bands handler).
+  const rmsButton = el<HTMLButtonElement>("btn-rms");
+  const syncRmsButton = (): void => {
+    const on = store.state.rmsVisible;
+    rmsButton.classList.toggle("on", on);
+    rmsButton.setAttribute("aria-pressed", String(on));
+    rmsButton.disabled = store.state.bandsVisible;
+  };
+  syncRmsButton();
+  rmsButton.addEventListener("click", () => {
+    store.update({ rmsVisible: !store.state.rmsVisible });
+    syncRmsButton();
     redraw();
   });
   el<HTMLSelectElement>("select-rate").addEventListener("change", (e) => {
