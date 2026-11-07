@@ -132,7 +132,8 @@
     "bmhOk": "确定",
     "bmhDefsTitle": "WAV 定义",
     "bmhFileNameLabel": "文件名",
-    "titleVolume": "回放音量"
+    "titleVolume": "回放音量",
+    "titleRms": "RMS 均方根带（峰值内的平均电平）"
   },
   "status": {
     "statusEmpty": "空：拖入 WAV/OGG 文件开始",
