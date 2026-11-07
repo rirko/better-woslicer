@@ -132,10 +132,22 @@
     "bmhOk": "OK",
     "bmhDefsTitle": "WAV definitions",
     "bmhFileNameLabel": "File name",
-    "titleVolume": "Playback volume"
+    "titleVolume": "Playback volume",
+    "titleRms": "RMS band (mean level inside the peaks)",
+    "titleTheme": "Color theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "languageAuto": "Auto",
+    "titleClose": "Close the current session",
+    "closeConfirmTitle": "Close everything?",
+    "closeConfirmBody": "The opened file and all unsaved markers will be cleared, and the session archive is deleted.",
+    "closeOk": "Close and clear",
+    "closeCancel": "Cancel"
   },
   "status": {
     "statusEmpty": "Empty: drop a WAV/OGG file to begin",
+    "lastFileMissing": "Last opened file not found: {name}",
     "playing": "Playing",
     "paused": "Paused",
     "stopped": "Stopped",

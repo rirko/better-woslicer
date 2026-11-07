@@ -16,6 +16,15 @@ export type BandName = "low" | "mid" | "high";
 export const BAND_CROSSOVERS = { lowMid: 250, midHigh: 4000 } as const;
 export const BAND_NAMES: readonly BandName[] = ["low", "mid", "high"] as const;
 
+/**
+ * Peak-cache bucket for the band OVERLAY drawing (64 frames ≈ 1.5 ms at
+ * 44.1 kHz — four times finer than the main waveform cache, which is what
+ * makes the band envelopes smooth at high zoom). The band DETECTION path is
+ * independent: it consumes the 10 ms RMS envelope, so this value never
+ * changes detection results.
+ */
+export const BAND_PEAK_BUCKET = 64;
+
 /** -60 dBFS gate for drawing (int16 scale). */
 export const BAND_DRAW_MIN_ABS = Math.round(32768 * Math.pow(10, -60 / 20));
 
@@ -139,7 +148,7 @@ export function analyzeBands(channels: Int16Array[], sampleRate: number, hopMs =
       const floats = new Float32Array(channel.length);
       for (let i = 0; i < channel.length; i++) floats[i] = channel[i] / 32768;
       const filtered = filterBand(floats, sampleRate, band);
-      peaks.push(buildPeakCache([toInt16(filtered)]));
+      peaks.push(buildPeakCache([toInt16(filtered)], BAND_PEAK_BUCKET));
       rms.push(rmsEnvelope(filtered, hopSamples));
     }
     return { peaks, rms };

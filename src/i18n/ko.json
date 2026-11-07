@@ -132,10 +132,22 @@
     "bmhOk": "확인",
     "bmhDefsTitle": "WAV 정의 정보",
     "bmhFileNameLabel": "파일 이름",
-    "titleVolume": "재생 볼륨"
+    "titleVolume": "재생 볼륨",
+    "titleRms": "RMS 밴드 (피크 내 평균 레벨)",
+    "titleTheme": "색 테마",
+    "themeLight": "라이트",
+    "themeDark": "다크",
+    "themeSystem": "시스템",
+    "languageAuto": "자동",
+    "titleClose": "세션 닫기",
+    "closeConfirmTitle": "모두 닫을까요?",
+    "closeConfirmBody": "열린 파일과 저장하지 않은 절단 위치를 지우고 세션 보관 데이터를 삭제합니다.",
+    "closeOk": "닫고 지우기",
+    "closeCancel": "취소"
   },
   "status": {
     "statusEmpty": "비어 있음: WAV/OGG 파일을 놓아 시작",
+    "lastFileMissing": "마지막으로 열었던 파일을 찾을 수 없습니다: {name}",
     "playing": "재생 중",
     "paused": "일시정지됨",
     "stopped": "정지됨",

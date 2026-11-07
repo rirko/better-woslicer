@@ -31,6 +31,7 @@ export const CHANNELS = {
   menuAction: "menu:action",
   stateChanged: "app:state",
   setLanguage: "app:set-language",
+  setTheme: "app:set-theme",
 } as const;
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS];
@@ -62,6 +63,7 @@ export const PRELOADED_API_KEYS = [
   "onStateChanged",
   "platform",
   "setLanguage",
+  "setTheme",
 ] as const;
 
 export type PreloadedApiKey = (typeof PRELOADED_API_KEYS)[number];

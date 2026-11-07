@@ -8,7 +8,7 @@
  * native menu follows it (see app.ts / main.ts).
  */
 
-import { LANGUAGES, DOC_LANG, LANGUAGE_LABELS, type Language, isLanguage } from "../core/language.js";
+import { LANGUAGES, DOC_LANG, LANGUAGE_LABELS, type Language, detectLanguage, isLanguage } from "../core/language.js";
 import {
   formatStatus,
   scopeRangeText,
@@ -74,15 +74,46 @@ export function setLanguage(lang: Language): void {
   applyStaticTranslations();
 }
 
-/** Call once at boot (before DOM wiring) to restore the saved language. */
-export function initLanguage(): void {
-  let saved: string | null = null;
+/**
+ * Follows the platform language: clears the stored override and re-resolves
+ * from the user locales (the system display language under Electron; the
+ * browser's preferred languages — the same preference Accept-Language is
+ * built from — under the web host).
+ */
+export function setAutoLanguage(): void {
+  current = detectLanguage(userLocales());
   try {
-    saved = localStorage.getItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
   } catch {
-    saved = null;
+    // The session still follows the platform language
   }
-  current = isLanguage(saved) ? saved : "en";
+  applyStaticTranslations();
+}
+
+/**
+ * The selector's current choice: the stored override, or "auto" when the UI
+ * follows the platform language.
+ */
+export function languageSelection(): Language | "auto" {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (isLanguage(saved)) return saved;
+  } catch {
+    // Unavailable storage behaves like the auto choice
+  }
+  return "auto";
+}
+
+/** Ordered user locales, guarded for hosts without a navigator. */
+function userLocales(): readonly string[] {
+  if (typeof navigator === "undefined") return [];
+  return navigator.languages ?? [navigator.language];
+}
+
+/** Call once at boot (before DOM wiring) to restore the saved or platform language. */
+export function initLanguage(): void {
+  const choice = languageSelection();
+  current = choice === "auto" ? detectLanguage(userLocales()) : choice;
 }
 
 /** Re-exported for callers formatting status entries with an explicit language. */

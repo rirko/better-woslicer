@@ -6,6 +6,7 @@
  */
 
 import type { MidiNoteEvent } from "../core/smf.js";
+import { palette } from "./theme.js";
 
 export interface PianoRollView {
   /** Redraws with the current scroll/zoom state. */
@@ -33,7 +34,7 @@ export function createPianoRoll(
     }
     canvas.height = Math.max(1, height * (window.devicePixelRatio || 1));
     context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
-    context.fillStyle = "#0e1013";
+    context.fillStyle = palette().app;
     context.fillRect(0, 0, width, height);
 
     const sequence = getSequence();
@@ -47,7 +48,7 @@ export function createPianoRoll(
     const lastBeat = firstBeat + width / pxPerBeat;
     for (let b = Math.floor(firstBeat * SUB_DIVISIONS); b <= Math.ceil(lastBeat * SUB_DIVISIONS); b++) {
       const x = b * (pxPerBeat / SUB_DIVISIONS);
-      context.fillStyle = b % (4 * SUB_DIVISIONS) === 0 ? "#2b3138" : b % SUB_DIVISIONS === 0 ? "#22272d" : "#181c21";
+      context.fillStyle = b % (4 * SUB_DIVISIONS) === 0 ? palette().surface3 : b % SUB_DIVISIONS === 0 ? palette().surface2 : palette().surface1;
       context.fillRect(x, 0, 1, height);
     }
 

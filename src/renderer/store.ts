@@ -9,6 +9,7 @@ import { DEFAULT_PLAYBACK_RATE } from "../core/rate.js";
 import { PeakCache } from "../core/peaks.js";
 import { resolveBreakpointTick } from "../core/timebase.js";
 import { BandAnalysis, BandName } from "../core/bands.js";
+import { dbToAmp, DEFAULT_CUE_DB, DEFAULT_PLAYBACK_DB } from "../core/volume.js";
 import type { FormatParams, StatusKey } from "../core/messages.js";
 
 export type Phase = "empty" | "parsing" | "ready";
@@ -60,6 +61,8 @@ export interface ViewState {
   playheadSample: number;
   /** Monitor volume for playback and previews (amplitude 0..1). */
   volume: number;
+  /** RMS band visibility in the waveform (session-only, default off). */
+  rmsVisible: boolean;
   /**
    * Monitor playback rate (0.25x .. 1.5x). Persists across pause/stop; never
    * affects marker ticks, slice lengths or exports (those are source-time 1x).
@@ -116,11 +119,11 @@ export class Store {
     selectedTicks: [],
     playing: false,
     playheadSample: 0,
-    volume: 1,
+    volume: dbToAmp(DEFAULT_PLAYBACK_DB),
     playbackRate: DEFAULT_PLAYBACK_RATE,
     followPlayhead: true,
     cueMode: "off",
-    cueVolume: 0.6,
+    cueVolume: dbToAmp(DEFAULT_CUE_DB),
     noisegateEnabled: true,
     baseName: "slice",
     clipStartNumber: 1,
@@ -128,6 +131,7 @@ export class Store {
     measureClipboard: null,
     exportLock: false,
     bandsVisible: false,
+    rmsVisible: false,
     bandAnalysis: null,
     bandDetectBands: { low: true, mid: true, high: true },
     bandThresholdDb: 6,
@@ -189,7 +193,15 @@ export class Store {
 
   zoomAt(anchorTick: number, factor: number): void {
     const { pxPerTick } = this.state;
-    const next = Math.max(0.02, Math.min(120, pxPerTick * factor));
+    // The ceiling scales with the time base: deep zoom exists to inspect
+    // individual samples, so the maximum puts ~4 CSS px on every sample
+    // (stems take over at 3 px per sample; at 120 BPM / 48 kHz one tick is
+    // 500 frames, which tops out at 2000 px/tick). The floor keeps the old
+    // ceiling for extreme time bases where 4 px/sample would be less.
+    const framesPerTick = this.state.source
+      ? (this.state.source.sampleRate * 5) / (this.state.doc.bpm * 4)
+      : 500;
+    const next = Math.max(0.02, Math.min(Math.max(600, 4 * framesPerTick), pxPerTick * factor));
     if (next === pxPerTick) return;
     // Keep the tick under the anchor visually fixed.
     const anchorPx = (anchorTick - this.state.scrollTick) * pxPerTick;
