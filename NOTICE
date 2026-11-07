@@ -4,6 +4,8 @@ LICENSE contains the MIT license for material the woslicer-electron contributors
 
 woslicer II/III was created by wosderge. This project includes implementation work derived from analysis of the original program, notably the slice DSP and related compatibility logic. Authorization for those portions remains subject to the original rightsholder; adding MIT does not establish that the entire application is available under MIT alone.
 
+BMHelper (beta 4') was created by exclusion (https://excln.github.io/bmhelper.html). The built-in BMHelper sub-feature is a reimplementation of its documented behaviour, based on the source code the original author published. The original program and its design remain the work of their author; this reimplementation adds no rights beyond those the author grants.
+
 The supplied original readme states:
 【権利】金銭が絡まない＋作者の明示　を条件に二次使用を許可します。
 (Secondary use is permitted on condition that no money is involved and the author is identified.)

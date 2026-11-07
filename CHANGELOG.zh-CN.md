@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · **中文**
 
+## 0.2.0 — 2026-11-07
+
+### 新增
+
+- 内置 BMHelper：导入键音 MIDI 声部，分割为录音序列与 WAVE 定义，将切点应用到时间轴，并导出录音 MIDI、切点位置、BMS 序列与 WAV 定义列表。基于 exclusion 的 BMHelper（https://excln.github.io/bmhelper.html）。
+
 ## 0.1.3 — 2026-11-06
 
 ### 新增
