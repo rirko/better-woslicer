@@ -30,7 +30,7 @@ import {
 import type { ChromeKey, FormatParams, StatusKey } from "../core/messages.js";
 import type { StatusEntry, StatusSegment } from "./store.js";
 import { gridStepTicks } from "../core/gridlines.js";
-import { MAX_TICKS, resolveBreakpointTick, sampleToTickNearest, tickToSampleExport } from "../core/timebase.js";
+import { MAX_TICKS, MEASURE_TICKS, resolveBreakpointTick, sampleToTickNearest, tickToSampleExport } from "../core/timebase.js";
 import { DEFAULT_PLAYBACK_RATE, formatRate, stepPlaybackRate } from "../core/rate.js";
 import { Store } from "./store.js";
 import { TimelineView } from "./waveform.js";
@@ -950,7 +950,7 @@ const actions: KeyActions = {
     // resolveBreakpointTick never returns an out-of-range tick, so a false
     // return from setMarker means this tick already holds the marker.
     if (s.doc.setMarker(tick, true)) store.setStatus("breakPointAtTick", { tick });
-    else store.setStatus("breakPointAlreadyAtTick", { tick });
+    else store.setStatus("breakPointAlreadyAtTick", { measure: Math.floor(tick / MEASURE_TICKS) + 1, tick });
     redraw();
   },
   rateDown(): void {

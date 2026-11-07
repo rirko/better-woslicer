@@ -508,7 +508,7 @@ async function main() {
     await kd("Enter", false, true, true); // same spot again: idempotent
     check(
       "Enter on an existing break point adds no cut and says so",
-      (await cutCountNow()) === beforeSnapChecks + 2 && (await statusNow()).includes(`already at tick ${bypassTick}`),
+      (await cutCountNow()) === beforeSnapChecks + 2 && (await statusNow()).includes(`tick ${bypassTick}) — nothing changed`),
       `count=${await cutCountNow()} status=${await statusNow()}`
     );
 
@@ -905,7 +905,7 @@ async function main() {
     const tickAtCursor = async () => {
       await kd("Enter");
       const status = await statusNow();
-      if (!/already at tick/.test(status)) await kd("z", true); // undo the probe marker
+      if (!/already exists at this position/.test(status)) await kd("z", true); // undo the probe marker
       const match = status.match(/tick (\d+)/);
       return match ? Number(match[1]) : NaN;
     };
