@@ -174,6 +174,19 @@ export class TimelineView {
       if (!s.source || !s.peaks) continue; // audio passes only; lanes drew above
       const step = Math.max(1, Math.round(1 / pxPerTick));
       const timeBase = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate };
+      const endTick = (s.source.length * timeBase.bpm * 4) / (timeBase.sampleRate * 5) - timeBase.shift;
+      const endX = this.tickToX(endTick, scrollTick, pxPerTick);
+      if (endX < width) {
+        // No-audio region: hatched so the song's extent is obvious even when
+        // the ending is quiet (the waveform alone does not show it).
+        ctx.fillStyle = this.stripePattern(ctx);
+        ctx.fillRect(Math.max(0, endX), laneTop, width - Math.max(0, endX), laneHeight);
+        ctx.strokeStyle = COLORS.accent;
+        ctx.beginPath();
+        ctx.moveTo(Math.floor(endX) + 0.5, laneTop);
+        ctx.lineTo(Math.floor(endX) + 0.5, laneTop + laneHeight);
+        ctx.stroke();
+      }
       const bandsOn = s.bandsVisible && s.bandAnalysis !== null;
       ctx.fillStyle = bandsOn
         ? c === 0
@@ -385,5 +398,46 @@ export class TimelineView {
     ctx.fillRect(viewX, 0, Math.max(2, viewW), OVERVIEW_HEIGHT);
     ctx.strokeStyle = COLORS.accent;
     ctx.strokeRect(viewX + 0.5, 0.5, Math.max(2, viewW), OVERVIEW_HEIGHT - 1);
+
+    // No-audio region beyond the song's end (same hatching as the waveform).
+    const endTick = (s.source.length * timeBase.bpm * 4) / (timeBase.sampleRate * 5) - timeBase.shift;
+    const endX = endTick * pxPerTickOverview;
+    if (endX < width) {
+      ctx.fillStyle = this.stripePattern(ctx);
+      ctx.fillRect(Math.max(0, endX), 0, width - Math.max(0, endX), OVERVIEW_HEIGHT);
+      ctx.strokeStyle = COLORS.accent;
+      ctx.beginPath();
+      ctx.moveTo(Math.floor(endX) + 0.5, 0);
+      ctx.lineTo(Math.floor(endX) + 0.5, OVERVIEW_HEIGHT);
+      ctx.stroke();
+    }
   }
+
+  /** Cached diagonal-hatch tile for the no-audio region. */
+  private stripePattern(ctx: CanvasRenderingContext2D): CanvasPattern {
+    if (!this.stripes) {
+      const tile = document.createElement("canvas");
+      tile.width = 12;
+      tile.height = 12;
+      const tileCtx = tile.getContext("2d");
+      if (tileCtx) {
+        tileCtx.fillStyle = COLORS.panel;
+        tileCtx.fillRect(0, 0, 12, 12);
+        tileCtx.strokeStyle = "#39414C";
+        tileCtx.lineWidth = 3;
+        tileCtx.beginPath();
+        tileCtx.moveTo(-3, 15);
+        tileCtx.lineTo(15, -3);
+        tileCtx.moveTo(-9, 9);
+        tileCtx.lineTo(9, -9);
+        tileCtx.moveTo(3, 21);
+        tileCtx.lineTo(21, 3);
+        tileCtx.stroke();
+        this.stripes = ctx.createPattern(tile, "repeat");
+      }
+    }
+    return this.stripes as CanvasPattern;
+  }
+
+  private stripes: CanvasPattern | null = null;
 }

@@ -110,10 +110,21 @@ export class Interactions {
     );
   }
 
+  /** Ticks beyond the end of the audio are illegal cut positions. */
+  private tickBeyondEnd(tick: number): boolean {
+    const s = this.store.state;
+    if (!s.source) return false;
+    return (
+      tickToSampleExport(tick, { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate }) >
+      s.source.length
+    );
+  }
+
   /** Writes one marker (no undo bookkeeping; the gesture commits the snapshot). */
   private paintAt(tick: number, painted: Set<number>): boolean {
     const doc = this.store.state.doc;
     if (tick < 0 || tick >= MAX_TICKS) return false;
+    if (this.tickBeyondEnd(tick)) return false; // illegal: beyond the audio
     if (doc.markers[tick] === 1) return false;
     doc.markers[tick] = 1;
     painted.add(tick);
@@ -255,7 +266,17 @@ export class Interactions {
         const requested =
           s.snap && !e.altKey && cell > 0 ? Math.round(rawDelta / cell) * cell : Math.round(rawDelta);
         // Group clamp: one shared delta keeps relative spacing intact.
-        const delta = clampGroupDelta(this.drag.originalTicks, requested);
+        let delta = clampGroupDelta(this.drag.originalTicks, requested);
+        // Cuts beyond the end of the audio are illegal: cap the shared delta
+        // so the rightmost marker never crosses the song's end.
+        if (s.source) {
+          const endTick =
+            (s.source.length * s.doc.bpm * 4) / (s.source.sampleRate * 5) - s.doc.shift;
+          const maxOriginal = Math.max(...this.drag.originalTicks);
+          delta = Math.min(delta, Math.floor(endTick) - maxOriginal);
+          const minOriginal = Math.min(...this.drag.originalTicks);
+          delta = Math.max(delta, -minOriginal);
+        }
         if (delta !== this.ghostDelta) {
           this.ghostDelta = delta;
           this.onDirty();

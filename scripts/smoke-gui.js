@@ -257,12 +257,12 @@ async function main() {
       JSON.stringify(emptyStateMarker)
     );
 
-    // Build a small deterministic WAV (3s, 440Hz) in the page and load it via
+    // Build a small deterministic WAV (6s, 440Hz) in the page and load it via
     // a real drag-and-drop event (the same path a user file drop takes).
-    // 3s so the follow-scroll page check later has room to page at the
+    // 6s so the follow-scroll page check later has room to page at the
     // default zoom (~1.9s of clip reaches the page point).
     await evaluate(`(async () => {
-      const sr = 48000, n = 144000;
+      const sr = 48000, n = 288000;
       const buf = new ArrayBuffer(44 + n * 4);
       const v = new DataView(buf);
       const ascii = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
