@@ -1488,15 +1488,19 @@ function wireDom(): void {
       .catch((err) => store.setStatus("bmhOpenFailed", { message: errorMessage(err) }, true));
   });
   el<HTMLButtonElement>("btn-bmh-setting-ok").addEventListener("click", () => {
-    if (!pendingBmhImport || !bmh.state) return;
+    if (!pendingBmhImport) return;
     try {
-      const tpq = bmh.state.source.quantize;
       const trackIndex = Number(el<HTMLSelectElement>("bmh-in-track").value);
       const channels = new Set<number>();
       for (let c = 0; c < 16; c++) {
         if (el<HTMLInputElement>(`bmh-in-ch-${c}`).checked) channels.add(c);
       }
-      const name = el<HTMLInputElement>("bmh-in-name").value.trim() || `division ${bmh.state.divisions.length + 1}`;
+      // The project is created HERE, after the track/channel selection.
+      bmh.importMidi(pendingBmhImport.bytes, pendingBmhImport.name, trackIndex, channels);
+      const project = bmh.state;
+      if (!project) return;
+      const tpq = project.source.quantize;
+      const name = el<HTMLInputElement>("bmh-in-name").value.trim() || `division ${project.divisions.length + 1}`;
       const setting: DivisionSetting = {
         name,
         srcCopy: el<HTMLInputElement>("bmh-in-src-copy").checked,
@@ -1510,9 +1514,7 @@ function wireDom(): void {
         startDefinition: parseBmhStart(el<HTMLInputElement>("bmh-in-start").value),
         mlThreshold: Math.max(0, Math.trunc(Number(el<HTMLInputElement>("bmh-in-ml").value) * tpq)),
       };
-      // The MIDI import defaults; re-create the division from the ORIGINAL
-      // source sequence (kept in the controller).
-      bmh.addDivision(bmh.state.source, setting);
+      bmh.addDivision(project.source, setting);
       store.setStatus("bmhDivisionCreated", { notes: bmh.selectedDivision?.recording.length ?? 0, defs: bmh.selectedDivision?.definitions.length ?? 0 });
       el<HTMLDivElement>("bmh-setting-modal").classList.add("hidden");
       pendingBmhImport = null;

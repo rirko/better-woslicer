@@ -131,7 +131,15 @@ build(path.join(root, "src", "web", "main.ts"), path.join(webDir, "app.js"), {
   format: "esm",
 });
 fs.mkdirSync(webDir, { recursive: true });
-const webHtml = fs.readFileSync(path.join(root, "src", "web", "index.html"), "utf8").split("{{APP_NAME}}").join(pkg.productName || pkg.name);
+// The web page is DERIVED from the renderer page at build time (no static
+// copy to drift): the entry script becomes app.js and the CSP gains
+// 'wasm-unsafe-eval' for the inlined WASM decoder.
+const webHtml = fs
+  .readFileSync(path.join(root, "src", "renderer", "index.html"), "utf8")
+  .split("{{APP_NAME}}")
+  .join(pkg.productName || pkg.name)
+  .replace('src="renderer/main.js"', 'src="app.js"')
+  .replace("script-src 'self';", "script-src 'self' 'wasm-unsafe-eval';");
 fs.writeFileSync(path.join(webDir, "index.html"), webHtml);
 minifyHtml(path.join(webDir, "index.html"));
 build(path.join(root, "src", "renderer", "styles.css"), path.join(webDir, "styles.css"), {
