@@ -247,7 +247,10 @@
     "bmhTrackNoNotes": "The selected track has no notes",
     "bmhProjectOpened": "Project opened: {file}",
     "bmhProjectSaved": "Project saved: {file}",
-    "bmhOpenFailed": "Failed to open: {message}"
+    "bmhOpenFailed": "Failed to open: {message}",
+    "cutBeyondEnd": "Cut position is beyond the end of the audio",
+    "emptySlice": "This cut is at the end of the audio — empty slice",
+    "exportSkippedBeyond": "{count} cut(s) beyond the audio end were skipped"
   },
   "menu": {
     "file": "File",

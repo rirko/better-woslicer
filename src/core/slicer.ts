@@ -1,17 +1,26 @@
 /**
- * Slice renderer — a faithful port of the original woslicerIII DSP
+ * Slice renderer — a port of the original woslicerIII DSP
  * (Class1.woswrite / Class1.Cut / Class1.safe_data / Class1.WriteFile),
  * recovered by disassembling the original .NET binary.
  *
- * Everything here is intentional, including:
+ * Oracle-verified territory (149 slices, fadeout 0 — see tests/oracle.test.ts):
  *  - integer divisions inside the envelope angle computations,
  *  - float32 rounding of envelope angles before Math.sin / Math.cos,
  *  - truncation toward zero after every sample multiply,
- *  - the ping-pong "sustain" tail that reads the source past the cut point
- *    and reverses (with phase inversion) on zero crossings,
  *  - the Cut() trailing-silence gate with the Math.cos decay,
  *  - the WriteFile overflow guard `v >= 32678` (sic) in wav.ts.
- * Do not "fix" any of this without re-verifying against the oracle slices.
+ *
+ * NOT covered by the oracle (its fadeoutMs is 0): the ping-pong "sustain"
+ * tail. Zero-crossing folds with phase inversion are kept by product
+ * decision (they render the click-free fade without reading deep into the
+ * next slice). The original's forced fold at the END of the source was
+ * confirmed a defect (it fabricated a reversed echo of the file's own tail,
+ * and produced 4-frame / reversed-echo stubs for cuts at or past the end);
+ * since this fix the tail simply stops when the material runs out — the
+ * remaining frames are silence, which the gate truncates. Silence padding is
+ * deliberately not used: Cut() exists to remove trailing silence, so padded
+ * silence would be truncated by construction. A cut at the source end is
+ * therefore a clean zero-duration slice.
  */
 
 import { DEG_TO_RAD_F32, DEG_TO_RAD_F64, intDiv, toInt32 } from "./float32.js";
@@ -60,20 +69,32 @@ export interface RenderedSlice {
  *   [end - start, end - start + tailLen)
  *                             sustain: reads the source forward from `end`,
  *                             ping-pongs with phase inversion on zero
- *                             crossings, enveloped by a decaying sin.
+ *                             crossings, enveloped by a decaying sin; stops
+ *                             producing audio when the material runs out at
+ *                             the end of the source (no fabricated echo).
  *   + 16 trailing zero frames (pad), included in the length formula.
+ *
+ * A cut at or beyond the end of the source renders an EMPTY slice
+ * (length 0): there is no material to fade, and the gate would only strip
+ * padded silence — a zero-duration WAV is the honest output.
  */
 export function renderSlice(src: SourceAudio, params: SliceParams): RenderedSlice {
   const fadeIn = intDiv(src.sampleRate, 525);
   const tailLen = intDiv(src.sampleRate * params.fadeoutMs, 1000);
   const end = Math.min(src.length, params.end);
   const start = params.start;
-  const length = end + tailLen - start + 16;
 
   if (start < 0) throw new RangeError(`slice start ${start} is negative`);
-  if (length < 0) {
-    throw new RangeError(`slice length ${length} is negative (start ${start}, end ${end})`);
+  if (start >= end) {
+    // Cut at (or beyond) the end of the source: no copy region, no tail, no
+    // gate — a zero-duration slice encodes as a valid 44-byte WAV.
+    return {
+      channelsData: Array.from({ length: src.channels }, () => new Int16Array(0)),
+      sampleRate: src.sampleRate,
+      length: 0,
+    };
   }
+  const length = end + tailLen - start + 16;
 
   const channelsData: Int16Array[] = [];
   for (let c = 0; c < src.channels; c++) {
@@ -94,7 +115,9 @@ export function renderSlice(src: SourceAudio, params: SliceParams): RenderedSlic
       out[pos - start] = safeGet(src, c, pos);
     }
 
-    // Sustain tail: while (out < end + tailLen)
+    // Sustain tail: while (out < end + tailLen). The walk folds back at zero
+    // crossings (click-free); when the material runs out at the end of the
+    // source the remaining frames stay silent — no fabricated echo.
     if (tailLen > 0) {
       let prev = 0;
       let dir = 1;
@@ -103,11 +126,10 @@ export function renderSlice(src: SourceAudio, params: SliceParams): RenderedSlic
       while (outPos < end + tailLen) {
         const prevPrev = prev;
         prev = safeGet(src, c, Math.max(0, readPos));
-        if (dir === 1 && (prevPrev * prev < 0 || readPos === src.length)) {
-          // Fold back at a zero crossing, or unconditionally at the end of
-          // the source. The original decrements the read position and then
-          // still applies `readPos += dir`, so the net move is -2, and the
-          // output frame is skipped (left as zero).
+        if (dir === 1 && prevPrev * prev < 0) {
+          // Fold back at a zero crossing. The original decrements the read
+          // position and then still applies `readPos += dir`, so the net move
+          // is -2, and the output frame is skipped (left as zero).
           dir = -1;
           readPos -= 1;
           readPos += dir;

@@ -247,7 +247,10 @@
     "bmhTrackNoNotes": "所选音轨没有音符",
     "bmhProjectOpened": "工程已打开：{file}",
     "bmhProjectSaved": "工程已保存：{file}",
-    "bmhOpenFailed": "打开失败：{message}"
+    "bmhOpenFailed": "打开失败：{message}",
+    "cutBeyondEnd": "切点超出音频末尾",
+    "emptySlice": "该切点位于音频末尾——空切片",
+    "exportSkippedBeyond": "已跳过 {count} 个超出音频末尾的切点"
   },
   "menu": {
     "file": "文件",

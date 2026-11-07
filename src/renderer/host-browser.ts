@@ -250,10 +250,10 @@ export const browserHost: WoslicerApi = {
   },
 
   async exportAll(request) {
-    const files = renderSliceFiles(requireSource(), request as SliceFileRequest);
+    const { files, skipped } = renderSliceFiles(requireSource(), request as SliceFileRequest);
     const zip = zipSync(Object.fromEntries(files.map((f) => [f.name, toPlainCopy(f.data)])));
     downloadBlob(new Blob([toPlainCopy(zip)]), request.dirPath);
-    return { written: files.map((f) => f.name) };
+    return { written: files.map((f) => f.name), skipped };
   },
 
   async writeBmseClipboard(text: string) {

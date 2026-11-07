@@ -188,25 +188,25 @@ export class Transport {
   /** Preview: render the slice at/before the cursor with the export DSP. */
   previewSlice(previous = false): void {
     const s = this.store.state;
-    if (!s.source) return;
-    const ticks = markerTicks(s.doc.markers);
+    const source = s.source;
+    if (!source) return;
+    const base = this.timeBase();
+    // Cuts beyond the end of the audio are illegal and never preview.
+    const ticks = markerTicks(s.doc.markers).filter(
+      (t) => tickToSampleExport(t, base) <= source.length
+    );
     if (!ticks.length) {
       this.store.setStatus("noMarkersToPreview");
       return;
     }
-    const base = this.timeBase();
     let index = sliceIndexAtOrBefore(ticks, s.cursorTick);
     if (index < 0) index = 0;
     if (previous) index = Math.max(0, index - 1);
     const start = tickToSampleExport(ticks[index], base);
     const end =
-      index + 1 < ticks.length ? tickToSampleExport(ticks[index + 1], base) : s.source.length;
-    if (start > s.source.length) {
-      this.store.setStatus("previewBeyondEnd", undefined, true);
-      return;
-    }
+      index + 1 < ticks.length ? tickToSampleExport(ticks[index + 1], base) : source.length;
     const rendered = renderSlice(
-      { sampleRate: s.source.sampleRate, channels: s.source.channels, length: s.source.length, data: s.source.data },
+      { sampleRate: source.sampleRate, channels: source.channels, length: source.length, data: source.data },
       {
         start,
         end,
@@ -214,6 +214,11 @@ export class Transport {
         noisegateDb: s.noisegateEnabled ? s.doc.noisegateDb : 0,
       }
     );
+    if (rendered.length === 0) {
+      // A cut exactly at the end of the audio: a legal empty slice.
+      this.store.setStatus("emptySlice");
+      return;
+    }
     this.playRendered(rendered.channelsData, rendered.sampleRate);
     this.store.setStatus("previewSlice", { slice: String(index).padStart(3, "0"), tick: ticks[index] });
   }
