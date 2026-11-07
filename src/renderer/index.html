@@ -12,7 +12,8 @@
 <body>
   <header id="command-bar" class="command-bar">
     <div class="cluster">
-      <button id="btn-open" class="cmd-btn" data-i18n-title="titleOpen" data-i18n="open"></button>
+      <button id="btn-open" class="cmd-btn open-btn" data-i18n-title="titleOpen" data-i18n="open"></button>
+      <button id="btn-close" class="cmd-btn close-btn" data-i18n-title="titleClose" data-i18n="close"></button>
       <button id="btn-undo" class="cmd-btn" data-i18n-title="titleUndo" data-i18n="undo"></button>
       <button id="btn-redo" class="cmd-btn" data-i18n-title="titleRedo" data-i18n="redo"></button>
     </div>
@@ -55,6 +56,11 @@
       <button id="btn-zoom-in" class="cmd-btn" data-i18n-title="titleZoomIn">+</button>
       <button id="btn-marker" class="cmd-btn" data-i18n-title="titleMark" data-i18n="mark"></button>
       <button id="btn-export" class="cmd-btn primary" data-i18n-title="titleExport" data-i18n="export"></button>
+      <select id="select-theme" class="select lang-select" data-i18n-title="titleTheme">
+        <option value="light" data-i18n="themeLight"></option>
+        <option value="dark" data-i18n="themeDark"></option>
+        <option value="system" data-i18n="themeSystem"></option>
+      </select>
       <select id="select-language" class="select lang-select" data-i18n-title="titleLanguage"></select>
     </div>
   </header>
@@ -202,6 +208,17 @@
     <span id="status-main" class="status-main"></span>
     <span id="status-right" class="status-right mono"></span>
   </footer>
+
+  <div id="close-confirm-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2 data-i18n="closeConfirmTitle"></h2>
+      <p class="hint" data-i18n="closeConfirmBody"></p>
+      <div class="modal-actions">
+        <button id="btn-close-cancel" class="cmd-btn" data-i18n="closeCancel"></button>
+        <button id="btn-close-confirm" class="cmd-btn danger" data-i18n="closeOk"></button>
+      </div>
+    </div>
+  </div>
 
   <div id="calibration-modal" class="modal-backdrop hidden">
     <div class="modal">

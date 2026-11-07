@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANIFEST as manifest, DATA as GENERATED_DATA, EN as en } from "../src/i18n/generated.js";
-import { LANGUAGES, DOC_LANG, isLanguage, languageFromLocale, type Language } from "../src/core/language.js";
+import { LANGUAGES, DOC_LANG, detectLanguage, isLanguage, languageFromLocale, type Language } from "../src/core/language.js";
 import { DIALOG_STRINGS, MENU_STRINGS } from "../src/main/menu-i18n.js";
 import {
   formatStatus,
@@ -210,6 +210,14 @@ test("locale mapping picks the closest shipped language", () => {
   assert.equal(languageFromLocale("de-DE"), "en");
   assert.equal(languageFromLocale(""), "en");
   assert.equal(languageFromLocale(undefined as unknown as string), "en");
+});
+
+test("auto detection walks the preference list without per-locale fallback", () => {
+  assert.equal(detectLanguage(["de-DE", "ja-JP", "ko"]), "ja");
+  assert.equal(detectLanguage(["zh-TW", "en"]), "zh");
+  assert.equal(detectLanguage(["fr-FR", "de-DE"]), "en");
+  assert.equal(detectLanguage([]), "en");
+  assert.equal(detectLanguage(["ko"]), "ko");
 });
 
 test("isLanguage gates the IPC payload", () => {

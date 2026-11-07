@@ -64,3 +64,21 @@ export function languageFromLocale(locale: string): Language {
   }
   return "en";
 }
+
+/**
+ * Picks the UI language from an ordered list of user locales (Electron:
+ * navigator.language mirrors the system display language; the browser: the
+ * same preference that produces the Accept-Language header). The first
+ * locale that resolves to a shipped language wins — unlike
+ * languageFromLocale there is no per-locale fallback, so a later locale can
+ * still match after an earlier unmatched one.
+ */
+export function detectLanguage(locales: readonly string[]): Language {
+  for (const locale of locales ?? []) {
+    const tag = String(locale ?? "").toLowerCase();
+    for (const lang of LANGUAGES) {
+      if (tag === lang || tag.startsWith(lang + "-")) return lang;
+    }
+  }
+  return "en";
+}

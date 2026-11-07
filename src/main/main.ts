@@ -56,18 +56,77 @@ function configureSmokeEnvironment() {
 const smokeEnvironment = configureSmokeEnvironment();
 let mainWindow: BrowserWindow | null = null;
 
+/** Last window geometry, saved on close and restored on launch. */
+interface WindowState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+}
+
+function windowStatePath(): string {
+  return path.join(app.getPath("userData"), "window-state.json");
+}
+
+/**
+ * Restores the saved window bounds, or null when they are missing, corrupt,
+ * or would land entirely off every connected display (a disconnected
+ * monitor must not hide the window).
+ */
+function loadWindowBounds(): WindowState | null {
+  try {
+    const raw: unknown = JSON.parse(fsSync.readFileSync(windowStatePath(), "utf8"));
+    if (typeof raw !== "object" || raw === null) return null;
+    const s = raw as Record<string, unknown>;
+    const nums = [s.x, s.y, s.width, s.height];
+    if (!nums.every((n) => typeof n === "number" && Number.isFinite(n) && (n as number) > -1e6 && (n as number) < 1e6)) {
+      return null;
+    }
+    const bounds = { x: s.x as number, y: s.y as number, width: s.width as number, height: s.height as number };
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    const area = screen.getDisplayMatching(bounds).workArea;
+    const overlapWidth = Math.min(bounds.x + bounds.width, area.x + area.width) - Math.max(bounds.x, area.x);
+    const overlapHeight = Math.min(bounds.y + bounds.height, area.y + area.height) - Math.max(bounds.y, area.y);
+    if (overlapWidth <= 0 || overlapHeight <= 0) return null;
+    return { ...bounds, maximized: s.maximized === true };
+  } catch {
+    return null; // Missing or corrupt state: use the default window
+  }
+}
+
+function saveWindowBounds(): void {
+  if (!mainWindow || smokeEnvironment) return;
+  try {
+    // getNormalBounds returns the restore bounds while maximized, so the
+    // pre-maximize geometry survives alongside the maximized flag.
+    const state: WindowState = {
+      ...mainWindow.getNormalBounds(),
+      maximized: mainWindow.isMaximized(),
+    };
+    fsSync.mkdirSync(app.getPath("userData"), { recursive: true });
+    fsSync.writeFileSync(windowStatePath(), JSON.stringify(state, null, 2));
+  } catch {
+    // A failed state write must never block closing.
+  }
+}
+
 function createWindow(): void {
-  // Dark window chrome: the default frame follows the (light) system theme
-  // and showed a white title strip. Forcing the dark native theme turns the
-  // title bar, the File/Edit/View/Help menu bar and the window controls dark.
+  // The native chrome (title bar, File/Edit/View/Help menu bar, window
+  // controls) follows the theme the user picks in the app: the renderer
+  // pushes light/dark/system over IPC (setTheme) and "system" tracks the OS
+  // scheme live. Forcing one value here would desync the native chrome from
+  // the in-app theme (and once made a light-OS machine paint dark menus).
   // titleBarStyle "hidden" + titleBarOverlay was evaluated and rejected: on
   // Windows it removes the native menu bar entirely, and none of
   // setMenuBarVisibility(true), autoHideMenuBar: false or setMenu() bring it
   // back — which broke the "native menus stay visible and usable" rule.
-  nativeTheme.themeSource = "dark";
+  const restoredBounds = smokeEnvironment ? null : loadWindowBounds();
   mainWindow = new BrowserWindow({
-    width: smokeEnvironment?.width ?? 1440,
-    height: smokeEnvironment?.height ?? 900,
+    width: smokeEnvironment?.width ?? restoredBounds?.width ?? 1440,
+    height: smokeEnvironment?.height ?? restoredBounds?.height ?? 900,
+    x: restoredBounds?.x,
+    y: restoredBounds?.y,
     useContentSize: smokeEnvironment !== undefined,
     minWidth: 960,
     minHeight: 600,
@@ -96,12 +155,23 @@ function createWindow(): void {
     }, null, 2));
   }
 
-  // Block navigation and popups entirely (single-page tool).
-  mainWindow.webContents.on("will-navigate", (event) => event.preventDefault());
+  // Block navigation and popups entirely (single-page tool). A navigation to
+  // the page's own URL is location.reload() — the Close action reboots the
+  // renderer into the cleared session through it and is allowed through;
+  // everything that would leave the page stays blocked. The app-level
+  // web-contents-created hook below enforces the same rule for any other
+  // web contents.
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (mainWindow && url === mainWindow.webContents.getURL()) return;
+    event.preventDefault();
+  });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-attach-webview", (event) => event.preventDefault());
 
   void mainWindow.loadFile(path.join(__dirname, "../../renderer/index.html"));
+  if (restoredBounds?.maximized) mainWindow.maximize();
+  // Persist the geometry on every close path (window button and app quit).
+  mainWindow.on("close", saveWindowBounds);
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -217,6 +287,15 @@ function registerIpcHandlers(): void {
     if (lang === uiLanguage) return;
     uiLanguage = lang;
     rebuildMenu();
+  });
+
+  // The renderer owns the persisted color theme; the native chrome (title
+  // bar, menu bar) follows it. "system" hands the decision back to the OS.
+  ipcMain.handle(CHANNELS.setTheme, (_event, theme: unknown) => {
+    if (theme !== "light" && theme !== "dark" && theme !== "system") {
+      throw new Error("unsupported color theme: " + String(theme));
+    }
+    nativeTheme.themeSource = theme;
   });
 
   ipcMain.handle(CHANNELS.openFileDialog, async () => {
@@ -488,8 +567,13 @@ function rebuildMenu(): void {
 
 
 // Defensive: block navigation from any web contents created in this app.
+// Same-URL navigations (location.reload(), the Close action's reboot) stay
+// allowed — they match the guard in createWindow; anything else is denied.
 app.on("web-contents-created", (_event, contents) => {
-  contents.on("will-navigate", (e) => e.preventDefault());
+  contents.on("will-navigate", (e, url) => {
+    if (url === contents.getURL()) return;
+    e.preventDefault();
+  });
 });
 
 void app.whenReady().then(() => {

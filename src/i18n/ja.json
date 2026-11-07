@@ -133,10 +133,21 @@
     "bmhDefsTitle": "WAV定義情報",
     "bmhFileNameLabel": "ファイル名",
     "titleVolume": "再生音量",
-    "titleRms": "RMS バンド（ピーク内の平均レベル）"
+    "titleRms": "RMS バンド（ピーク内の平均レベル）",
+    "titleTheme": "カラーテーマ",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeSystem": "システム",
+    "languageAuto": "自動",
+    "titleClose": "セッションを閉じる",
+    "closeConfirmTitle": "すべて閉じますか？",
+    "closeConfirmBody": "開いているファイルと未保存の切断位置を消去し、セッション保存データを削除します。",
+    "closeOk": "閉じて消去",
+    "closeCancel": "キャンセル"
   },
   "status": {
     "statusEmpty": "空：WAV/OGG ファイルをドロップして開始",
+    "lastFileMissing": "前回開いたファイルが見つかりません：{name}",
     "playing": "再生中",
     "paused": "一時停止中",
     "stopped": "停止しました",

@@ -133,10 +133,21 @@
     "bmhDefsTitle": "WAV 定义",
     "bmhFileNameLabel": "文件名",
     "titleVolume": "回放音量",
-    "titleRms": "RMS 均方根带（峰值内的平均电平）"
+    "titleRms": "RMS 均方根带（峰值内的平均电平）",
+    "titleTheme": "配色主题",
+    "themeLight": "亮色",
+    "themeDark": "暗色",
+    "themeSystem": "系统",
+    "languageAuto": "自动",
+    "titleClose": "关闭当前会话",
+    "closeConfirmTitle": "全部关闭？",
+    "closeConfirmBody": "将关闭打开的文件、清空未保存的切分标记，并删除会话存档。",
+    "closeOk": "关闭并清空",
+    "closeCancel": "取消"
   },
   "status": {
     "statusEmpty": "空：拖入 WAV/OGG 文件开始",
+    "lastFileMissing": "上次打开的文件未找到：{name}",
     "playing": "播放中",
     "paused": "已暂停",
     "stopped": "已停止",

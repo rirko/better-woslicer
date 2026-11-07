@@ -19,7 +19,9 @@ import {
   bandScopeWhole,
   getLanguage,
   initLanguage,
+  languageSelection,
   renderStatus,
+  setAutoLanguage,
   setLanguage,
   tr,
   LANGUAGES,
@@ -28,6 +30,16 @@ import {
   type Language,
 } from "./i18n.js";
 import type { ChromeKey, FormatParams, StatusKey } from "../core/messages.js";
+import { applyTheme, palette, setThemeName, themeSelection, watchSystemTheme, type ThemeName } from "./theme.js";
+import {
+  captureSession,
+  clearSession,
+  readSession,
+  suppressSessionSave,
+  writeSession,
+  SAVE_DEBOUNCE_MS,
+  type SessionSnapshot,
+} from "./session.js";
 import type { StatusEntry, StatusSegment } from "./store.js";
 import { gridStepTicks } from "../core/gridlines.js";
 import { MAX_TICKS, MEASURE_TICKS, resolveBreakpointTick, sampleToTickNearest, tickToSampleExport } from "../core/timebase.js";
@@ -699,6 +711,123 @@ async function saveWos(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Session archive                                                     */
+/* ------------------------------------------------------------------ */
+
+let sessionSaveTimer: number | null = null;
+let bootSession: SessionSnapshot | null = null;
+let reopenCandidate: SessionSnapshot["lastFile"] = null;
+
+function activeSidebarTab(): string | null {
+  return document.querySelector<HTMLButtonElement>(".side-tab.active")?.dataset.tab ?? null;
+}
+
+function saveSessionNow(): void {
+  if (sessionSaveTimer !== null) {
+    window.clearTimeout(sessionSaveTimer);
+    sessionSaveTimer = null;
+  }
+  writeSession(captureSession(store.state, activeSidebarTab()));
+}
+
+function scheduleSessionSave(): void {
+  if (sessionSaveTimer !== null) window.clearTimeout(sessionSaveTimer);
+  sessionSaveTimer = window.setTimeout(saveSessionNow, SAVE_DEBOUNCE_MS);
+}
+
+function flushSessionSave(): void {
+  if (sessionSaveTimer !== null) saveSessionNow();
+}
+
+/**
+ * Applies the archived options and marker document before the DOM wires up,
+ * so every control that backfills from the store reads the restored values.
+ * The BPM/shift/fade/gate inputs are filled here too: like the .wos load
+ * path, the archive replaces the document without going through the inputs.
+ */
+function restoreSessionState(): void {
+  bootSession = readSession(store.state);
+  if (bootSession === null) return;
+  if (Object.keys(bootSession.options).length > 0) store.update(bootSession.options);
+  const doc = bootSession.doc;
+  if (doc) {
+    store.state.doc.bpm = doc.bpm;
+    store.state.doc.shift = doc.shift;
+    store.state.doc.fadeoutMs = doc.fadeoutMs;
+    store.state.doc.noisegateDb = doc.noisegateDb;
+    const bitmap = new Uint8Array(MAX_TICKS);
+    for (const tick of doc.markers) bitmap[tick] = 1;
+    store.state.doc.replaceBitmap(bitmap);
+    el<HTMLInputElement>("input-bpm").value = String(doc.bpm);
+    el<HTMLInputElement>("input-shift").value = String(doc.shift);
+    el<HTMLInputElement>("input-fade").value = String(doc.fadeoutMs);
+    el<HTMLInputElement>("input-gate").value = String(doc.noisegateDb);
+  }
+  reopenCandidate = bootSession.lastFile;
+}
+
+/** Mirrors the restored options into the controls wireDom leaves at defaults. */
+function syncSessionControls(): void {
+  const s = store.state;
+  syncRateSelect();
+  syncGridSelect();
+  el<HTMLSelectElement>("select-cue").value = s.cueMode;
+  el<HTMLButtonElement>("btn-follow").classList.toggle("on", s.followPlayhead);
+  el<HTMLButtonElement>("btn-follow").setAttribute("aria-pressed", String(s.followPlayhead));
+  el<HTMLButtonElement>("btn-snap").classList.toggle("on", s.snap);
+  el<HTMLButtonElement>("btn-snap").setAttribute("aria-pressed", String(s.snap));
+  el<HTMLInputElement>("input-basename").value = s.baseName;
+  el<HTMLInputElement>("input-clipnum").value = String(s.clipStartNumber);
+  el<HTMLInputElement>("check-ff").checked = s.useFfNumbering;
+  el<HTMLInputElement>("check-gate").checked = s.noisegateEnabled;
+  el<HTMLInputElement>("input-band-threshold").value = String(s.bandThresholdDb);
+  el<HTMLSelectElement>("select-band-gap").value = String(s.bandMinGapUnits);
+  el<HTMLInputElement>("check-band-snap").checked = s.bandSnap;
+  updateBandPanel();
+}
+
+function restoreSessionTab(): void {
+  const tab = bootSession?.tab;
+  if (tab) {
+    document.querySelector<HTMLButtonElement>(`.side-tab[data-tab="${CSS.escape(tab)}"]`)?.click();
+  }
+  bootSession = null;
+}
+
+/**
+ * Reopens the last session's file through its saved path. Dropped files are
+ * never archived (they have no path), so this only runs for dialog-opened
+ * audio; a file that has moved or disappeared is reported in the status bar.
+ */
+async function reopenLastSessionFile(): Promise<void> {
+  const last = reopenCandidate;
+  reopenCandidate = null;
+  if (!last) return;
+  try {
+    store.update({ phase: "parsing" });
+    setStatus("parsingSourceFile");
+    const info = await api().readAudioFile(last.path);
+    applyLoadedAudio(info);
+  } catch {
+    store.update({ phase: store.state.source ? "ready" : "empty" });
+    setStatus("lastFileMissing", { name: last.name || last.path });
+  }
+}
+
+/**
+ * The Close action: wipes the session archive and reboots the renderer into
+ * a clean state. The reload re-runs boot against the cleared archive, which
+ * resets every module (transport, undo history, BMHelper project) the same
+ * way a fresh launch would; the save is suppressed so the pre-clear state
+ * cannot be re-archived on the way out.
+ */
+function clearAllWork(): void {
+  suppressSessionSave();
+  clearSession();
+  location.reload();
+}
+
+/* ------------------------------------------------------------------ */
 /* Export                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -1128,6 +1257,16 @@ function readNumericInput(input: HTMLInputElement, fallback: number): number {
 
 function wireDom(): void {
   el<HTMLButtonElement>("btn-open").addEventListener("click", () => void loadFromPath());
+  el<HTMLButtonElement>("btn-close").addEventListener("click", () => {
+    el<HTMLDivElement>("close-confirm-modal").classList.remove("hidden");
+  });
+  el<HTMLButtonElement>("btn-close-cancel").addEventListener("click", () => {
+    el<HTMLDivElement>("close-confirm-modal").classList.add("hidden");
+  });
+  el<HTMLButtonElement>("btn-close-confirm").addEventListener("click", () => {
+    el<HTMLDivElement>("close-confirm-modal").classList.add("hidden");
+    clearAllWork();
+  });
   el<HTMLButtonElement>("btn-undo").addEventListener("click", actions.undo);
   el<HTMLButtonElement>("btn-redo").addEventListener("click", actions.redo);
   el<HTMLButtonElement>("btn-zoom-in").addEventListener("click", actions.zoomIn);
@@ -1222,11 +1361,19 @@ function wireDom(): void {
     store.setStatus("tapOffsetApplied", { offset: `${median >= 0 ? "+" : ""}${median.toFixed(1)}` });
   });
 
-  // UI language, persisted in localStorage. The options come from the i18n
+  // UI language: an explicit choice is persisted; "auto" follows the
+  // platform language (the system display language under Electron; the
+  // browser's preferred languages — the same preference Accept-Language is
+  // built from — under the web host). The options come from the i18n
   // language manifest so the selector can never drift from the shipped set.
   // Each option carries its own lang attribute (its manifest docLang) so the
   // browser renders every native name with that language's font fallback.
   const languageSelect = el<HTMLSelectElement>("select-language");
+  const autoOption = document.createElement("option");
+  autoOption.value = "auto";
+  autoOption.dataset.i18n = "languageAuto";
+  autoOption.textContent = tr("languageAuto");
+  languageSelect.append(autoOption);
   for (const lang of LANGUAGES) {
     const option = document.createElement("option");
     option.value = lang;
@@ -1234,16 +1381,42 @@ function wireDom(): void {
     option.textContent = LANGUAGE_LABELS[lang];
     languageSelect.append(option);
   }
-  languageSelect.value = getLanguage();
+  languageSelect.value = languageSelection();
   languageSelect.addEventListener("change", (e) => {
-    const lang = (e.target as HTMLSelectElement).value as Language;
-    setLanguage(lang);
+    const value = (e.target as HTMLSelectElement).value;
+    if (value === "auto") {
+      setAutoLanguage();
+    } else {
+      setLanguage(value as Language);
+    }
     // Keep the native menu bar in step with the renderer chrome.
     void api()
-      .setLanguage(lang)
+      .setLanguage(getLanguage())
       .catch(() => undefined);
     renderStatusBar();
     updateBandPanel();
+  });
+
+  // Color theme: light / dark / follow the system scheme (live — a flip of
+  // the OS scheme repaints while "system" is selected). Canvas layers read
+  // the palette on every draw, so applying a theme only needs one redraw.
+  // The selection also mirrors into the native chrome (title bar, menus).
+  const themeSelect = el<HTMLSelectElement>("select-theme");
+  themeSelect.value = themeSelection();
+  const applyThemeSelection = (): void => {
+    applyTheme(themeSelect.value as ThemeName);
+    void api()
+      .setTheme(themeSelect.value)
+      .catch(() => undefined);
+    redraw();
+    bmhSync();
+  };
+  themeSelect.addEventListener("change", () => {
+    setThemeName(themeSelect.value as ThemeName);
+    applyThemeSelection();
+  });
+  watchSystemTheme(() => {
+    if (themeSelect.value === "system") applyThemeSelection();
   });
 
   // Play button toggles playback ONLY — the break point moved to Enter, so a
@@ -1455,7 +1628,7 @@ function wireDom(): void {
     canvas.width = Math.max(1, width * (window.devicePixelRatio || 1));
     canvas.height = Math.max(1, height * (window.devicePixelRatio || 1));
     context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
-    context.fillStyle = "#14171b";
+    context.fillStyle = palette().panel;
     context.fillRect(0, 0, width, height);
     if (!division) return;
     const cell = 30;
@@ -1463,9 +1636,9 @@ function wireDom(): void {
       const x = (index % Math.max(1, Math.floor(width / cell))) * cell;
       const y = Math.floor(index / Math.max(1, Math.floor(width / cell))) * (height / 2);
       if (y >= height) return;
-      context.fillStyle = index % 2 === 0 ? "#1a1e23" : "#22272d";
+      context.fillStyle = index % 2 === 0 ? palette().surface1 : palette().surface2;
       context.fillRect(x, y, cell - 1, height / 2 - 1);
-      context.fillStyle = "#edeff2";
+      context.fillStyle = palette().text1;
       context.font = "9px monospace";
       context.fillText(zzStringOf(definition.zz), x + 3, y + 10);
       context.fillText(String(definition.div), x + 3, y + 22);
@@ -1821,22 +1994,36 @@ function animate(): void {
 
 window.addEventListener("DOMContentLoaded", () => {
   try {
+    // Theme before language: the CSS custom properties must be painted
+    // before anything renders, while the language choice only affects text.
+    applyTheme(themeSelection());
     initLanguage();
     applyStaticTranslations();
-    // The main process starts the menu in the OS locale; this makes the
-    // persisted choice authoritative on every launch.
+    // The main process starts the menu in the OS locale with system theme
+    // chrome; these make the persisted choices authoritative on every launch.
+    void api()
+      .setTheme(themeSelection())
+      .catch(() => undefined);
     void api()
       .setLanguage(getLanguage())
       .catch(() => undefined);
+    restoreSessionState();
     wireDom();
     interactions.attach();
     transport.setCueVolume(store.state.cueVolume);
     transport.setVolume(store.state.volume);
     syncTapOffsetDisplay();
+    syncSessionControls();
+    restoreSessionTab();
     renderStatusBar();
     updateReadout();
     redraw();
     animate();
+    // Archive the working state (options, tab, document, last file) a moment
+    // after it stops changing, plus one final flush when the page goes away.
+    store.subscribe(scheduleSessionSave);
+    window.addEventListener("beforeunload", flushSessionSave);
+    void reopenLastSessionFile();
   } catch (err) {
     (window as unknown as { __bootError: string }).__bootError =
       err instanceof Error ? `${err.message}

@@ -2,6 +2,23 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
+## 0.3.0 — 2026-11-08
+
+### Added
+
+- Color themes: Light, Dark and System, next to the language selector. The System choice follows the operating system live.
+- The interface language can follow the system language automatically — the language selector gains an Auto choice.
+- The session is restored on launch: window size and position, your options, the selected tab, the markers you were cutting with and the last opened file. A file that has gone missing is reported in the status bar.
+- A Close button next to Open: after a confirmation it clears the opened file and all unsaved work, including the session archive.
+- The waveform is drawn in two tones — a light peak envelope with a darker RMS band inside — and stays detailed at every zoom, down to the individual samples: a connected curve at mid zooms and one stem per sample at the deepest zoom.
+- An RMS layer toggle (left of the Bands button, off by default); turning Bands on turns the RMS layer off and locks its toggle while the band overlay is shown.
+- Band overlay lines are smoother.
+- Monitor playback defaults to −10 dB and the cue to −6 dB.
+
+### Fixed
+
+- Dense audio no longer renders as a solid block: the waveform is drawn per device pixel on high-DPI screens and stays sharp at mid-range zooms instead of blurring.
+
 ## 0.2.1 — 2026-11-07
 
 ### Added
