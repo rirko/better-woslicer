@@ -131,7 +131,8 @@
     "bmhSrcCopy": "Use the original sequence as-is",
     "bmhOk": "OK",
     "bmhDefsTitle": "WAV definitions",
-    "bmhFileNameLabel": "File name"
+    "bmhFileNameLabel": "File name",
+    "titleVolume": "Playback volume"
   },
   "status": {
     "statusEmpty": "Empty: drop a WAV/OGG file to begin",
@@ -250,7 +251,9 @@
     "bmhOpenFailed": "Failed to open: {message}",
     "cutBeyondEnd": "Cut position is beyond the end of the audio",
     "emptySlice": "This cut is at the end of the audio — empty slice",
-    "exportSkippedBeyond": "{count} cut(s) beyond the audio end were skipped"
+    "exportSkippedBeyond": "{count} cut(s) beyond the audio end were skipped",
+    "playbackVolumeDb": "Playback volume {db} dB",
+    "cueVolumeDb": "Cue volume {db} dB"
   },
   "menu": {
     "file": "File",
