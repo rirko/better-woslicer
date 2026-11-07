@@ -1090,6 +1090,12 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Amplitude 0..1 as a dB attenuation label ("0.0" at full, "-∞" muted). */
+function formatDb(v: number): string {
+  if (v <= 0) return "-∞";
+  return (20 * Math.log10(v)).toFixed(1);
+}
+
 /** Parses a two-character base-36 definition id ("01".."ZZ") into its value. */
 function parseBmhStart(text: string): number {
   const trimmed = text.trim();
@@ -1264,6 +1270,14 @@ function wireDom(): void {
     const v = Number((e.target as HTMLInputElement).value) / 100;
     store.update({ cueVolume: v });
     transport.setCueVolume(v);
+    store.setStatus("cueVolumeDb", { db: formatDb(v) });
+  });
+  // Monitor volume for playback and previews, left of the Bands toggle.
+  el<HTMLInputElement>("input-volume").addEventListener("input", (e) => {
+    const v = Number((e.target as HTMLInputElement).value) / 100;
+    store.update({ volume: v });
+    transport.setVolume(v);
+    store.setStatus("playbackVolumeDb", { db: formatDb(v) });
   });
   el<HTMLSelectElement>("select-rate").addEventListener("change", (e) => {
     const rate = Number((e.target as HTMLSelectElement).value);
@@ -1789,6 +1803,7 @@ window.addEventListener("DOMContentLoaded", () => {
     wireDom();
     interactions.attach();
     transport.setCueVolume(store.state.cueVolume);
+    transport.setVolume(store.state.volume);
     syncTapOffsetDisplay();
     renderStatusBar();
     updateReadout();

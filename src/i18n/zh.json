@@ -131,7 +131,8 @@
     "bmhSrcCopy": "原样使用原序列",
     "bmhOk": "确定",
     "bmhDefsTitle": "WAV 定义",
-    "bmhFileNameLabel": "文件名"
+    "bmhFileNameLabel": "文件名",
+    "titleVolume": "回放音量"
   },
   "status": {
     "statusEmpty": "空：拖入 WAV/OGG 文件开始",
@@ -250,7 +251,9 @@
     "bmhOpenFailed": "打开失败：{message}",
     "cutBeyondEnd": "切点超出音频末尾",
     "emptySlice": "该切点位于音频末尾——空切片",
-    "exportSkippedBeyond": "已跳过 {count} 个超出音频末尾的切点"
+    "exportSkippedBeyond": "已跳过 {count} 个超出音频末尾的切点",
+    "playbackVolumeDb": "回放音量 {db} dB",
+    "cueVolumeDb": "提示音音量 {db} dB"
   },
   "menu": {
     "file": "文件",
