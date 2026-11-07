@@ -223,15 +223,23 @@ export class TimelineView {
       const deviceWidth = ctx.canvas.width;
       const fromFrame = tickToSampleExport(Math.floor(fromTick), timeBase);
       const toFrame = tickToSampleExport(Math.ceil(toTick), timeBase);
-      const framesPerColumn = Math.max(1, (toFrame - fromFrame) / deviceWidth);
+      // The regime thresholds compare the TRUE per-column frame count, from
+      // the continuous view span: fromFrame/toFrame quantize the view to
+      // whole ticks (floor/ceil), and a sub-tick view at deep zoom would
+      // stay near 0.5 frames per column no matter how far in we go.
+      const framesInView = ((toTick - fromTick) * timeBase.sampleRate * 5) / (timeBase.bpm * 4);
+      const framesPerColumn = framesInView / deviceWidth;
       const baseBucket = s.peaks.levels[0].framesPerBucket;
       // When a column covers fewer frames than the finest cache bucket, the
       // cache is coarser than the view: read the raw samples directly (the
       // visible range at that zoom is only a few thousand frames).
       const sampleLevel = framesPerColumn < baseBucket;
-      // Sample-visible: individual samples discernible — they render as
-      // stems from the zero line, and the RMS band is meaningless there.
-      const sampleStems = sampleLevel && framesPerColumn <= 2;
+      // Sample-visible: stems render once a sample spans at least ~3 CSS px
+      // (Audacity's dot/point threshold) — below that the samples crowd into
+      // a solid mass and the connected curve is the readable rendering.
+      // framesPerColumn counts device columns, so the CSS-px spacing brings
+      // in the dpr factor.
+      const sampleStems = sampleLevel && framesPerColumn * dpr <= 1 / 3;
       // Between the stem view and the envelope view the per-column min/max
       // is small-sample noise: a filled envelope there reads as a fuzzy
       // block. DAW editors render this regime as a connected per-sample
@@ -285,10 +293,10 @@ export class TimelineView {
       } else if (sampleCurve) {
         // Connected-sample curve: one polyline through every visible
         // sample with per-sample vertices in integer device coordinates,
-        // instead of per-column fills. Stems take over below ~2 frames
-        // per column, the envelope above the curve cutoff; the x mapping
-        // matches the stems exactly so the two regimes join seamlessly at
-        // the boundary.
+        // instead of per-column fills. Stems take over below 3 px of
+        // sample spacing, the envelope above the curve cutoff; the x
+        // mapping matches the stems exactly so the two regimes join
+        // seamlessly at the boundary.
         const data = s.source.data[c];
         const xScale = ((timeBase.bpm * 4) / (timeBase.sampleRate * 5)) * pxPerTick * dpr;
         const xOff = (-timeBase.shift - scrollTick) * pxPerTick * dpr;

@@ -193,9 +193,15 @@ export class Store {
 
   zoomAt(anchorTick: number, factor: number): void {
     const { pxPerTick } = this.state;
-    // The ceiling allows sample-level zoom: at 120 BPM / 48 kHz one tick is
-    // 500 frames, so pxPerTick 500 puts one sample on every pixel.
-    const next = Math.max(0.02, Math.min(600, pxPerTick * factor));
+    // The ceiling scales with the time base: deep zoom exists to inspect
+    // individual samples, so the maximum puts ~4 CSS px on every sample
+    // (stems take over at 3 px per sample; at 120 BPM / 48 kHz one tick is
+    // 500 frames, which tops out at 2000 px/tick). The floor keeps the old
+    // ceiling for extreme time bases where 4 px/sample would be less.
+    const framesPerTick = this.state.source
+      ? (this.state.source.sampleRate * 5) / (this.state.doc.bpm * 4)
+      : 500;
+    const next = Math.max(0.02, Math.min(Math.max(600, 4 * framesPerTick), pxPerTick * factor));
     if (next === pxPerTick) return;
     // Keep the tick under the anchor visually fixed.
     const anchorPx = (anchorTick - this.state.scrollTick) * pxPerTick;
