@@ -178,10 +178,11 @@ export class TimelineView {
       const endX = this.tickToX(endTick, scrollTick, pxPerTick);
       if (endX < width) {
         // No-audio region: hatched so the song's extent is obvious even when
-        // the ending is quiet (the waveform alone does not show it).
+        // the ending is quiet (the waveform alone does not show it). The
+        // boundary line is danger-red: cutting past it is illegal.
         ctx.fillStyle = this.stripePattern(ctx);
         ctx.fillRect(Math.max(0, endX), laneTop, width - Math.max(0, endX), laneHeight);
-        ctx.strokeStyle = COLORS.accent;
+        ctx.strokeStyle = COLORS.danger;
         ctx.beginPath();
         ctx.moveTo(Math.floor(endX) + 0.5, laneTop);
         ctx.lineTo(Math.floor(endX) + 0.5, laneTop + laneHeight);
@@ -405,7 +406,7 @@ export class TimelineView {
     if (endX < width) {
       ctx.fillStyle = this.stripePattern(ctx);
       ctx.fillRect(Math.max(0, endX), 0, width - Math.max(0, endX), OVERVIEW_HEIGHT);
-      ctx.strokeStyle = COLORS.accent;
+      ctx.strokeStyle = COLORS.danger;
       ctx.beginPath();
       ctx.moveTo(Math.floor(endX) + 0.5, 0);
       ctx.lineTo(Math.floor(endX) + 0.5, OVERVIEW_HEIGHT);

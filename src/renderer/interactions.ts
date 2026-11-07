@@ -18,7 +18,7 @@
  */
 
 import { gridStepTicks } from "../core/gridlines.js";
-import { MAX_TICKS, resolveBreakpointTick, tickToSampleExport } from "../core/timebase.js";
+import { MAX_TICKS, MEASURE_TICKS, resolveBreakpointTick, tickToSampleExport } from "../core/timebase.js";
 import { markerTicks } from "../core/wos.js";
 import { clampGroupDelta, normalizeSelection } from "../core/markers.js";
 import { Store } from "./store.js";
@@ -324,7 +324,10 @@ export class Interactions {
         this.store.setStatus(
           changed
             ? { key: "addedMarkerAtTick", params: { tick: this.drag.anchorTick } }
-            : { key: "markerAlreadyAtTick", params: { tick: this.drag.anchorTick } }
+            : {
+                key: "markerAlreadyAtTick",
+                params: { measure: Math.floor(this.drag.anchorTick / MEASURE_TICKS) + 1, tick: this.drag.anchorTick },
+              }
         );
         break;
       }
