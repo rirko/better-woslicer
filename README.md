@@ -12,6 +12,7 @@ An offline audio slicer for BMS, based on wosderge's woslicerIII.
 - Timeline editing with snapping, selection, quantization and undo/redo.
 - Variable-speed monitoring, cue sounds and tap calibration.
 - Frequency-band display and automatic cut detection.
+- Built-in BMHelper: divide a key-sound MIDI part into a recording sequence with WAVE definitions, then apply its cut positions to the timeline.
 - English, Chinese, Japanese and Korean UI; About shows version, commit and build date.
 
 ## Run
