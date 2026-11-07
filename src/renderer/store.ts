@@ -9,6 +9,7 @@ import { DEFAULT_PLAYBACK_RATE } from "../core/rate.js";
 import { PeakCache } from "../core/peaks.js";
 import { resolveBreakpointTick } from "../core/timebase.js";
 import { BandAnalysis, BandName } from "../core/bands.js";
+import { dbToAmp, DEFAULT_CUE_DB, DEFAULT_PLAYBACK_DB } from "../core/volume.js";
 import type { FormatParams, StatusKey } from "../core/messages.js";
 
 export type Phase = "empty" | "parsing" | "ready";
@@ -60,6 +61,8 @@ export interface ViewState {
   playheadSample: number;
   /** Monitor volume for playback and previews (amplitude 0..1). */
   volume: number;
+  /** RMS band visibility in the waveform (session-only, default off). */
+  rmsVisible: boolean;
   /**
    * Monitor playback rate (0.25x .. 1.5x). Persists across pause/stop; never
    * affects marker ticks, slice lengths or exports (those are source-time 1x).
@@ -116,11 +119,11 @@ export class Store {
     selectedTicks: [],
     playing: false,
     playheadSample: 0,
-    volume: 1,
+    volume: dbToAmp(DEFAULT_PLAYBACK_DB),
     playbackRate: DEFAULT_PLAYBACK_RATE,
     followPlayhead: true,
     cueMode: "off",
-    cueVolume: 0.6,
+    cueVolume: dbToAmp(DEFAULT_CUE_DB),
     noisegateEnabled: true,
     baseName: "slice",
     clipStartNumber: 1,
@@ -128,6 +131,7 @@ export class Store {
     measureClipboard: null,
     exportLock: false,
     bandsVisible: false,
+    rmsVisible: false,
     bandAnalysis: null,
     bandDetectBands: { low: true, mid: true, high: true },
     bandThresholdDb: 6,
@@ -189,7 +193,9 @@ export class Store {
 
   zoomAt(anchorTick: number, factor: number): void {
     const { pxPerTick } = this.state;
-    const next = Math.max(0.02, Math.min(120, pxPerTick * factor));
+    // The ceiling allows sample-level zoom: at 120 BPM / 48 kHz one tick is
+    // 500 frames, so pxPerTick 500 puts one sample on every pixel.
+    const next = Math.max(0.02, Math.min(600, pxPerTick * factor));
     if (next === pxPerTick) return;
     // Keep the tick under the anchor visually fixed.
     const anchorPx = (anchorTick - this.state.scrollTick) * pxPerTick;

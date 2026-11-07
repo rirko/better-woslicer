@@ -31,6 +31,7 @@ import type { ChromeKey, FormatParams, StatusKey } from "../core/messages.js";
 import type { StatusEntry, StatusSegment } from "./store.js";
 import { gridStepTicks } from "../core/gridlines.js";
 import { MAX_TICKS, MEASURE_TICKS, resolveBreakpointTick, sampleToTickNearest, tickToSampleExport } from "../core/timebase.js";
+import { dbToAmp, dbToSlider, ampToDb, sliderToDb } from "../core/volume.js";
 import { DEFAULT_PLAYBACK_RATE, formatRate, stepPlaybackRate } from "../core/rate.js";
 import { Store } from "./store.js";
 import { TimelineView } from "./waveform.js";
@@ -1267,17 +1268,32 @@ function wireDom(): void {
     store.setStatus("cueMode", { mode: tr(modeKeys[mode]) });
   });
   el<HTMLInputElement>("input-cue-vol").addEventListener("input", (e) => {
-    const v = Number((e.target as HTMLInputElement).value) / 100;
-    store.update({ cueVolume: v });
-    transport.setCueVolume(v);
-    store.setStatus("cueVolumeDb", { db: formatDb(v) });
+    // Slider positions map onto a -60..0 dB fader; the transport takes amps.
+    const db = sliderToDb(Number((e.target as HTMLInputElement).value));
+    const amp = dbToAmp(db);
+    store.update({ cueVolume: amp });
+    transport.setCueVolume(amp);
+    store.setStatus("cueVolumeDb", { db: formatDb(amp) });
   });
-  // Monitor volume for playback and previews, left of the Bands toggle.
+  // Monitor volume for playback and previews, left of the RMS/Bands toggles.
   el<HTMLInputElement>("input-volume").addEventListener("input", (e) => {
-    const v = Number((e.target as HTMLInputElement).value) / 100;
-    store.update({ volume: v });
-    transport.setVolume(v);
-    store.setStatus("playbackVolumeDb", { db: formatDb(v) });
+    const db = sliderToDb(Number((e.target as HTMLInputElement).value));
+    const amp = dbToAmp(db);
+    store.update({ volume: amp });
+    transport.setVolume(amp);
+    store.setStatus("playbackVolumeDb", { db: formatDb(amp) });
+  });
+  // Slider positions start at the product defaults (-10 dB / -6 dB).
+  el<HTMLInputElement>("input-volume").value = String(dbToSlider(ampToDb(store.state.volume)));
+  el<HTMLInputElement>("input-cue-vol").value = String(dbToSlider(ampToDb(store.state.cueVolume)));
+  // RMS band toggle (default off; the envelope alone shows the peaks).
+  el<HTMLButtonElement>("btn-rms").addEventListener("click", (e) => {
+    const next = !store.state.rmsVisible;
+    store.update({ rmsVisible: next });
+    const button = e.currentTarget as HTMLButtonElement;
+    button.classList.toggle("on", next);
+    button.setAttribute("aria-pressed", String(next));
+    redraw();
   });
   el<HTMLSelectElement>("select-rate").addEventListener("change", (e) => {
     const rate = Number((e.target as HTMLSelectElement).value);

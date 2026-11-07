@@ -26,6 +26,10 @@ const COLORS = {
   text2: "#B7BEC6",
   wave: "#5FA79D",
   waveBright: "#8FE3D6",
+  waveRms: "#2E5450",
+  waveRmsBright: "#456E68",
+  waveRmsDim: "rgba(46, 84, 80, 0.4)",
+  waveRmsBrightDim: "rgba(69, 110, 104, 0.4)",
   playhead: "#F5F7FA",
   selection: "#7FB3FF",
   accent: "#F2B24C",
@@ -172,7 +176,6 @@ export class TimelineView {
       // The view axis is ticks; frames are derived through the time base so
       // the waveform stays aligned with markers at any BPM/shift.
       if (!s.source || !s.peaks) continue; // audio passes only; lanes drew above
-      const step = Math.max(1, Math.round(1 / pxPerTick));
       const timeBase = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate };
       const endTick = (s.source.length * timeBase.bpm * 4) / (timeBase.sampleRate * 5) - timeBase.shift;
       const endX = this.tickToX(endTick, scrollTick, pxPerTick);
@@ -189,35 +192,192 @@ export class TimelineView {
         ctx.stroke();
       }
       const bandsOn = s.bandsVisible && s.bandAnalysis !== null;
-      ctx.fillStyle = bandsOn
+      const outerColor = bandsOn
         ? c === 0
           ? COLORS.waveDim
           : COLORS.waveBrightDim
         : c === 0
           ? COLORS.wave
           : COLORS.waveBright;
-      for (let x = 0; x < width; x += step) {
-        const t0 = this.xToTick(x, scrollTick, pxPerTick);
-        const t1 = this.xToTick(x + step, scrollTick, pxPerTick);
-        const f0 = tickToSampleExport(Math.floor(t0), timeBase);
-        const f1 = tickToSampleExport(Math.max(Math.floor(t0) + 1, Math.ceil(t1)), timeBase);
-        // Outside the source: draw nothing (otherwise the 1px minimum-height
-        // fill paints a fake zero line past the end of the audio).
-        if (f1 <= 0 || f0 >= s.source.length) continue;
-        const range = peakRange(s.peaks, s.source.length, f0, Math.max(f0 + 1, f1));
-        const yMin = mid - (range.max / 32768) * half;
-        const yMax = mid - (range.min / 32768) * half;
-        ctx.fillRect(x, yMin, Math.max(1, step), Math.max(1, yMax - yMin));
+      const innerColor = bandsOn
+        ? c === 0
+          ? COLORS.waveRmsDim
+          : COLORS.waveRmsBrightDim
+        : c === 0
+          ? COLORS.waveRms
+          : COLORS.waveRmsBright;
+
+      // Per-pixel two-tone rendering (the classic DAW style): the min/max
+      // envelope in the wave color with the RMS band darker inside it, so
+      // dense audio shows its envelope instead of a solid block.
+      //
+      // The columns are DEVICE pixels (the context is reset to identity for
+      // this pass): on high-DPI screens a CSS pixel is dpr device pixels, so
+      // CSS-px columns would render as 2px+ grains.
+      //
+      // One shared cache level per view: the widest level whose buckets are
+      // at most ~2x the frames a single device column covers — every column
+      // then merges only a few buckets, and a full repaint stays in
+      // sub-millisecond territory at any zoom.
+      const dpr = window.devicePixelRatio || 1;
+      const deviceWidth = ctx.canvas.width;
+      const fromFrame = tickToSampleExport(Math.floor(fromTick), timeBase);
+      const toFrame = tickToSampleExport(Math.ceil(toTick), timeBase);
+      const framesPerColumn = Math.max(1, (toFrame - fromFrame) / deviceWidth);
+      const baseBucket = s.peaks.levels[0].framesPerBucket;
+      // When a column covers fewer frames than the finest cache bucket, the
+      // cache is coarser than the view: read the raw samples directly (the
+      // visible range at that zoom is only a few thousand frames).
+      const sampleLevel = framesPerColumn < baseBucket;
+      // Sample-visible: individual samples discernible — they render as
+      // stems from the zero line, and the RMS band is meaningless there.
+      const sampleStems = sampleLevel && framesPerColumn <= 2;
+      // Between the stem view and the envelope view the per-column min/max
+      // is small-sample noise: a filled envelope there reads as a fuzzy
+      // block. DAW editors render this regime as a connected per-sample
+      // curve instead, and it stays the readable rendering up to ~16
+      // frames per column, past which the min/max envelope is again the
+      // informative shape.
+      const sampleCurve = sampleLevel && framesPerColumn <= 16;
+      let level = s.peaks.levels[0];
+      if (!sampleLevel) {
+        for (const l of s.peaks.levels) {
+          if (l.framesPerBucket <= framesPerColumn * 2) level = l;
+        }
       }
+      const fpb = level.framesPerBucket;
+      const minMax = level.minMax;
+      const rms = level.rms;
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // device-pixel space for this pass
+      const midDev = mid * dpr;
+      const halfDev = half * dpr;
+
+      if (sampleStems) {
+        for (let xd = 0; xd < deviceWidth; xd += 1) {
+          // Continuous tick -> sample conversion: floor(t0) would quantize each
+          // column to a whole tick (500 frames at 120 BPM / 48 kHz), which at
+          // sample-level zoom turns every column into a full-tick envelope.
+          const t0 = this.xToTick(xd / dpr, scrollTick, pxPerTick);
+          const t1 = this.xToTick((xd + 1) / dpr, scrollTick, pxPerTick);
+          const f0 = Math.max(0, Math.min(s.source.length, tickToSampleExport(t0, timeBase)));
+          const f1 = Math.max(f0, Math.min(s.source.length, tickToSampleExport(t1, timeBase)));
+          // Outside the source: draw nothing (otherwise the 1px minimum-height
+          // fill paints a fake zero line past the end of the audio).
+          if (f1 <= 0 || f0 >= s.source.length) continue;
+          // Sample-visible zoom: every sample is a stem from the zero line
+          // (the classic DAW sample view). The RMS band is meaningless at
+          // this level and stays hidden.
+          const data = s.source.data[c];
+          for (let f = f0; f < f1; f++) {
+            const tickF = (f * timeBase.bpm * 4) / (timeBase.sampleRate * 5) - timeBase.shift;
+            const xF = Math.round((tickF - scrollTick) * pxPerTick * dpr);
+            if (xF < 0 || xF >= deviceWidth) continue;
+            const v = data[f];
+            const yV = midDev - (v / 32768) * halfDev;
+            // Integer edges: fractional fills antialias a soft fringe.
+            const yTop = Math.round(Math.min(midDev, yV));
+            const yBot = Math.round(Math.max(midDev, yV));
+            ctx.fillStyle = outerColor;
+            ctx.fillRect(xF, yTop, 1, Math.max(1, yBot - yTop));
+          }
+        }
+      } else if (sampleCurve) {
+        // Connected-sample curve: one polyline through every visible
+        // sample with per-sample vertices in integer device coordinates,
+        // instead of per-column fills. Stems take over below ~2 frames
+        // per column, the envelope above the curve cutoff; the x mapping
+        // matches the stems exactly so the two regimes join seamlessly at
+        // the boundary.
+        const data = s.source.data[c];
+        const xScale = ((timeBase.bpm * 4) / (timeBase.sampleRate * 5)) * pxPerTick * dpr;
+        const xOff = (-timeBase.shift - scrollTick) * pxPerTick * dpr;
+        const fStart = Math.max(0, Math.floor(fromFrame));
+        const fEnd = Math.min(s.source.length, Math.ceil(toFrame));
+        ctx.strokeStyle = outerColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        let started = false;
+        for (let f = fStart; f < fEnd; f++) {
+          const xF = Math.round(f * xScale + xOff);
+          if (xF < 0 || xF >= deviceWidth) continue;
+          const yV = Math.round(midDev - (data[f] / 32768) * halfDev);
+          if (started) ctx.lineTo(xF, yV);
+          else {
+            ctx.moveTo(xF, yV);
+            started = true;
+          }
+        }
+        ctx.stroke();
+      } else {
+        for (let xd = 0; xd < deviceWidth; xd += 1) {
+          // Continuous tick -> sample conversion: floor(t0) would quantize each
+          // column to a whole tick (500 frames at 120 BPM / 48 kHz), which at
+          // sample-level zoom turns every column into a full-tick envelope.
+          const t0 = this.xToTick(xd / dpr, scrollTick, pxPerTick);
+          const t1 = this.xToTick((xd + 1) / dpr, scrollTick, pxPerTick);
+          const f0 = Math.max(0, Math.min(s.source.length, tickToSampleExport(t0, timeBase)));
+          const f1 = Math.max(f0, Math.min(s.source.length, tickToSampleExport(t1, timeBase)));
+          // Outside the source: draw nothing (otherwise the 1px minimum-height
+          // fill paints a fake zero line past the end of the audio).
+          if (f1 <= 0 || f0 >= s.source.length) continue;
+          let min = 32767;
+          let max = -32768;
+          let sumSquares = 0;
+          let buckets = 0;
+          if (sampleLevel) {
+            // Raw per-lane samples: sample-accurate at zooms finer than the
+            // cache (min/max/RMS of this lane's own channel, not the mix).
+            const data = s.source.data[c];
+            for (let f = f0; f < f1; f++) {
+              const v = data[f];
+              if (v < min) min = v;
+              if (v > max) max = v;
+              sumSquares += v * v;
+              buckets += 1;
+            }
+          } else {
+            const b0 = Math.floor(f0 / fpb);
+            const b1 = Math.floor(f1 / fpb);
+            for (let b = b0; b <= Math.min(b1, level.buckets - 1); b++) {
+              min = Math.min(min, minMax[b * 2]);
+              max = Math.max(max, minMax[b * 2 + 1]);
+              sumSquares += rms[b] * rms[b];
+              buckets += 1;
+            }
+          }
+          if (buckets === 0 || min > max) continue;
+          // Integer edges on both layers: fractional fill heights antialias a
+          // soft 1px fringe onto every column, which at mid zoom reads as
+          // blur. Integer-coordinate painting is the classic DAW envelope
+          // look for the same reason.
+          const yTop = Math.round(midDev - (max / 32768) * halfDev);
+          const yBot = Math.round(midDev - (min / 32768) * halfDev);
+          ctx.fillStyle = outerColor;
+          ctx.fillRect(xd, yTop, 1, Math.max(1, yBot - yTop));
+          // RMS band, centered on the zero line, darker inside the envelope.
+          // Hidden unless the RMS layer toggle is on; also hidden at
+          // sample-detail zoom (stems and curve), where it carries no
+          // information.
+          if (s.rmsVisible) {
+            const r = (Math.sqrt(sumSquares / buckets) / 32768) * halfDev;
+            const rTop = Math.round(midDev - r);
+            const rBot = Math.round(midDev + r);
+            ctx.fillStyle = innerColor;
+            ctx.fillRect(xd, rTop, 1, Math.max(1, rBot - rTop));
+          }
+        }
+      }
+      ctx.restore(); // back to the DPR transform for the CSS-px layers below
 
       // Band overlay: envelope polylines for low / mid / high, drawn in the
       // same lane (never a separate track). Marker/selection/playhead stay on
       // top because this block runs before those layers.
       if (bandsOn) {
         const analysis = s.bandAnalysis!;
-        this.drawBandEnvelope(ctx, analysis.low.peaks[c], COLORS.bandLow, 1, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, step);
-        this.drawBandEnvelope(ctx, analysis.mid.peaks[c], COLORS.bandMid, 1, [4, 2], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, step);
-        this.drawBandEnvelope(ctx, analysis.high.peaks[c], COLORS.bandHigh, 1.25, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, step);
+        this.drawBandEnvelope(ctx, analysis.low.peaks[c], COLORS.bandLow, 1, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
+        this.drawBandEnvelope(ctx, analysis.mid.peaks[c], COLORS.bandMid, 1, [4, 2], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
+        this.drawBandEnvelope(ctx, analysis.high.peaks[c], COLORS.bandHigh, 1.25, [], width, mid, half, scrollTick, pxPerTick, timeBase, s.source.length, 1);
       }
     }
 
@@ -277,6 +437,13 @@ export class TimelineView {
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
     ctx.setLineDash(dash);
+    const level0 = peaks.levels[0];
+    const bb = level0.framesPerBucket;
+    // Envelope value at a bucket index (clamped at both ends).
+    const bucketValue = (bucket: number, upper: boolean): number => {
+      const i = Math.max(0, Math.min(level0.buckets - 1, bucket));
+      return upper ? level0.minMax[i * 2 + 1] : level0.minMax[i * 2];
+    };
     for (const upper of [true, false]) {
       ctx.beginPath();
       let drawing = false;
@@ -285,13 +452,30 @@ export class TimelineView {
         const t1 = this.xToTick(x + step, scrollTick, pxPerTick);
         const f0 = tickToSampleExport(Math.floor(t0), timeBase);
         const f1 = tickToSampleExport(Math.max(Math.floor(t0) + 1, Math.ceil(t1)), timeBase);
-        const range = peakRange(peaks, sourceLength, f0, Math.max(f0 + 1, f1));
-        const loud = Math.max(Math.abs(range.min), Math.abs(range.max)) >= BAND_DRAW_MIN_ABS;
+        const covered = Math.max(1, f1 - f0);
+        const fc = (f0 + f1) / 2;
+        let value: number;
+        let loud: boolean;
+        if (covered <= bb) {
+          // Column finer than the cache: linear interpolation between the
+          // surrounding buckets smooths the envelope past the bucket
+          // resolution (the filtered signal itself is not retained).
+          const bf = fc / bb;
+          const b = Math.floor(bf);
+          const frac = bf - b;
+          const v0 = bucketValue(b, upper);
+          const v1 = bucketValue(b + 1, upper);
+          value = v0 + (v1 - v0) * frac;
+          loud = Math.max(Math.abs(v0), Math.abs(v1)) >= BAND_DRAW_MIN_ABS;
+        } else {
+          const range = peakRange(peaks, sourceLength, f0, Math.max(f0 + 1, f1));
+          value = upper ? range.max : range.min;
+          loud = Math.max(Math.abs(range.min), Math.abs(range.max)) >= BAND_DRAW_MIN_ABS;
+        }
         if (!loud) {
           drawing = false;
           continue;
         }
-        const value = upper ? range.max : range.min;
         const y = mid - (value / 32768) * half;
         if (drawing) ctx.lineTo(x, y);
         else {

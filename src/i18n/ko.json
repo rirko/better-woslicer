@@ -132,7 +132,8 @@
     "bmhOk": "확인",
     "bmhDefsTitle": "WAV 정의 정보",
     "bmhFileNameLabel": "파일 이름",
-    "titleVolume": "재생 볼륨"
+    "titleVolume": "재생 볼륨",
+    "titleRms": "RMS 밴드 (피크 내 평균 레벨)"
   },
   "status": {
     "statusEmpty": "비어 있음: WAV/OGG 파일을 놓아 시작",
