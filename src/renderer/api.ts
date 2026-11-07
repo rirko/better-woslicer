@@ -20,10 +20,18 @@ export interface WoslicerApi {
   saveWosDialog(suggestedName: string): Promise<string | null>;
   exportSliceDialog(suggestedName: string): Promise<string | null>;
   exportAllDialog(suggestedDir: string): Promise<string | null>;
+  openMidiDialog(): Promise<string | null>;
+  saveMidiDialog(suggestedName: string): Promise<string | null>;
+  openBmhDialog(): Promise<string | null>;
+  saveBmhDialog(suggestedName: string): Promise<string | null>;
   readAudioFile(path: string): Promise<LoadedAudioInfo>;
   decodeAudioBuffer(name: string, buffer: ArrayBuffer): Promise<LoadedAudioInfo>;
   readWosFile(path: string): Promise<Uint8Array>;
   writeWosFile(path: string, bytes: Uint8Array): Promise<void>;
+  readMidiFile(path: string): Promise<Uint8Array>;
+  writeMidiFile(path: string, bytes: Uint8Array): Promise<void>;
+  readBmhFile(path: string): Promise<Uint8Array>;
+  writeBmhFile(path: string, bytes: Uint8Array): Promise<void>;
   exportSlice(request: {
     filePath: string;
     start: number;

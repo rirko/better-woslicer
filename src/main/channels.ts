@@ -12,10 +12,18 @@ export const CHANNELS = {
   saveWosDialog: "dialog:save-wos",
   exportSliceDialog: "dialog:export-slice",
   exportAllDialog: "dialog:export-all",
+  openMidiDialog: "dialog:open-midi",
+  saveMidiDialog: "dialog:save-midi",
+  openBmhDialog: "dialog:open-bmh",
+  saveBmhDialog: "dialog:save-bmh",
   readAudioFile: "file:read-audio",
   decodeAudioBuffer: "file:decode-audio-buffer",
   readWosFile: "file:read-wos",
   writeWosFile: "file:write-wos",
+  readMidiFile: "file:read-midi",
+  writeMidiFile: "file:write-midi",
+  readBmhFile: "file:read-bmh",
+  writeBmhFile: "file:write-bmh",
   exportSlice: "export:slice",
   exportAll: "export:all",
   writeClipboard: "clipboard:write-bmse",
@@ -34,10 +42,18 @@ export const PRELOADED_API_KEYS = [
   "saveWosDialog",
   "exportSliceDialog",
   "exportAllDialog",
+  "openMidiDialog",
+  "saveMidiDialog",
+  "openBmhDialog",
+  "saveBmhDialog",
   "readAudioFile",
   "decodeAudioBuffer",
   "readWosFile",
   "writeWosFile",
+  "readMidiFile",
+  "writeMidiFile",
+  "readBmhFile",
+  "writeBmhFile",
   "exportSlice",
   "exportAll",
   "writeBmseClipboard",
@@ -53,6 +69,8 @@ export type PreloadedApiKey = (typeof PRELOADED_API_KEYS)[number];
 /** File extensions accepted by the open dialog and the file readers. */
 export const AUDIO_EXTENSIONS = [".wav", ".ogg"] as const;
 export const WOS_EXTENSIONS = [".wos"] as const;
+export const MIDI_EXTENSIONS = [".mid", ".midi", ".smf"] as const;
+export const BMH_EXTENSIONS = [".bmh"] as const;
 
 /** Validation shared by IPC handlers (pure, unit-tested). */
 export function hasAudioExtension(path: string): boolean {
@@ -61,6 +79,14 @@ export function hasAudioExtension(path: string): boolean {
 
 export function hasWosExtension(path: string): boolean {
   return WOS_EXTENSIONS.some((ext) => path.toLowerCase().endsWith(ext));
+}
+
+export function hasMidiExtension(path: string): boolean {
+  return MIDI_EXTENSIONS.some((ext) => path.toLowerCase().endsWith(ext));
+}
+
+export function hasBmhExtension(path: string): boolean {
+  return BMH_EXTENSIONS.some((ext) => path.toLowerCase().endsWith(ext));
 }
 
 /** Payload accepted by export:slice / export:all, with validation rules. */
@@ -137,6 +163,29 @@ export function validateWosFilePath(p: unknown): string {
     throw new Error(`wos path must end in .wos (got ${p})`);
   }
   return p;
+}
+
+function validateExtensionPath(p: unknown, extensions: readonly string[], label: string): string {
+  if (typeof p !== "string" || p.length === 0) {
+    throw new Error(`${label} path must be a non-empty string (got ${String(p)})`);
+  }
+  if (hasForbiddenSegments(p)) {
+    throw new Error(`${label} path contains forbidden path segments: ${p}`);
+  }
+  if (!extensions.some((ext) => p.toLowerCase().endsWith(ext))) {
+    throw new Error(`${label} path must end in ${extensions.join("/")} (got ${p})`);
+  }
+  return p;
+}
+
+/** Path for reading or writing a MIDI file. */
+export function validateMidiFilePath(p: unknown): string {
+  return validateExtensionPath(p, MIDI_EXTENSIONS, "MIDI");
+}
+
+/** Path for reading or writing a BMHelper project file. */
+export function validateBmhFilePath(p: unknown): string {
+  return validateExtensionPath(p, BMH_EXTENSIONS, "bmh");
 }
 
 /** Directory for total export. */

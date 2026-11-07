@@ -102,6 +102,7 @@
         <button class="side-tab active" data-tab="source" data-i18n="tabSource"></button>
         <button class="side-tab" data-tab="cuts" data-i18n="tabCuts"></button>
         <button class="side-tab" data-tab="output" data-i18n="tabOutput"></button>
+        <button class="side-tab" data-tab="bmhelper" data-i18n="tabBmhelper"></button>
       </div>
       <div class="side-body" id="tab-source">
         <div class="kv"><span data-i18n="fileLabel"></span><em id="src-name">&mdash;</em></div>
@@ -153,6 +154,31 @@
         <button id="btn-edge" class="cmd-btn wide" data-i18n-title="titleEdgeDetect" data-i18n="edgeDetect"></button>
         <button id="btn-clear" class="cmd-btn wide danger" data-i18n-title="titleClearMarkers" data-i18n="clearMarkers"></button>
       </div>
+      <div class="side-body hidden" id="tab-bmhelper">
+        <button id="btn-bmh-open" class="cmd-btn wide" data-i18n="bmhOpen"></button>
+        <button id="btn-bmh-open-project" class="cmd-btn wide" data-i18n="bmhOpenProject"></button>
+        <div id="bmh-project" class="hidden">
+          <div class="kv"><span data-i18n="bmhSourceLabel"></span><em id="bmh-source-info">&mdash;</em></div>
+          <button id="btn-bmh-new" class="cmd-btn wide" data-i18n="bmhNewDivision"></button>
+          <ul id="bmh-division-list" class="cut-list"></ul>
+          <div id="bmh-editor" class="hidden">
+            <canvas id="bmh-pianoroll" class="bmh-pianoroll" tabindex="0"></canvas>
+            <canvas id="bmh-defs" class="bmh-defs"></canvas>
+            <button id="btn-bmh-export-midi" class="cmd-btn wide" data-i18n="bmhExportMidi"></button>
+            <button id="btn-bmh-apply" class="cmd-btn wide" data-i18n="bmhApply"></button>
+            <button id="btn-bmh-copy-cuts" class="cmd-btn wide" data-i18n="bmhCopyCuts"></button>
+            <button id="btn-bmh-copy-defs" class="cmd-btn wide" data-i18n="bmhCopyDefs"></button>
+            <button id="btn-bmh-copy-bms" class="cmd-btn wide" data-i18n="bmhCopyBms"></button>
+            <div class="cluster bmh-shift">
+              <button id="btn-bmh-shift-left" class="cmd-btn">&lt;</button>
+              <button id="btn-bmh-shift-right" class="cmd-btn">&gt;</button>
+              <button id="btn-bmh-start-number" class="cmd-btn" data-i18n="bmhStartNumber"></button>
+            </div>
+          </div>
+          <button id="btn-bmh-delete" class="cmd-btn wide danger hidden" data-i18n="bmhDelete"></button>
+          <button id="btn-bmh-save-project" class="cmd-btn wide" data-i18n="bmhSaveProject"></button>
+        </div>
+      </div>
     </aside>
 
     <section id="timeline-area" class="timeline-area">
@@ -192,6 +218,49 @@
         <button id="btn-calibration-finish" class="cmd-btn" data-i18n="finish"></button>
         <button id="btn-calibration-apply" class="cmd-btn primary hidden" data-i18n="apply"></button>
         <button id="btn-calibration-close" class="cmd-btn" data-i18n="close"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bmh-setting-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2 data-i18n="bmhNewDivision"></h2>
+      <div class="kv"><span>MIDI</span><span id="bmh-in-channels" class="mono"></span></div>
+      <label class="check-label"><input id="bmh-in-src-copy" type="checkbox" /> <span data-i18n="bmhSrcCopy"></span></label>
+      <div class="kv"><span data-i18n="bmhNameLabel"></span><input id="bmh-in-name" class="text-input" /></div>
+      <div class="kv"><span data-i18n="bmhHeadMargin"></span><input id="bmh-in-head" class="num-input small" type="number" value="0" /></div>
+      <div class="kv"><span data-i18n="bmhMinInterval"></span><input id="bmh-in-interval" class="num-input small" type="number" value="1" /></div>
+      <div class="kv"><span data-i18n="bmhSortLabel"></span>
+        <select id="bmh-in-sort" class="select">
+          <option value="nn_gate_vel" selected>nn/gate/vel</option>
+          <option value="nn_vel_gate">nn/vel/gate</option>
+          <option value="gate_nn_vel">gate/nn/vel</option>
+          <option value="gate_vel_nn">gate/vel/nn</option>
+          <option value="vel_nn_gate">vel/nn/gate</option>
+          <option value="vel_gate_nn">vel/gate/nn</option>
+        </select>
+      </div>
+      <div class="kv"><span data-i18n="bmhGateThreshold"></span><input id="bmh-in-gate" class="num-input small" type="number" step="0.125" value="0.125" /></div>
+      <div class="kv"><span data-i18n="bmhVelThreshold"></span><input id="bmh-in-vel" class="num-input small" type="number" value="5" /></div>
+      <label class="check-label"><input id="bmh-in-zz" type="checkbox" checked /> <span data-i18n="bmhZzDefinition"></span></label>
+      <label class="check-label"><input id="bmh-in-ml" type="checkbox" checked /> <span data-i18n="bmhMlDefinition"></span></label>
+      <div class="kv"><span data-i18n="bmhStartDefinitionLabel"></span><input id="bmh-in-start" class="num-input small" value="01" /></div>
+      <div class="kv"><span data-i18n="bmhMlThreshold"></span><input id="bmh-in-ml" class="num-input small" type="number" step="0.125" value="0.5" /></div>
+      <div class="modal-actions">
+        <button id="btn-bmh-setting-ok" class="cmd-btn primary" data-i18n="bmhOk"></button>
+        <button id="btn-bmh-setting-cancel" class="cmd-btn" data-i18n="close"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bmh-defs-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2 data-i18n="bmhDefsTitle"></h2>
+      <div class="kv"><span data-i18n="bmhFileNameLabel"></span><input id="bmh-in-filename" class="text-input" /></div>
+      <textarea id="bmh-defs-text" class="bmh-defs-text mono" readonly></textarea>
+      <div class="modal-actions">
+        <button id="btn-bmh-defs-copy" class="cmd-btn primary" data-i18n="copy"></button>
+        <button id="btn-bmh-defs-close" class="cmd-btn" data-i18n="close"></button>
       </div>
     </div>
   </div>

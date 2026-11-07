@@ -18,6 +18,12 @@ const api = {
     ipcRenderer.invoke(CHANNELS.exportSliceDialog, String(suggestedName)),
   exportAllDialog: (suggestedDir: string): Promise<string | null> =>
     ipcRenderer.invoke(CHANNELS.exportAllDialog, String(suggestedDir)),
+  openMidiDialog: (): Promise<string | null> => ipcRenderer.invoke(CHANNELS.openMidiDialog),
+  saveMidiDialog: (suggestedName: string): Promise<string | null> =>
+    ipcRenderer.invoke(CHANNELS.saveMidiDialog, String(suggestedName)),
+  openBmhDialog: (): Promise<string | null> => ipcRenderer.invoke(CHANNELS.openBmhDialog),
+  saveBmhDialog: (suggestedName: string): Promise<string | null> =>
+    ipcRenderer.invoke(CHANNELS.saveBmhDialog, String(suggestedName)),
 
   readAudioFile: (path: string): Promise<ArrayBuffer> =>
     ipcRenderer.invoke(CHANNELS.readAudioFile, path),
@@ -27,6 +33,14 @@ const api = {
     ipcRenderer.invoke(CHANNELS.readWosFile, path),
   writeWosFile: (path: string, bytes: Uint8Array): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.writeWosFile, path, bytes),
+  readMidiFile: (path: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke(CHANNELS.readMidiFile, path),
+  writeMidiFile: (path: string, bytes: Uint8Array): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.writeMidiFile, path, bytes),
+  readBmhFile: (path: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke(CHANNELS.readBmhFile, path),
+  writeBmhFile: (path: string, bytes: Uint8Array): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.writeBmhFile, path, bytes),
 
   exportSlice: (request: unknown): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.exportSlice, request),
