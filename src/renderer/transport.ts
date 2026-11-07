@@ -16,6 +16,8 @@ import { Store } from "./store.js";
 export class Transport {
   private ctx: AudioContext;
   private cue: CueSynth;
+  /** Master playback volume (amp 0..1) for whole-track playback and previews. */
+  private masterGain: GainNode;
   private playBuffer: AudioBuffer | null = null;
   private playNode: AudioBufferSourceNode | null = null;
   /** Last slice-preview node (P / O); tracked so a retrigger restarts it. */
@@ -28,11 +30,18 @@ export class Transport {
 
   constructor(private store: Store) {
     this.ctx = new AudioContext();
+    this.masterGain = this.ctx.createGain();
+    this.masterGain.connect(this.ctx.destination);
     this.cue = new CueSynth(this.ctx);
   }
 
   setCueVolume(v: number): void {
     this.cue.setVolume(v);
+  }
+
+  /** Sets the monitor volume for playback and slice previews (amp 0..1). */
+  setVolume(v: number): void {
+    this.masterGain.gain.value = Math.max(0, Math.min(1, v));
   }
 
   /** Shared AudioContext (tap calibration must use the same audio clock). */
@@ -78,7 +87,7 @@ export class Transport {
     // Monitor rate from the store: it survives pause/stop, so every new node
     // must pick it up (the rate is only applied to whole-track playback).
     node.playbackRate.value = s.playbackRate;
-    node.connect(this.ctx.destination);
+    node.connect(this.masterGain);
     const offsetSamples = s.playheadSample;
     const when = 0;
     node.start(when, offsetSamples / this.playBuffer.sampleRate);
@@ -241,7 +250,7 @@ export class Transport {
     }
     const node = this.ctx.createBufferSource();
     node.buffer = buffer;
-    node.connect(this.ctx.destination);
+    node.connect(this.masterGain);
     node.onended = () => {
       if (this.previewNode === node) {
         this.previewNode = null;

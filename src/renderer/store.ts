@@ -58,6 +58,8 @@ export interface ViewState {
   selectedTicks: number[];
   playing: boolean;
   playheadSample: number;
+  /** Monitor volume for playback and previews (amplitude 0..1). */
+  volume: number;
   /**
    * Monitor playback rate (0.25x .. 1.5x). Persists across pause/stop; never
    * affects marker ticks, slice lengths or exports (those are source-time 1x).
@@ -114,6 +116,7 @@ export class Store {
     selectedTicks: [],
     playing: false,
     playheadSample: 0,
+    volume: 1,
     playbackRate: DEFAULT_PLAYBACK_RATE,
     followPlayhead: true,
     cueMode: "off",

@@ -131,7 +131,8 @@
     "bmhSrcCopy": "元のシーケンスをそのまま使用する",
     "bmhOk": "OK",
     "bmhDefsTitle": "WAV定義情報",
-    "bmhFileNameLabel": "ファイル名"
+    "bmhFileNameLabel": "ファイル名",
+    "titleVolume": "再生音量"
   },
   "status": {
     "statusEmpty": "空：WAV/OGG ファイルをドロップして開始",
@@ -250,7 +251,9 @@
     "bmhOpenFailed": "読み込みに失敗しました：{message}",
     "cutBeyondEnd": "切断位置が音源の末尾を超えています",
     "emptySlice": "この切断位置は音源の末尾です——空スライス",
-    "exportSkippedBeyond": "音源の末尾を超える {count} 個の切断位置をスキップしました"
+    "exportSkippedBeyond": "音源の末尾を超える {count} 個の切断位置をスキップしました",
+    "playbackVolumeDb": "再生音量 {db} dB",
+    "cueVolumeDb": "キュー音量 {db} dB"
   },
   "menu": {
     "file": "ファイル",

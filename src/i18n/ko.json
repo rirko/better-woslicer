@@ -131,7 +131,8 @@
     "bmhSrcCopy": "원본 시퀀스 그대로 사용",
     "bmhOk": "확인",
     "bmhDefsTitle": "WAV 정의 정보",
-    "bmhFileNameLabel": "파일 이름"
+    "bmhFileNameLabel": "파일 이름",
+    "titleVolume": "재생 볼륨"
   },
   "status": {
     "statusEmpty": "비어 있음: WAV/OGG 파일을 놓아 시작",
@@ -250,7 +251,9 @@
     "bmhOpenFailed": "열기 실패: {message}",
     "cutBeyondEnd": "절단 위치가 오디오 끝을 넘습니다",
     "emptySlice": "이 컷은 오디오 끝입니다 — 빈 슬라이스",
-    "exportSkippedBeyond": "오디오 끝을 넘는 절단 위치 {count}개를 건너뛰었습니다"
+    "exportSkippedBeyond": "오디오 끝을 넘는 절단 위치 {count}개를 건너뛰었습니다",
+    "playbackVolumeDb": "재생 볼륨 {db} dB",
+    "cueVolumeDb": "큐 음량 {db} dB"
   },
   "menu": {
     "file": "파일",
