@@ -2,6 +2,12 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
+## 0.2.0 — 2026-11-07
+
+### Added
+
+- Built-in BMHelper: import a key-sound MIDI part, divide it into a recording sequence with WAVE definitions, apply its cut positions to the timeline, and export the recording MIDI, cut positions, BMS sequence and WAV definition list. Based on exclusion's BMHelper (https://excln.github.io/bmhelper.html).
+
 ## 0.1.3 — 2026-11-06
 
 ### Added
