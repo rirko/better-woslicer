@@ -271,6 +271,7 @@ function parseDivisionChunk(chunk: Chunk, sourceNoteCount: number): Division {
     recording: recording.notes,
     definitions,
     src2def: s2df,
+    zzDefinition: true, // session default after a reload (the mode is not serialized)
   };
 }
 

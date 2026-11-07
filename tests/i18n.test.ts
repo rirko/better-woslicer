@@ -142,13 +142,16 @@ test("Japanese strings keep the original woslicerIII terminology", () => {
       `ja ${section}.${key} lost the original term "${term}" (got: ${String(actual)})`
     );
   }
-  // The AI-translation drift must not come back either.
+  // The AI-translation drift must not come back either. 開く stays legitimate
+  // when the BMHelper port opens a PROJECT file with the original's own
+  // wording (プロジェクトを開く); only the audio-open drift is banned.
   for (const banned of ["マーカー", "書き出し", "開く"]) {
     const occurrences: string[] = [];
     for (const [section, data] of Object.entries(DATA.ja)) {
       if (section === "scopeRange") continue;
-      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-        if (typeof value === "string" && value.includes(banned)) occurrences.push(`${section}.${key}`);
+      for (const [key, raw] of Object.entries(data as Record<string, unknown>)) {
+        const value = typeof raw === "string" ? raw.replace(/プロジェクトを開く/g, "") : null;
+        if (value !== null && value.includes(banned)) occurrences.push(`${section}.${key}`);
       }
     }
     assert.deepEqual(occurrences, [], `ja still carries the drifted term "${banned}" in: ${occurrences.join(", ")}`);

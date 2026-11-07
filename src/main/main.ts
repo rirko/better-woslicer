@@ -19,6 +19,8 @@ import {
   validateExportRequest,
   validateWavOutputPath,
   validateWosFilePath,
+  validateMidiFilePath,
+  validateBmhFilePath,
 } from "./channels.js";
 import { encodeWav16 } from "../core/wav.js";
 import { renderSlice } from "../core/slicer.js";
@@ -272,6 +274,74 @@ function registerIpcHandlers(): void {
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
+  });
+
+  ipcMain.handle(CHANNELS.openMidiDialog, async () => {
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: DIALOG_STRINGS[uiLanguage].loadMidi,
+      filters: [{ name: DIALOG_STRINGS[uiLanguage].filterMidi, extensions: ["mid", "midi", "smf"] }],
+      properties: ["openFile"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle(CHANNELS.saveMidiDialog, async (_event, suggestedName: unknown) => {
+    if (!mainWindow) return null;
+    const name = typeof suggestedName === "string" && suggestedName.trim() ? suggestedName : "recording.mid";
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: DIALOG_STRINGS[uiLanguage].saveMidi,
+      defaultPath: name,
+      filters: [{ name: DIALOG_STRINGS[uiLanguage].filterMidi, extensions: ["mid"] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    return result.filePath;
+  });
+
+  ipcMain.handle(CHANNELS.openBmhDialog, async () => {
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: DIALOG_STRINGS[uiLanguage].loadProject,
+      filters: [{ name: DIALOG_STRINGS[uiLanguage].filterBmh, extensions: ["bmh"] }],
+      properties: ["openFile"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle(CHANNELS.saveBmhDialog, async (_event, suggestedName: unknown) => {
+    if (!mainWindow) return null;
+    const name = typeof suggestedName === "string" && suggestedName.trim() ? suggestedName : "project.bmh";
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: DIALOG_STRINGS[uiLanguage].saveProject,
+      defaultPath: name.endsWith(".bmh") ? name : name + ".bmh",
+      filters: [{ name: DIALOG_STRINGS[uiLanguage].filterBmh, extensions: ["bmh"] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    return result.filePath;
+  });
+
+  ipcMain.handle(CHANNELS.readMidiFile, async (_event, filePath: unknown) => {
+    const safePath = path.resolve(validateMidiFilePath(filePath));
+    return fs.readFile(safePath);
+  });
+
+  ipcMain.handle(CHANNELS.writeMidiFile, async (_event, filePath: unknown, bytes: unknown) => {
+    const safePath = path.resolve(validateMidiFilePath(filePath));
+    if (!(bytes instanceof Uint8Array)) throw new Error("MIDI payload must be a Uint8Array");
+    await fs.writeFile(safePath, bytes);
+  });
+
+  ipcMain.handle(CHANNELS.readBmhFile, async (_event, filePath: unknown) => {
+    const safePath = path.resolve(validateBmhFilePath(filePath));
+    return fs.readFile(safePath);
+  });
+
+  ipcMain.handle(CHANNELS.writeBmhFile, async (_event, filePath: unknown, bytes: unknown) => {
+    const safePath = path.resolve(validateBmhFilePath(filePath));
+    if (!(bytes instanceof Uint8Array)) throw new Error("project payload must be a Uint8Array");
+    await fs.writeFile(safePath, bytes);
   });
 
   ipcMain.handle(CHANNELS.readAudioFile, (_event, filePath: unknown) => loadAudioFile(filePath));

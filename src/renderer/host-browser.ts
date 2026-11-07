@@ -24,6 +24,8 @@ import type { LoadedAudioInfo, WoslicerApi } from "./api.js";
 /** Cached picked files, keyed by the synthetic path returned by the dialogs. */
 const pickedAudio = new Map<string, File>();
 const pickedWos = new Map<string, File>();
+const pickedMidi = new Map<string, File>();
+const pickedBmh = new Map<string, File>();
 /** Save targets created by the *Dialog calls, keyed by the returned path. */
 const saveTargets = new Map<string, { handle: FileSystemFileHandle } | { downloadName: string }>();
 /** The decoded source, mirroring the Electron main process's currentSource. */
@@ -160,6 +162,28 @@ export const browserHost: WoslicerApi = {
     return `picked:${file.name}`;
   },
 
+  async openMidiDialog() {
+    const file = await pickFile(".mid,.midi,.smf");
+    if (!file) return null;
+    pickedMidi.set(`picked:${file.name}`, file);
+    return `picked:${file.name}`;
+  },
+
+  async openBmhDialog() {
+    const file = await pickFile(".bmh");
+    if (!file) return null;
+    pickedBmh.set(`picked:${file.name}`, file);
+    return `picked:${file.name}`;
+  },
+
+  async saveMidiDialog(suggestedName: string) {
+    return saveTarget(suggestedName);
+  },
+
+  async saveBmhDialog(suggestedName: string) {
+    return saveTarget(suggestedName);
+  },
+
   async saveWosDialog(suggestedName: string) {
     return saveTarget(suggestedName);
   },
@@ -192,6 +216,26 @@ export const browserHost: WoslicerApi = {
   },
 
   async writeWosFile(path: string, bytes: Uint8Array) {
+    await writeFileBytes(path, bytes);
+  },
+
+  async readMidiFile(path: string) {
+    const file = pickedMidi.get(path);
+    if (!file) throw new Error(`no picked MIDI file for ${path}`);
+    return new Uint8Array(await file.arrayBuffer());
+  },
+
+  async writeMidiFile(path: string, bytes: Uint8Array) {
+    await writeFileBytes(path, bytes);
+  },
+
+  async readBmhFile(path: string) {
+    const file = pickedBmh.get(path);
+    if (!file) throw new Error(`no picked .bmh file for ${path}`);
+    return new Uint8Array(await file.arrayBuffer());
+  },
+
+  async writeBmhFile(path: string, bytes: Uint8Array) {
     await writeFileBytes(path, bytes);
   },
 
