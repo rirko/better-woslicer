@@ -247,7 +247,10 @@
     "bmhTrackNoNotes": "選択したトラックにノートがありません",
     "bmhProjectOpened": "プロジェクトを開きました：{file}",
     "bmhProjectSaved": "プロジェクトを保存しました：{file}",
-    "bmhOpenFailed": "読み込みに失敗しました：{message}"
+    "bmhOpenFailed": "読み込みに失敗しました：{message}",
+    "cutBeyondEnd": "切断位置が音源の末尾を超えています",
+    "emptySlice": "この切断位置は音源の末尾です——空スライス",
+    "exportSkippedBeyond": "音源の末尾を超える {count} 個の切断位置をスキップしました"
   },
   "menu": {
     "file": "ファイル",

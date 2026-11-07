@@ -419,11 +419,12 @@ function registerIpcHandlers(): void {
     const parsed = parseExportAllRequest(request);
     const src = requireSource();
     const written: string[] = [];
-    for (const file of renderSliceFiles(asSource(src), parsed)) {
+    const { files, skipped } = renderSliceFiles(asSource(src), parsed);
+    for (const file of files) {
       await fs.writeFile(path.join(parsed.dirPath, file.name), file.data);
       written.push(file.name);
     }
-    return { written };
+    return { written, skipped };
   });
 
   // BMSE clipboard: the exact custom format name carries the raw payload

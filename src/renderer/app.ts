@@ -736,7 +736,14 @@ async function exportAll(): Promise<void> {
       noisegateDb: effectiveNoisegate(),
       markers: ticks,
     });
-    setStatus("exportedSlicesTo", { count: result.written.length, directory: dir });
+    if (result.skipped > 0) {
+      store.setStatus([
+        { key: "exportedSlicesTo", params: { count: result.written.length, directory: dir } },
+        { key: "exportSkippedBeyond", params: { count: result.skipped } },
+      ]);
+    } else {
+      setStatus("exportedSlicesTo", { count: result.written.length, directory: dir });
+    }
   } catch (err) {
     const message = errorMessage(err);
     setStatus(
@@ -803,12 +810,17 @@ async function bmseIn(): Promise<void> {
   try {
     const text = await api().readBmseClipboard();
     const parsed = parseBmseClipboard(text);
-    store.state.doc.setTicks(parsed.ticks);
-    store.setStatus(
+    // Cuts beyond the end of the audio are illegal: skipped on import.
+    const legal = parsed.ticks.filter((t) => !tickBeyondEnd(t));
+    store.state.doc.setTicks(legal);
+    const segments: StatusSegment[] = [
       parsed.invalidLines.length
-        ? { key: "bmseClipboardImportedSkipped", params: { count: parsed.ticks.length, skipped: parsed.invalidLines.length } }
-        : { key: "bmseClipboardImported", params: { count: parsed.ticks.length } }
-    );
+        ? { key: "bmseClipboardImportedSkipped", params: { count: legal.length, skipped: parsed.invalidLines.length } }
+        : { key: "bmseClipboardImported", params: { count: legal.length } },
+    ];
+    const droppedBeyond = parsed.ticks.length - legal.length;
+    if (droppedBeyond > 0) segments.push({ key: "exportSkippedBeyond", params: { count: droppedBeyond } });
+    store.setStatus(segments);
     redraw();
   } catch (err) {
     setStatus("bmseReadFailed", { message: errorMessage(err) }, true);
@@ -827,6 +839,10 @@ const actions: KeyActions = {
     void loadWos();
   },
   toggleMarkerAtCursor(): void {
+    if (tickBeyondEnd(store.state.cursorTick)) {
+      store.setStatus("cutBeyondEnd", undefined, true);
+      return;
+    }
     if (store.state.doc.toggleMarker(store.state.cursorTick)) {
       store.setStatus("markerToggledAtTick", { tick: store.state.cursorTick });
     }
@@ -859,6 +875,11 @@ const actions: KeyActions = {
       return;
     }
     const target = store.state.cursorTick;
+    // Cuts beyond the end of the audio are illegal: reject the whole paste.
+    if (doc.selectionClipboard.some((offset) => tickBeyondEnd(target + offset))) {
+      store.setStatus("cutBeyondEnd", undefined, true);
+      return;
+    }
     const pasted = doc.pasteSelection(target);
     if (!pasted) {
       store.setStatus("pasteRejected", { tick: target, reason: doc.pasteRejectReason(target) }, true);
@@ -914,6 +935,10 @@ const actions: KeyActions = {
       ? sampleToTickNearest(Math.max(0, transport.currentSample() - compensation), base)
       : s.cursorTick;
     const tick = resolveBreakpointTick(rawTick, s.snap, gridStepTicks(s.grid), bypassSnap);
+    if (tickBeyondEnd(tick)) {
+      store.setStatus("cutBeyondEnd", undefined, true);
+      return;
+    }
     if (transport.isPlaying()) store.update({ cursorTick: tick });
     // Stopped: the cursor follows the resolved tick too, so it keeps pointing
     // at the marker when snapping moved it off the raw cursor position.
@@ -970,6 +995,15 @@ const actions: KeyActions = {
     store.setStatus("ffNumberingRule", { state: next ? "on" : "off" });
   },
   shiftAll(delta: number): void {
+    // A rightward shift that would push a cut beyond the audio end is illegal.
+    if (delta > 0 && store.state.source) {
+      const ticks = markerTicks(store.state.doc.markers);
+      const maxTick = ticks.length ? ticks[ticks.length - 1] : -1;
+      if (maxTick >= 0 && tickBeyondEnd(maxTick + delta)) {
+        store.setStatus("cutBeyondEnd", undefined, true);
+        return;
+      }
+    }
     if (store.state.doc.shiftAll(delta)) {
       store.setStatus("shiftedAllMarkers", { count: delta });
     }
@@ -991,7 +1025,7 @@ const actions: KeyActions = {
       ...new Set(
         s.selectedTicks
           .map((t) => Math.max(0, Math.min(MAX_TICKS - 1, Math.round(t / cell) * cell)))
-          .filter((t) => s.doc.markers[t] === 1)
+          .filter((t) => s.doc.markers[t] === 1 && !tickBeyondEnd(t))
       ),
     ];
     store.update({ selectedTicks: snapped });
@@ -1064,6 +1098,16 @@ function parseBmhStart(text: string): number {
   const value = digits.indexOf(trimmed[0].toUpperCase()) * 36 + digits.indexOf(trimmed[1].toUpperCase());
   if (value < 0 || value > 1295) throw new RangeError(`invalid definition id: ${text}`);
   return value;
+}
+
+/** Cuts beyond the end of the audio are illegal (a confirmed defect of the original). */
+function tickBeyondEnd(tick: number): boolean {
+  const s = store.state;
+  if (!s.source) return false;
+  return (
+    tickToSampleExport(tick, { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: s.source.sampleRate }) >
+    s.source.length
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -1566,7 +1610,7 @@ function wireDom(): void {
     let dropped = 0;
     for (const note of division.recording) {
       const tick = Math.trunc((note.position * 48) / division.quantize);
-      if (tick >= 0 && tick < BMH_MAX_TICKS) {
+      if (tick >= 0 && tick < BMH_MAX_TICKS && !tickBeyondEnd(tick)) {
         bitmap[tick] = 1;
         applied += 1;
       } else {

@@ -47,7 +47,7 @@ export interface WoslicerApi {
     fadeoutMs: number;
     noisegateDb: number;
     markers: number[];
-  }): Promise<{ written: string[] }>;
+  }): Promise<{ written: string[]; skipped: number }>;
   writeBmseClipboard(text: string): Promise<void>;
   readBmseClipboard(): Promise<string>;
   /** Mirrors the UI language into the main process (native menu labels). */

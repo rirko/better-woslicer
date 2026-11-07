@@ -23,18 +23,28 @@ export interface SliceFile {
   data: Uint8Array;
 }
 
-/** Renders every requested slice into an in-memory WAV file. */
-export function renderSliceFiles(source: SourceAudio, request: SliceFileRequest): SliceFile[] {
+export interface SliceExport {
+  files: SliceFile[];
+  /** Cut marks beyond the end of the source: illegal, skipped (counted). */
+  skipped: number;
+}
+
+/**
+ * Renders every requested slice into an in-memory WAV file. Cut marks beyond
+ * the end of the source are illegal (a confirmed defect of the original
+ * tool) and are skipped; a cut exactly at the end of the source is legal and
+ * renders a zero-duration WAV, keeping the cut-to-file numbering 1:1.
+ */
+export function renderSliceFiles(source: SourceAudio, request: SliceFileRequest): SliceExport {
   const base: TimeBase = { bpm: request.bpm, shift: request.shift, sampleRate: source.sampleRate };
   const sorted = [...request.markers].sort((a, b) => a - b);
   const files: SliceFile[] = [];
+  let skipped = 0;
   for (let i = 0; i < sorted.length; i++) {
     const startSample = tickToSampleExport(sorted[i], base);
     if (startSample > source.length) {
-      // Original DoPrev: "元waveファイルの参照外です。" (start out of range).
-      throw new Error(
-        `slice ${i} (tick ${sorted[i]}) starts at sample ${startSample}, beyond the end of the source (${source.length} frames)`
-      );
+      skipped += 1;
+      continue;
     }
     const endSample = i + 1 < sorted.length ? tickToSampleExport(sorted[i + 1], base) : source.length;
     const rendered = renderSlice(source, {
@@ -48,5 +58,5 @@ export function renderSliceFiles(source: SourceAudio, request: SliceFileRequest)
       data: encodeWav16(rendered.channelsData, rendered.sampleRate, rendered.length),
     });
   }
-  return files;
+  return { files, skipped };
 }

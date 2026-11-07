@@ -153,27 +153,34 @@ test("fadeout > 0 appends a decaying sustain tail read past the cut", () => {
   assert.equal(ch[end - start + T - 100], 0);
 });
 
-test("fadeout > 0 at source end folds back with phase inversion (sustain ping-pong)", () => {
-  // end == source length: the first tail read hits srcLength, forcing the
-  // original's foldback: dir=-1, readPos moves back by 2, one zero frame is
-  // skipped, and subsequent frames are read BACKWARD and INVERTED.
-  const value = 1000;
-  const data = new Int16Array(9600).fill(value);
+test("a cut at the end of the source renders an empty (zero-duration) slice", () => {
+  // The original fabricated a reversed echo here (a confirmed defect); the
+  // fixed semantics produce a clean zero-duration slice, which encodes as a
+  // valid 44-byte header-only WAV.
+  const data = new Int16Array(9600).fill(1000);
   const src: SourceAudio = { sampleRate: 48000, channels: 1, length: 9600, data: [data] };
-  const end = 9600;
-  const start = 0;
-  const T = Math.trunc((48000 * 250) / 1000); // 12000
-  const rendered = renderSlice(src, { start, end, fadeoutMs: 250, noisegateDb: 0 });
+  const rendered = renderSlice(src, { start: 9600, end: 9600, fadeoutMs: 250, noisegateDb: 0 });
+  assert.equal(rendered.length, 0);
+  assert.equal(rendered.channelsData[0].length, 0);
+  const bytes = encodeWav16(rendered.channelsData, rendered.sampleRate, rendered.length);
+  assert.equal(bytes.byteLength, 44);
+  assert.equal(bytes[0], 0x52); // 'R'
+});
+
+test("a tail overrunning the source end stops at the material (no fabricated echo)", () => {
+  // end == source length with a long fadeout: the tail wants 12000 frames
+  // but no material exists past the end. The fixed tail simply stops
+  // producing audio there (no foldback, no phase-inverted echo); the
+  // trailing silence is Cut(dB=0)-truncated at the last non-zero frame.
+  const data = new Int16Array(9600).fill(1000);
+  const src: SourceAudio = { sampleRate: 48000, channels: 1, length: 9600, data: [data] };
+  const rendered = renderSlice(src, { start: 0, end: 9600, fadeoutMs: 250, noisegateDb: 0 });
+  // Cut(dB=0) truncates at lastLoud (exclusive length = lastLoud + 0).
+  assert.equal(rendered.length, 9599);
   const ch = rendered.channelsData[0];
-  // Tail slot 0 is the skipped zero frame (foldback "skip write").
-  assert.equal(ch[end - start], 0);
-  // Tail slot 1: outPos = end+1 -> envelope index (T-1); readPos = end-2 read
-  // backward (dir=-1): inverted copy.
-  const g1 = Math.trunc(value * Math.sin(Math.fround(Math.trunc(((T - 1) * 90) / T) * 0.017453333362936974)));
-  assert.equal(ch[end - start + 1], Math.trunc(g1 * -1));
-  // Tail slot 2: outPos = end+2 -> envelope index (T-2); readPos = end-3.
-  const g2 = Math.trunc(value * Math.sin(Math.fround(Math.trunc(((T - 2) * 90) / T) * 0.017453333362936974)));
-  assert.equal(ch[end - start + 2], Math.trunc(g2 * -1));
+  // The inverted echo would show up as negative frames: none may exist.
+  assert.ok(!Array.from(ch).some((v) => v < 0), "no phase-inverted echo frames");
+  assert.equal(ch[9598], 1000);
 });
 
 test("encodeWav16 reproduces the original 32678 overflow guard and header", () => {

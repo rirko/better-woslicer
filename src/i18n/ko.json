@@ -247,7 +247,10 @@
     "bmhTrackNoNotes": "선택한 트랙에 노트가 없습니다",
     "bmhProjectOpened": "프로젝트 열림: {file}",
     "bmhProjectSaved": "프로젝트 저장됨: {file}",
-    "bmhOpenFailed": "열기 실패: {message}"
+    "bmhOpenFailed": "열기 실패: {message}",
+    "cutBeyondEnd": "절단 위치가 오디오 끝을 넘습니다",
+    "emptySlice": "이 컷은 오디오 끝입니다 — 빈 슬라이스",
+    "exportSkippedBeyond": "오디오 끝을 넘는 절단 위치 {count}개를 건너뛰었습니다"
   },
   "menu": {
     "file": "파일",
