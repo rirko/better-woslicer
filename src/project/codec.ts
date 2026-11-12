@@ -3,7 +3,7 @@ import {
   PROJECT_FILE_MAX_BYTES, PROJECT_FORMAT, PROJECT_MAX_CLIPS, PROJECT_MAX_FRAMES,
   PROJECT_MAX_GAIN_DB, PROJECT_MAX_MARKERS, PROJECT_MAX_MEDIA, PROJECT_MAX_TRACKS,
   PROJECT_MIN_GAIN_DB, PROJECT_SCHEMA_VERSION,
-  type MediaAsset, type ProjectCapability, type ProjectDocument, type ProjectFileV1, type ProjectParseResult,
+  type MediaAsset, type ProjectCapability, type ProjectDecodeResult, type ProjectDocument, type ProjectFileV1, type ProjectParseResult,
 } from './schema';
 
 export class ProjectFormatError extends Error {
@@ -41,6 +41,13 @@ function choice<const T extends readonly string[]>(value: unknown, label: string
   if (typeof value !== 'string' || !choices.includes(value)) throw new ProjectFormatError(`${label} is unsupported`);
   return value as T[number];
 }
+const UNKNOWN_FIELD_LIMIT = 16;
+function extraFields(item: Record<string, unknown>, known: readonly string[]): string[] {
+  return Object.keys(item).filter(key => !known.includes(key));
+}
+const MEDIA_KEYS = ['mediaId', 'format', 'name', 'byteLength', 'sampleRateHz', 'channels', 'framesPerChannel', 'integrity', 'originHint'] as const;
+const TRACK_KEYS = ['trackId', 'name', 'gainDb', 'muted', 'solo', 'views', 'clips'] as const;
+const CLIP_KEYS = ['clipId', 'mediaId', 'timelineStartSeconds', 'sourceOffsetFrames', 'frameCount'] as const;
 function viewOverride(value: unknown, label: string): ProjectFileV1['tracks'][number]['views'] {
   const item = record(value, label);
   const override = (raw: unknown, key: string): boolean | null => raw === null ? null : bool(raw, `${label}.${key}`);
@@ -61,17 +68,29 @@ export function projectCapability(project: ProjectDocument): ProjectCapability {
 }
 
 export function parseProject(input: unknown): ProjectParseResult {
+  const unknownFields: string[] = [];
+  const noteUnknown = (item: Record<string, unknown>, known: readonly string[], prefix: string): void => {
+    for (const key of extraFields(item, known)) if (unknownFields.length < UNKNOWN_FIELD_LIMIT) unknownFields.push(prefix ? `${prefix}.${key}` : key);
+  };
   const root = record(input, 'Project');
+  noteUnknown(root, ['format', 'schemaVersion', 'projectId', 'name', 'timing', 'slicing', 'output', 'global', 'media', 'tracks', 'bmhelper'], '');
   if (root.format !== PROJECT_FORMAT) throw new ProjectFormatError('Not a wosdx project');
   const version = integer(root.schemaVersion, 'schemaVersion', 1, 1_000_000);
   if (version !== PROJECT_SCHEMA_VERSION) return { kind: 'unsupported-version', version, raw: input };
   const timingInput = record(root.timing, 'timing');
+  noteUnknown(timingInput, ['bpm', 'shiftTicks'], 'timing');
   const slicingInput = record(root.slicing, 'slicing');
+  noteUnknown(slicingInput, ['fadeoutMs', 'noisegateDb', 'noisegateEnabled', 'markers', 'bandDetection'], 'slicing');
   const outputInput = record(root.output, 'output');
+  noteUnknown(outputInput, ['baseName', 'clipStartNumber', 'useFfNumbering'], 'output');
   const globalInput = record(root.global, 'global');
+  noteUnknown(globalInput, ['masterGainDb', 'masterMuted', 'cueGainDb', 'cueMode', 'playbackRate', 'views'], 'global');
   const globalViewsInput = record(globalInput.views, 'global.views');
+  noteUnknown(globalViewsInput, ['rms', 'bands', 'spectrum'], 'global.views');
   const detectionInput = record(slicingInput.bandDetection, 'slicing.bandDetection');
+  noteUnknown(detectionInput, ['bands', 'thresholdDb', 'minGapUnits', 'snap'], 'slicing.bandDetection');
   const detectionBandsInput = record(detectionInput.bands, 'slicing.bandDetection.bands');
+  noteUnknown(detectionBandsInput, ['low', 'mid', 'high'], 'slicing.bandDetection.bands');
   if (!Array.isArray(root.media) || root.media.length > PROJECT_MAX_MEDIA) throw new ProjectFormatError('media collection exceeds its limit');
   if (!Array.isArray(root.tracks) || root.tracks.length === 0 || root.tracks.length > PROJECT_MAX_TRACKS) throw new ProjectFormatError('tracks collection is outside its supported range');
 
@@ -79,6 +98,7 @@ export function parseProject(input: unknown): ProjectParseResult {
   const addId = (id: string, label: string) => { if (ids.has(id)) throw new ProjectFormatError(`duplicate ${label} id: ${id}`); ids.add(id); };
   const media: MediaAsset[] = root.media.map((raw, index) => {
     const item = record(raw, `media[${index}]`);
+    noteUnknown(item, MEDIA_KEYS, `media[${index}]`);
     const mediaId = string(item.mediaId, `media[${index}].mediaId`, 128); addId(mediaId, 'media');
     const format = choice(item.format, `media[${index}].format`, ['wav', 'ogg'] as const);
     const name = string(item.name, `media[${index}].name`, 1024);
@@ -89,6 +109,7 @@ export function parseProject(input: unknown): ProjectParseResult {
     let originHint: MediaAsset['originHint'] = null;
     if (item.originHint !== null) {
       const hint = record(item.originHint, `media[${index}].originHint`);
+      noteUnknown(hint, ['kind', 'pathHint', 'name', 'relativePathHint', 'lastModified'], `media[${index}].originHint`);
       if (hint.kind === 'desktop') originHint = { kind: 'desktop', pathHint: string(hint.pathHint, `media[${index}].originHint.pathHint`) };
       else if (hint.kind === 'browser') {
         const relativePathHint = hint.relativePathHint === undefined ? undefined : string(hint.relativePathHint, `media[${index}].originHint.relativePathHint`);
@@ -99,6 +120,7 @@ export function parseProject(input: unknown): ProjectParseResult {
     let integrity: MediaAsset['integrity'] = null;
     if (item.integrity !== null) {
       const digest = record(item.integrity, `media[${index}].integrity`);
+      noteUnknown(digest, ['algorithm', 'digest'], `media[${index}].integrity`);
       if (digest.algorithm !== 'sha256' || typeof digest.digest !== 'string' || !/^[0-9a-f]{64}$/i.test(digest.digest)) throw new ProjectFormatError(`media[${index}].integrity is invalid`);
       integrity = { algorithm: 'sha256', digest: digest.digest.toLowerCase() };
     }
@@ -108,12 +130,16 @@ export function parseProject(input: unknown): ProjectParseResult {
   let totalClips = 0;
   const tracks: ProjectFileV1['tracks'] = root.tracks.map((raw, trackIndex) => {
     const item = record(raw, `tracks[${trackIndex}]`);
+    noteUnknown(item, TRACK_KEYS, `tracks[${trackIndex}]`);
     const trackId = string(item.trackId, `tracks[${trackIndex}].trackId`, 128); addId(trackId, 'track');
+    const trackViewsInput = record(item.views, `tracks[${trackIndex}].views`);
+    noteUnknown(trackViewsInput, ['rms', 'bands', 'spectrum'], `tracks[${trackIndex}].views`);
     if (!Array.isArray(item.clips)) throw new ProjectFormatError(`tracks[${trackIndex}].clips must be an array`);
     totalClips += item.clips.length;
     if (totalClips > PROJECT_MAX_CLIPS) throw new ProjectFormatError('clip collection exceeds its limit');
     const clips = item.clips.map((clipRaw, clipIndex) => {
       const clip = record(clipRaw, `tracks[${trackIndex}].clips[${clipIndex}]`);
+      noteUnknown(clip, CLIP_KEYS, `tracks[${trackIndex}].clips[${clipIndex}]`);
       const clipId = string(clip.clipId, `tracks[${trackIndex}].clips[${clipIndex}].clipId`, 128); addId(clipId, 'clip');
       const mediaId = string(clip.mediaId, `tracks[${trackIndex}].clips[${clipIndex}].mediaId`, 128);
       const asset = mediaById.get(mediaId);
@@ -129,7 +155,7 @@ export function parseProject(input: unknown): ProjectParseResult {
       gainDb: finite(item.gainDb, `tracks[${trackIndex}].gainDb`, PROJECT_MIN_GAIN_DB, PROJECT_MAX_GAIN_DB),
       muted: bool(item.muted, `tracks[${trackIndex}].muted`),
       solo: bool(item.solo, `tracks[${trackIndex}].solo`),
-      views: viewOverride(item.views, `tracks[${trackIndex}].views`), clips,
+      views: viewOverride(trackViewsInput, `tracks[${trackIndex}].views`), clips,
     };
   });
   const globalViews = {
@@ -147,6 +173,7 @@ export function parseProject(input: unknown): ProjectParseResult {
   let bmhelper: ProjectFileV1['bmhelper'] = null;
   if (bmhelperRaw !== null) {
     const data = record(bmhelperRaw, 'bmhelper');
+    noteUnknown(data, ['format', 'bytesBase64'], 'bmhelper');
     if (data.format !== 'bmh' || typeof data.bytesBase64 !== 'string' || data.bytesBase64.length > 32 * 1024 * 1024 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data.bytesBase64)) throw new ProjectFormatError('bmhelper data is invalid');
     bmhelper = { format: 'bmh', bytesBase64: data.bytesBase64 };
   }
@@ -175,9 +202,10 @@ export function parseProject(input: unknown): ProjectParseResult {
     },
     media, tracks, bmhelper,
   };
-  return { kind: 'supported', project, capability: projectCapability(project) };
+  return { kind: 'supported', project, capability: projectCapability(project), unknownFields };
 }
 
+/** Encodes known, normalized v1 fields; use sourceBytes to preserve an unchanged file. */
 export function encodeProject(value: ProjectDocument): Uint8Array {
   const normalized = parseProject(value);
   if (normalized.kind !== 'supported') throw new ProjectFormatError('unsupported project schema cannot be written');
@@ -185,12 +213,14 @@ export function encodeProject(value: ProjectDocument): Uint8Array {
   if (bytes.byteLength > PROJECT_FILE_MAX_BYTES) throw new ProjectFormatError('project exceeds the 16 MiB limit');
   return bytes;
 }
-export function decodeProject(bytes: Uint8Array): ProjectParseResult {
+export function decodeProject(bytes: Uint8Array): ProjectDecodeResult {
   if (bytes.byteLength > PROJECT_FILE_MAX_BYTES) throw new ProjectFormatError('project exceeds the 16 MiB limit');
   let value: unknown;
   try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch (error) { throw new ProjectFormatError(`project JSON is invalid: ${error instanceof Error ? error.message : String(error)}`); }
-  return parseProject(value);
+  const parsed = parseProject(value);
+  // Construct a Uint8Array explicitly: Buffer.slice() would alias the caller's input.
+  return { ...parsed, sourceBytes: new Uint8Array(bytes) };
 }
 
 export interface SingleTrackProjectInput {

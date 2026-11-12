@@ -14,17 +14,20 @@ interface CommandOptions {
   onClose(): void | Promise<void>;
   onAbout(): void | Promise<void>;
   onOpenProject?(): void | Promise<void>;
+  onNewProjectFromWos?(): void | Promise<void>;
 }
 
-export function createCommands({ editor, workspace, playback, onClose, onAbout, onOpenProject = () => workspace.openProject() }: CommandOptions) {
+export function createCommands({ editor, workspace, playback, onClose, onAbout, onOpenProject = () => workspace.openProject(), onNewProjectFromWos = () => workspace.newProjectFromWos() }: CommandOptions) {
   const { actions } = workspace;
   async function execute(command: AppCommand): Promise<void> {
     switch (command) {
       case 'open-project': await onOpenProject(); return;
+      case 'new-project-wos': await onNewProjectFromWos(); return;
       case 'save-project': return workspace.saveProject();
       case 'relink-audio': return workspace.relinkAudio();
       case 'open-audio': return workspace.openAudio();
-      case 'import-wos': return workspace.loadWos();
+      case 'import-wos': return workspace.importWosSettings();
+      case 'import-legacy': return workspace.importLegacyRecovery();
       case 'export-wos': return workspace.saveWos();
       case 'export-slice': await workspace.exportSlice(); return;
       case 'export-all': await workspace.exportAll(); return;

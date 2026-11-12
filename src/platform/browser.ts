@@ -169,6 +169,7 @@ export function createBrowserPlatform(): Platform {
       localStorage.setItem(SESSION_KEY, value);
     },
     async clearSession() { localStorage.removeItem(SESSION_KEY); },
+    async importLegacySession() { return importBrowserLegacySession(); },
     async setTheme(mode) { document.documentElement.style.colorScheme = mode; },
   };
 }

@@ -129,13 +129,10 @@ impl HostFiles {
         files.references.insert(reference.clone(), path);
         let json = serde_json::to_vec(&files.references).map_err(message)?;
         super::session::atomic_write(&self.grants_path, &json)?;
-        // Concurrent chunked reads of other references must survive a new open;
-        // each transfer closes its own reader when it finishes.
-        self.insert_reader(&mut files, reference, file)?;
         Ok(descriptor)
     }
     fn reopen(&self, reference: &str) -> Result<OpenedFile, String> {
-        let mut files = self.inner.lock().expect("file state lock poisoned");
+        let files = self.inner.lock().expect("file state lock poisoned");
         let path = files
             .references
             .get(reference)
@@ -143,24 +140,25 @@ impl HostFiles {
         if path.canonicalize().map_err(message)? != *path {
             return Err("the selected file was redirected; select it again".into());
         }
-        let file = File::open(path).map_err(message)?;
-        let descriptor = descriptor(path, reference, &file)?;
-        self.insert_reader(&mut files, reference.into(), file)?;
-        Ok(descriptor)
+        descriptor(path, reference, &File::open(path).map_err(message)?)
     }
-    fn insert_reader(
-        &self,
-        files: &mut Files,
-        reference: String,
-        file: File,
-    ) -> Result<(), String> {
-        if !files.readers.contains_key(&reference) && files.readers.len() >= MAX_OPEN_READERS {
+    /// Opens one independent transfer reader per call; concurrent transfers of
+    /// the same reference keep their own handles and seek positions.
+    fn begin_read(&self, reference: &str) -> Result<String, String> {
+        let mut files = self.inner.lock().expect("file state lock poisoned");
+        let path = files
+            .references
+            .get(reference)
+            .ok_or("unknown file reference; select the file again")?;
+        let file = File::open(path).map_err(message)?;
+        if files.readers.len() >= MAX_OPEN_READERS {
             return Err(
                 "too many concurrent file readers; finish or cancel the open transfers".into(),
             );
         }
-        files.readers.insert(reference, file);
-        Ok(())
+        let transfer = Uuid::new_v4().to_string();
+        files.readers.insert(transfer.clone(), file);
+        Ok(transfer)
     }
     fn start_write(&self, destination: PathBuf, size: u64) -> Result<String, String> {
         let mut files = self.inner.lock().expect("file state lock poisoned");
@@ -276,19 +274,25 @@ pub(crate) fn reopen_file(
 ) -> Result<OpenedFile, String> {
     state.reopen(&reference)
 }
-/// Releases one transfer's reader; other concurrent readers are unaffected.
+/// Opens one bounded transfer reader for an existing grant reference.
 #[tauri::command]
-pub(crate) fn close_reader(reference: String, state: State<'_, HostFiles>) {
+pub(crate) fn begin_read(reference: String, state: State<'_, HostFiles>) -> Result<String, String> {
+    state.begin_read(&reference)
+}
+/// Releases one transfer's reader; other transfers, including concurrent
+/// transfers of the same reference, are unaffected.
+#[tauri::command]
+pub(crate) fn close_reader(transfer: String, state: State<'_, HostFiles>) {
     state
         .inner
         .lock()
         .expect("file state lock poisoned")
         .readers
-        .remove(&reference);
+        .remove(&transfer);
 }
 #[tauri::command]
 pub(crate) fn read_file_chunk(
-    reference: String,
+    transfer: String,
     offset: u64,
     length: usize,
     state: State<'_, HostFiles>,
@@ -297,10 +301,7 @@ pub(crate) fn read_file_chunk(
         return Err("invalid read chunk size".into());
     }
     let mut files = state.inner.lock().expect("file state lock poisoned");
-    let file = files
-        .readers
-        .get_mut(&reference)
-        .ok_or("file is not open")?;
+    let file = files.readers.get_mut(&transfer).ok_or("file is not open")?;
     let size = file.metadata().map_err(message)?.len();
     if offset > size || size > MAX_FILE_BYTES {
         return Err("read outside selected file".into());
@@ -567,12 +568,12 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         fn read_chunk(
             state: &HostFiles,
-            reference: &str,
+            transfer: &str,
             offset: u64,
             length: usize,
         ) -> Result<Vec<u8>, String> {
             let mut files = state.inner.lock().expect("test state lock poisoned");
-            let file = files.readers.get_mut(reference).ok_or("file is not open")?;
+            let file = files.readers.get_mut(transfer).ok_or("file is not open")?;
             let mut bytes = vec![0u8; length];
             file.seek(SeekFrom::Start(offset))
                 .map_err(|e| e.to_string())?;
@@ -587,21 +588,91 @@ mod tests {
         let state = HostFiles::load(directory.path())?;
         let opened_first = state.grant(&first)?;
         let opened_second = state.grant(&second)?;
-        // Opening the second file must not evict the first transfer's reader.
-        assert_eq!(
-            read_chunk(&state, &opened_first.reference, 1, 2)?,
-            vec![1, 2]
-        );
+        let transfer_first = state.begin_read(&opened_first.reference)?;
+        let transfer_second = state.begin_read(&opened_second.reference)?;
+        // Reading one transfer must not disturb another transfer's seek position.
+        assert_eq!(read_chunk(&state, &transfer_first, 1, 2)?, vec![1, 2]);
+        assert_eq!(read_chunk(&state, &transfer_second, 0, 1)?, vec![4]);
         // Closing the second transfer leaves the first readable.
         state
             .inner
             .lock()
             .expect("test state lock poisoned")
             .readers
-            .remove(&opened_second.reference);
+            .remove(&transfer_second);
+        assert_eq!(read_chunk(&state, &transfer_first, 0, 3)?, vec![0, 1, 2]);
+        assert!(read_chunk(&state, &transfer_second, 0, 1).is_err());
+        Ok(())
+    }
+    #[test]
+    fn same_reference_transfers_keep_independent_handles() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = tempfile::tempdir()?;
+        let file = directory.path().join("audio.wav");
+        fs::write(&file, [0, 1, 2, 3])?;
+        let state = HostFiles::load(directory.path())?;
+        let opened = state.grant(&file)?;
+        let early = state.begin_read(&opened.reference)?;
+        let late = state.begin_read(&opened.reference)?;
+        {
+            let mut files = state.inner.lock().expect("test state lock poisoned");
+            files
+                .readers
+                .get_mut(&early)
+                .ok_or("missing transfer")?
+                .seek(SeekFrom::Start(2))
+                .map_err(|e| e.to_string())?;
+        }
+        // The later transfer's seek position is unaffected by the earlier one.
+        let mut bytes = [0u8; 1];
+        {
+            let mut files = state.inner.lock().expect("test state lock poisoned");
+            let handle = files.readers.get_mut(&late).ok_or("missing transfer")?;
+            handle.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+            handle.read_exact(&mut bytes).map_err(|e| e.to_string())?;
+        }
+        assert_eq!(bytes, [0]);
+        // Finishing the earlier transfer must not close the later one's reader.
+        state
+            .inner
+            .lock()
+            .expect("test state lock poisoned")
+            .readers
+            .remove(&early);
+        assert!(state.begin_read(&opened.reference).is_ok());
+        Ok(())
+    }
+    #[test]
+    fn grants_reuse_references_and_honor_the_persisted_cap()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let state = HostFiles::load(directory.path())?;
+        let first = directory.path().join("first.wav");
+        fs::write(&first, [0])?;
+        let opened = state.grant(&first)?;
+        let reused = state.grant(&first)?;
+        assert_eq!(reused.reference, opened.reference);
+        {
+            let files = state.inner.lock().expect("test state lock poisoned");
+            assert_eq!(files.references.len(), 1);
+        }
+        let mut last = None;
+        for index in 1..MAX_REFERENCES {
+            let path = directory.path().join(format!("audio-{index}.wav"));
+            fs::write(&path, [0])?;
+            last = Some(state.grant(&path)?.reference);
+        }
+        let extra = directory.path().join("extra.wav");
+        fs::write(&extra, [0])?;
+        assert!(state.grant(&extra).is_err());
+        {
+            let files = state.inner.lock().expect("test state lock poisoned");
+            assert_eq!(files.references.len(), MAX_REFERENCES);
+        }
+        // Existing grants stay reopenable at the cap.
         assert_eq!(
-            read_chunk(&state, &opened_first.reference, 0, 3)?,
-            vec![0, 1, 2]
+            state.reopen(&last.expect("granted reference"))?.name,
+            format!("audio-{}.wav", MAX_REFERENCES - 1)
         );
         Ok(())
     }

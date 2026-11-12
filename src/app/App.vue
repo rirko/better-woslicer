@@ -23,7 +23,7 @@ import AboutDialog from './components/AboutDialog.vue';
 const platform = getPlatform();
 const editor = useEditorStore(pinia);
 const bmhelper = useBmhelperStore(pinia);
-const workspace = createWorkspace({ platform, editor });
+const workspace = createWorkspace({ platform, editor, confirmDiscardRecovery, confirmRelinkDifference, confirmLegacyImport });
 const playback = createPlayback(editor);
 provideWorkspace(workspace); providePlayback(playback);
 const { t } = useI18n({ useScope: 'global' });
@@ -32,7 +32,7 @@ const calibrating = ref(false), aboutOpen = ref(false), closing = ref(false), dr
 const panelGeneration = ref(0);
 const identity = shallowRef<BuildIdentity | null>(null);
 const bpm = computed(() => { void editor.docRevision; return editor.doc.bpm; });
-const commands = createCommands({ editor, workspace, playback, onClose: closeWorkspace, onOpenProject: openProject, onAbout: () => { aboutOpen.value = true; } });
+const commands = createCommands({ editor, workspace, playback, onClose: closeWorkspace, onOpenProject: openProject, onNewProjectFromWos: newProjectFromWos, onAbout: () => { aboutOpen.value = true; } });
 let disposed = false;
 let stopAppearance: (() => void) | undefined;
 function report(error: unknown): void { if (!disposed) editor.setStatus('loadFailed', { message: error instanceof Error ? error.message : String(error) }, true); }
@@ -49,8 +49,44 @@ async function confirmProjectReplacement(): Promise<boolean> {
   } catch (error: unknown) { if (error !== 'cancel' && error !== 'close') report(error); return false; }
   finally { closing.value = false; }
 }
+async function confirmDiscardRecovery(): Promise<boolean> {
+  if (closing.value) return false;
+  closing.value = true;
+  try {
+    await ElMessageBox.confirm(t('chrome.discardRecoveryBody'), t('chrome.discardRecoveryTitle'), {
+      confirmButtonText: t('chrome.discardRecoveryOk'), cancelButtonText: t('chrome.discardRecoveryCancel'), type: 'warning',
+    });
+    return !disposed;
+  } catch (error: unknown) { if (error !== 'cancel' && error !== 'close') report(error); return false; }
+  finally { closing.value = false; }
+}
+async function confirmRelinkDifference(difference: { current: string; selected: string }): Promise<boolean> {
+  if (closing.value) return false;
+  closing.value = true;
+  try {
+    await ElMessageBox.confirm(t('chrome.relinkDifferenceBody', difference), t('chrome.relinkDifferenceTitle'), {
+      confirmButtonText: t('chrome.relinkDifferenceOk'), cancelButtonText: t('chrome.relinkDifferenceCancel'), type: 'warning',
+    });
+    return !disposed;
+  } catch (error: unknown) { if (error !== 'cancel' && error !== 'close') report(error); return false; }
+  finally { closing.value = false; }
+}
+async function confirmLegacyImport(summary: { name: string; bpm: number; shift: number; markers: number }): Promise<boolean> {
+  if (closing.value) return false;
+  closing.value = true;
+  try {
+    await ElMessageBox.confirm(t('chrome.legacyImportBody', summary), t('chrome.legacyImportTitle'), {
+      confirmButtonText: t('chrome.legacyImportOk'), cancelButtonText: t('chrome.legacyImportCancel'), type: 'warning',
+    });
+    return !disposed;
+  } catch (error: unknown) { if (error !== 'cancel' && error !== 'close') report(error); return false; }
+  finally { closing.value = false; }
+}
 async function openProject(): Promise<void> {
   if (await confirmProjectReplacement()) { calibrating.value = false; await workspace.openProject(); }
+}
+async function newProjectFromWos(): Promise<void> {
+  if (await confirmProjectReplacement()) { calibrating.value = false; await workspace.newProjectFromWos(); }
 }
 function keydown(event: KeyboardEvent): void { if (!calibrating.value && !aboutOpen.value && !closing.value) commands.onKeyDown(event); }
 function calibrate(): void {

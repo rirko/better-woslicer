@@ -142,20 +142,21 @@ describe("browser host capabilities", () => {
 });
 
 describe("Tauri adapter boundary", () => {
-  it("closes oversized project readers without requesting chunks", async () => {
+  it("rejects oversized projects before opening any transfer reader", async () => {
     const calls: string[] = [];
     mockIPC(command => {
       calls.push(command);
       if (command === 'open_file') return { name: 'project.wosdx', reference: 'project-grant', size: 16 * 1024 * 1024 + 1 };
     });
     await expect(createTauriPlatform().openFile('wosdx')).rejects.toThrow('16 MiB');
-    expect(calls).toEqual(['open_file', 'close_reader']);
+    expect(calls).toEqual(['open_file']);
   });
   it("saves and reads exact portable project bytes", async () => {
     const bytes = new TextEncoder().encode('{"format":"wosdx"}');
     mockIPC((command, payload) => {
       if (command === 'open_file') { expect(payload).toEqual({ kind: 'wosdx' }); return { name: 'project.wosdx', reference: 'grant', size: bytes.length }; }
-      if (command === 'read_file_chunk') return bytes.buffer;
+      if (command === 'begin_read') return 'transfer-1';
+      if (command === 'read_file_chunk') { expect(payload).toEqual({ transfer: 'transfer-1', offset: 0, length: bytes.length }); return bytes.buffer; }
       if (command === 'prepare_save') { expect(payload).toEqual({ kind: 'wosdx', name: 'project.wosdx', size: bytes.length }); return 'write-id'; }
       if (command === 'write_chunk') expect(payload).toEqual(bytes);
     });
@@ -200,29 +201,39 @@ describe("Tauri adapter boundary", () => {
     expect(calls).toEqual(["begin_export", "begin_export_file", "write_chunk", "cancel_write", "end_export"]);
   });
   it("validates host file metadata and exact binary response size", async () => {
-    mockIPC(command => command === "open_file" ? { name: "source.wav", reference: "grant", size: 3 } : new Uint8Array([0, 255, 7]).buffer);
+    mockIPC(command => {
+      if (command === "open_file") return { name: "source.wav", reference: "grant", size: 3 };
+      if (command === "begin_read") return "transfer-1";
+      return new Uint8Array([0, 255, 7]).buffer;
+    });
     expect(await createTauriPlatform().openFile("audio")).toEqual({ name: "source.wav", reference: "grant", bytes: new Uint8Array([0, 255, 7]) });
-    mockIPC(command => command === "open_file" ? { name: "source.wav", reference: "grant", size: 3 } : new Uint8Array([0]).buffer);
+    mockIPC(command => {
+      if (command === "open_file") return { name: "source.wav", reference: "grant", size: 3 };
+      if (command === "begin_read") return "transfer-1";
+      return new Uint8Array([0]).buffer;
+    });
     await expect(createTauriPlatform().openFile("audio")).rejects.toThrow("Incomplete binary");
     mockIPC(() => ({ name: "source.wav", reference: "grant", size: -1 }));
     await expect(createTauriPlatform().openFile("audio")).rejects.toThrow("Invalid host file");
   });
-  it("releases the transfer reader after successful and failed chunk reads", async () => {
+  it("releases each transfer reader after successful and failed chunk reads", async () => {
     const closed: string[] = [];
     mockIPC(command => {
       if (command === "open_file") return { name: "source.wav", reference: "grant", size: 3 };
-      if (command === "close_reader") { closed.push("grant"); return undefined; }
+      if (command === "begin_read") return "transfer-1";
+      if (command === "close_reader") { closed.push("transfer-1"); return undefined; }
       return new Uint8Array([0, 255, 7]).buffer;
     });
     await createTauriPlatform().openFile("audio");
-    expect(closed).toEqual(["grant"]);
+    expect(closed).toEqual(["transfer-1"]);
     mockIPC(command => {
       if (command === "open_file") return { name: "source.wav", reference: "grant", size: 3 };
-      if (command === "close_reader") { closed.push("grant"); return undefined; }
+      if (command === "begin_read") return "transfer-2";
+      if (command === "close_reader") { closed.push("transfer-2"); return undefined; }
       if (command === "read_file_chunk") throw new Error("Transport lost");
       return undefined;
     });
     await expect(createTauriPlatform().openFile("audio")).rejects.toThrow("Transport lost");
-    expect(closed).toEqual(["grant", "grant"]);
+    expect(closed).toEqual(["transfer-1", "transfer-2"]);
   });
 });

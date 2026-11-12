@@ -21,7 +21,7 @@
 | `timing.bpm`, `timing.shiftTicks` | BPM 与 tick 偏移；不是秒或源帧 |
 | `slicing.fadeoutMs` | 整数毫秒 |
 | `slicing.noisegateDb`, `noisegateEnabled` | dB 阈值与开关，互不替代 |
-| `slicing.markers` | tick 数组；192 ticks/measure，范围 0..49,151；编解码规范化排序/去重 |
+| `slicing.markers` | tick 数组；192 ticks/measure，范围 0..49,151；编解码规范化排序，重复 tick 拒绝 |
 | `slicing.bandDetection` | `bands {low,mid,high}`、`thresholdDb`、`minGapUnits`、`snap`；检测配置不是波形可见性 |
 | `output` | `baseName`、`clipStartNumber`、`useFfNumbering` |
 | `global` | `masterGainDb`、`masterMuted`、`cueGainDb`、`cueMode`、`playbackRate`、`views` |
@@ -86,8 +86,8 @@ masterMuted 控制素材总线，cue 独立路由；不能让 master/track 的�
 | 空项目 | 可编辑设置、保存 | 支持 |
 | 完整单轨布局、媒体缺失 | 开文档、显示失联、编辑非媒体内容、保存、手动重关联 | 基本路径已连通 |
 | 单轨带 gain/mute/solo 或视图覆盖 | 视图/播放使用有效属性；与保存恢复一致 | track 非中性播放属性现在被 capability 判为 unsupported；global/视图字段接入未完成 |
-| 多轨/多 clip/offset/trim/leading silence 等合法布局 | 受限打开、说明不支持的操作、保全后保存；不能默默只取第一段 | codec 可读，workspace 直接拒绝；W2 必须补齐 |
-| future schema | 保留输入、独立提示，不进入可覆盖编辑态 | parse 返回 raw；workspace 抛错，没有持久保留工作流 |
+| 多轨/多 clip/offset/trim/leading silence 等合法布局 | 受限打开、说明不支持的操作、保全后保存；不能默默只取第一段 | 已完成（5375e68）：受限打开、编辑/播放/WOS 操作禁用、保存原字节 |
+| future schema | 保留输入、独立提示，不进入可覆盖编辑态 | 已完成：打开前抛错且不改动当前工作区、不落任何写；原文件本身留在磁盘即保全；恢复存档侧 future 记录另有 W1b 显式保全 |
 | invalid/corrupt | 不替换当前项目，不覆盖源记录，给出失败状态 | 项目 open 有错误保护；session 区分与保全不足，W1 修复 |
 
 当前 `projectCapability` 的 single-track 要求 1 轨 1 clip、完整已知源长、位置/offset=0、track gain=0 且未 mute/solo。
@@ -98,10 +98,18 @@ masterMuted 控制素材总线，cue 独立路由；不能让 master/track 的�
 “复杂工程无损”至少要求保留所有合法已知媒体、轨道、片段、时间位置、属性和 BMH 内容，不发生压平或暗中裁切。
 canonical JSON 的空白、字段顺序不承诺字节一致；与 `.wos` 字节兼容要求不同。
 
-当前 parser 构造已知字段的新对象：未知附加字段会丢失，markers 会排序去重，digest 会小写，track spectrum 的 null 会转 reserved。
-因此不能把当前 encode/decode 称作对任意输入“原样保存”。W2 要明确规范化范围：对不能安全理解的输入保留原始字节/表示，
-禁用覆盖写，或提供明确的保全副本路径；不能直接调用当前 encode 然后宣称无损。
-未来 schema 的 raw 也必须有保全生命周期，不能误走 v1 writer。
+当前 parser 构造已知字段的新对象：markers 会排序（重复 tick 拒绝），digest 会小写，track spectrum 的 null 会转 reserved。
+未知附加字段不会静默丢失（53a5f57）：`parseProject` 逐节点收集未知键路径到 `unknownFields`（上限 16 条），
+可编辑工程打开时以 `projectUnknownFields` 明确披露“保存仅保留可识别数据”；受限工程的保存走原字节，不受此规范化影响。
+对不能安全理解的输入，规范化范围的边界为：复杂布局原字节保全（受限只读），未知字段明确披露后规范化保存，future 版本拒绝打开且不落盘。
+
+W2a.1 已将文件解码结果扩展为 `ProjectDecodeResult`：`decodeProject` 在校验通过后额外返回 `sourceBytes`，
+复制输入 view 而不共享底层存储（包括 Node Buffer 子视图）。这个副本保留未知字段、规范化前的值、BOM、空白和数字拼写，
+对 supported 和 unsupported-version 两个分支都有效。它由调用者持有且可变，只用于未编辑文件的保全；不能代替编辑后文档的编码。
+`parseProject` 不附带文件字节，`encodeProject` 仍是规范化 v1 writer；原始字节不属于 ProjectDocument 或 undo 历史。
+受限打开、保存与 session 生命周期已在 5375e68 接通：复杂布局以只读打开并显示 `projectLimitedOpen`，
+文档修改在 editor 层单点拦截，保存原样写出 `sourceBytes`（逐字节测试覆盖）；从恢复存档还原的复杂工程保持只读，
+因存档不含原始字节而明确不可保存（`limitedSaveUnavailable`）。
 
 ## 本机绑定、恢复与重关联
 

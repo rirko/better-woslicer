@@ -5,11 +5,17 @@
 
 ## 1. 当前任务与检查点
 
-- 当前用户要求：重新挖掘第三次 session，回填详细实施计划，确保下次直接恢复；本轮是文档整理，没有声称完成剩余移植代码。
-- 工作分支：`feature/tauri`。应用代码检查点 `161fc52`；随后文档检查点 `e959a97`。本轮文档提交用 `git log -3 --oneline` 定位，避免自引用 commit hash。
+- 2026-11-10 本轮：**W1 恢复写可靠性已完成。** W1a `618d445`（写 ACK/失败可见/重试/dispose 上抛）、W1b `5a40e7b`（恢复结果区分 absent/restored/invalid/future/read-failed，坏/future/read-failed 原输入保留，恢复写暂停，打开内容需显式确认丢弃，`reset` 显式清档）。
+- 2026-11-10 续做：**W2a.2 受限打开与保全保存已完成（`5375e68`）**：复杂布局只读打开、editor 层单点拦截、保存原字节、恢复还原保持只读且保存明确不可用。
+- 2026-11-10 W3 起步：**G12 已完成（`9e4e9fc`）**：reader 改为按独立 transfer ID（新增 `begin_read` 命令；grant/reopen 不再插 reader；chunk/close 按 transfer 定位），同一引用双读取拥有独立句柄与 seek 位，先结束的 transfer 不再影响后者；16 MiB 检查移到开 reader 之前；grant 生命周期有测试（同路径复用引用、1024 上限拒绝新 grant 且既有可 reopen）。Rust fmt/test(12)/clippy -D warnings 全过；前端 adapter mock 已迁移并全绿。
+- 2026-11-10 W3 起步：**G09 已完成（本次提交）**：`Platform.importLegacySession` 进入契约（browser/tauri 各自接线）；`convertLegacySession` 纯转换信封（`{version,session}` 内层走既有 legacy 解析）；`importLegacyRecovery` 命令+菜单项：读取→摘要预览（名称/BPM/偏移/切点数）→App 对话框确认→整体替换并恢复；legacy `lastFile.path` 仅 hint，归档 lastFile 为 null，reopen 不触发；拒绝/非 legacy 文件不动工作区。
+- 2026-11-10 W3 起步：**G06 已完成（`6828d6f`）**：relink 不匹配改为可选采纳——`confirmRelinkDifference` 回调（App.vue 对话框，4 语言），确认后以一次可撤销事务更新媒体元数据（名称/格式/字节/采样率/声道/帧数/完整性）与 clip 帧数，mediaId 稳定；拒绝或未接线保持硬拒绝且不改动；对话框期间并发编辑经 revision 守卫作废。
+- 2026-11-10 W3 起步：**G05 已完成（`7c4a975`）**：音频绑定改为 `editor.lastFile`（独立于 decoded source 生命周期）——解码失败/取消不清绑定，归档持续携带 lastFile；restore 先种绑定再尝试 reopen，失败后下次归档仍保留；reopen 成功不重置 projectId/媒体/dirty；`reset`/打开工程/`newProjectFromWos` 清绑定，reference 为 null 的加载清除绑定。
+- 2026-11-10 续做：**W2 全部完成**。W2b `fa1b652`：WOS 拆为 `importWosSettings`（原地单事务、保留身份/媒体/输出、一步撤销、无音频不虚构媒体）与 `newProjectFromWos`（整体替换、走替换确认、清空 source）；`savedWos` 文案明确仅时序与切点。`53a5f57`：`parseProject.unknownFields` 收集未知字段路径，可编辑工程打开时 `projectUnknownFields` 披露“保存不保留”；future 版本打开前抛错不落盘（原文件即保全，处置已记入 PROJECT_FORMAT）。
+- 工作分支：`feature/tauri`。本轮起点 HEAD `777cf0e`；W2a.1 检查点提交位于其后（用 `git log --oneline -3` 定位）。
 - 恢复时先核对 HEAD/diff；本文记录的是上述检查点，不覆盖后来已经完成的工作。
-- 本轮开始工作树干净。产物为入口文档、获批原文、时序证据、实施差异台账、格式说明和 AGENTS 恢复入口；没有应用源码改动。
-- **下一项代码任务：W1 恢复写可靠性。** 不要先回去美化原生菜单、重构旧打包工具或实现多轨混音。
+- 本轮改动归属：codec/schema、project 测试及三份迁移/格式文档，全部属于 W2a.1；无用户遗留修改。提交后核对工作树干净。
+- **W3 绑定与恢复身份四项（G05/G06/G09/G12）已全部完成**；下一包 **W4 项目属性与 BMHelper（G07/G08/G11）**。不要先回去美化原生菜单、重构旧打包工具或实现多轨混音。
 
 阅读顺序：本文件 → [实施计划](IMPLEMENTATION.md) → [项目格式](../PROJECT_FORMAT.md)。
 追溯原话时读 [决策时序](THIRD_SESSION_EVIDENCE.md) 和 [获批原文](THIRD_SESSION_APPROVED_PLAN.md)。
@@ -26,25 +32,22 @@
 7. 正式构建最终切换常规 Vite/Tauri；旧打包轮子退出，不能为保持它们而漂移。原生/归档尚未验收。
 8. 离线运行、严格类型、许可证、root version、真实测试声明遵循 AGENTS.md。清理移动不删除，定期本地 commit，不 push/tag/release/deploy。
 
-## 3. W1 的直接起手步骤
+## 3. W3 的直接起手步骤
 
-先读 `src/workspace/persistence.ts`、`session.ts`、`workspace.ts` 及 `tests/app/workspace.test.ts`、`workspace-fixture.ts`。
-编辑前加载当前工具可用的 TypeScript/Vue skill；Rust 改动再读 Rust skill。本轮整理不是要求重跑 smell 审计。
+先读 `src/workspace/session.ts`（lastFile 捕获与恢复）、`src/workspace/project-media.ts`（relink 硬拒绝）、`src/platform/` 契约与 `src-tauri/src/` reader（transfer/grant），及对应测试 `tests/app/workspace.test.ts`、`tests/app/project-files.test.ts`、`tests/app/platform.test.ts`。
+编辑前加载当前工具可用的 TypeScript/Vue skill；G12 涉及 Rust 时再读 Rust skill。
 
-当前根因：flush 在 writeSession 完成前把 dirty 清掉，定时器/dispose 吞错误；parseEditorSession 把坏/未来记录和 absent 混为 null。
-当前串行写和 reset 防复活已有测试，保留其行为，不推倒重写。
+当前现状：G05 lastFile 从 decoded source 捕获、reopen 走 loadAudio；G06 relink 不匹配当前硬拒绝；G09 `platform.importLegacySession` 只有选择/读取；G12 不同引用并行已测、同一引用双读取 transfer 隔离与 grant 回收未验证。
 
 先加有意义的失败场景，再用最小设计修复（First Make it Work → Make it Right → Follow Practice）：
 
-1. 项目编辑后自动写失败：显示恢复保存失败；待写状态保留。用户重试即使没有新编辑也能写出正确快照。
-2. 写 A 未完成期间编辑为 B：A 成功/失败都不能把 B 误认成已持久化；后续写 B 有序，不写回旧快照。
-3. 读取 absent、corrupt/invalid、future、host read failure 的结果可区分。非 absent 原输入保留，确认替换前不允许自动恢复写覆盖它。
-4. 工作区恢复/显式开始新项目/取消替换各有明确状态；错误可见但不妨碍应用离线启动。不要为了“启动成功”把错误吞掉。
-5. close/reset 与 pending 写交错不复活已关闭内容；clear 失败可见；dispose 不遗留未处理 rejection 或静默把失败当成功。
-6. 不把恢复写失败等同于项目已经保存；项目 dirty 和恢复 pending 是两个状态。
+1. ~~G05~~ 已完成（7c4a975）。
+2. ~~G06~~ 已完成（6828d6f）。
+3. ~~G09~~ 已完成（import-legacy 菜单项，确认对话框 `confirmLegacyImport`）。
+4. ~~G12~~ 已完成（9e4e9fc）。
 
-可先提交 W1a（写 ACK/失败/重试），再 W1b（恢复结果/保全/确认）。每个提交记下测试结果和剩余项。
-W1 完成后按 IMPLEMENTATION 的 W2→W3→W4→W5→W6→W7 继续；依赖关系可拆分，但状态台账必须同步。
+可按 G05→G06→G09→G12 拆成小步提交。每个提交记下测试结果和剩余项。
+W3 完成后按 IMPLEMENTATION 的 W4→W5→W6→W7 继续；依赖关系可拆分，但状态台账必须同步。
 
 ## 4. 进入环境：先观察，后修改
 
@@ -135,8 +138,13 @@ build:app 前移走需要替换的旧输出；typecheck/build 失败先诊断，
 
 ### 已有验证记录（此前执行，本轮未重跑）
 
+本轮 W2a.1 验证（2026-11-10 JST，Node 24.22.2）：先运行新增用例得到预期的 3 failed / 7 passed；实现后 `npm run typecheck:app` 通过，`npm run test:components` 17 files / 147 passed。三个新增用例覆盖复杂文件精确保全与重解码、Buffer 子视图复制隔离、future 文件保全。未运行 build/UI profiles/归档、旧 lane 或 Rust：本轮仅编解码返回值增加原始字节，不改 UI、旧 lane、原生代码；未产出或宣称完整应用构建。测试输出在本轮工具日志，无新增持久测试产物。
+
 | 范围 / 基准 | 记录 | 不能据此声称 |
 |---|---|---|
+| Vue/project Vitest + typecheck:app + build:app，W1 代码（618d445、5a40e7b） | 17 files / 144 passed（含 11 个新 W1 用例：写失败可见重试、旧 ACK 不清新修改、dispose 上抛、恢复四分类、坏/future/read-failed 保全与显式确认）；typecheck 通过；build:app 通过（bundle 大 chunk warning 与此前一致） | UI profiles、旧 lane、Rust 已验证 |
+| Vue/project Vitest + typecheck:app + build:app，W2a.2 代码（5375e68） | 17 files / 150 passed（受限打开只读、原字节保存逐字节相等、受限操作拒绝、恢复受限只读且保存不可用、菜单可用性同规则）；typecheck 通过；build:app 通过 | UI profiles、旧 lane、Rust、真实 WebView 已验证 |
+| Vue/project Vitest + typecheck:app + build:app，W2b+未知字段代码（fa1b652、53a5f57） | 17 files / 154 passed（两类 WOS 语义、原地导入可撤销、新建项目清空工作区、无音频导入不虚构媒体、未知字段披露与保存规范化、受限工程两入口均拒）；typecheck 通过；build:app 通过 | UI profiles、旧 lane、Rust、真实 WebView 已验证 |
 | Vue/project Vitest，161fc52 对应代码 | 17 files / 134 passed | 所有计划缺口都已覆盖 |
 | 旧 npm test，同次回归 | 224 passed / 4 skipped / 0 failed；缺 original oracle fixtures | 原版完整兼容已验证 |
 | Vue UI production output，同次回归 | Chromium low 1280×720/DPR1、high 1920×1080/DPR2，各一个 workflow passed；真实 decode/开存/relink/取消/菜单/canvas | Vue Firefox 或 native Tauri 通过 |
@@ -155,6 +163,13 @@ Android 明确不在本期验证范围；旧 Electron 默认构建/CI 仍在，�
 保留不属于本任务的用户修改；无未授权 reset/checkout 覆盖。当前已授权随时本地 commit，不 push。
 
 本轮文档验证（2026-11-10 JST）：7 份文档的本地 Markdown 链接与代码围栏检查通过；获批计划正文与原提取逐字一致并记录 SHA-256；`git diff --check` 通过。没有重跑应用测试。
+W1 轮代码验证（同日）：`test:components` 17 files / 144 passed；`typecheck:app` 通过；`build:app` 通过。本轮未重跑 `test:app-ui`（App.vue 新增的确认对话框仅有逻辑级覆盖）、旧 lane `npm test`（改动不触及旧 lane，`src/renderer/session.ts` 为独立实现）与 Cargo（无 Rust 改动）；这些列入后续验收。
+W2a.2 轮代码验证（同日）：`test:components` 17 files / 150 passed；`typecheck:app` 通过；`build:app` 通过。未重跑 `test:app-ui`、旧 lane `npm test`（不触及）与 Cargo（无 Rust 改动）。
+G12 轮（同日）：cargo fmt/test --locked --offline（12 passed）/clippy all-targets all-features -D warnings 通过；`test:components` 17 files / 160 passed；typecheck:app 通过。`9e4e9fc`。注意：Cargo 前需先 `node scripts/tauri-build-info.mjs`（build.rs 会因过期 identity 拒绝构建）。
+G09 轮（同日）：`test:components` 17 files / 160 passed；typecheck:app、build:app 通过。
+G06 轮（同日）：`test:components` 17 files / 158 passed；typecheck:app、build:app 通过。`6828d6f`。
+G05 轮（同日）：`test:components` 17 files / 156 passed；typecheck:app 通过。`7c4a975`。
+W2b 与未知字段轮（同日）：`test:components` 17 files / 154 passed；`typecheck:app`、`build:app` 通过；每次提交前 `git diff --check` 通过。同样未重跑 UI profiles、旧 lane 与 Cargo（无 Rust 改动）。
 以后更新此检查点必须写明：
 
 - 当前 HEAD、分支、未提交文件及归属。
@@ -165,6 +180,6 @@ Android 明确不在本期验证范围；旧 Electron 默认构建/CI 仍在，�
 
 可以直接给下一工具的续做指令：
 
-> 先读 AGENTS.md 和 docs/migration/RESUME.md，对照 Git 状态；按 IMPLEMENTATION.md 的 W1 接续恢复可靠性。
+> 先读 AGENTS.md 和 docs/migration/RESUME.md，对照 Git 状态；从 W2a.2 接续受限打开与保全保存，复用 W2a.1 的 sourceBytes，先加 workspace 失败用例。
 > 原生业务菜单已确定迁入 Web UI；多轨只预留 schema；不修复将退出的旧打包轮子。
 > 清理用移动至 .pending-delete，完成小步检查后本地 commit，并更新恢复文档。

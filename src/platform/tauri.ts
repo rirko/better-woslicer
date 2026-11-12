@@ -17,19 +17,21 @@ async function readOpened(value: unknown, project = false): Promise<OpenedFile> 
     throw new Error("Invalid host file descriptor");
   }
   const id = reference(value.reference);
+  if ((project || /\.wosdx$/i.test(value.name)) && value.size > PROJECT_FILE_MAX_BYTES) throw new Error('Project exceeds 16 MiB');
+  // Every transfer reads through its own host handle; concurrent transfers of
+  // the same reference keep independent seek positions and lifetimes.
+  const transfer = reference(await invoke("begin_read", { reference: id }));
   try {
-    if ((project || /\.wosdx$/i.test(value.name)) && value.size > PROJECT_FILE_MAX_BYTES) throw new Error('Project exceeds 16 MiB');
     const bytes = new Uint8Array(value.size);
     for (let offset = 0; offset < bytes.length; offset += CHUNK_BYTES) {
       const length = Math.min(CHUNK_BYTES, bytes.length - offset);
-      const raw: unknown = await invoke("read_file_chunk", { reference: id, offset, length });
+      const raw: unknown = await invoke("read_file_chunk", { transfer, offset, length });
       if (!(raw instanceof ArrayBuffer) || raw.byteLength !== length) throw new Error("Incomplete binary file transfer");
       bytes.set(new Uint8Array(raw), offset);
     }
     return { name: value.name, reference: id, bytes };
   } finally {
-    // Release this transfer's reader; concurrent reads of other references are unaffected.
-    await invoke("close_reader", { reference: id }).catch(() => undefined);
+    await invoke("close_reader", { transfer }).catch(() => undefined);
   }
 }
 
@@ -85,6 +87,7 @@ export function createTauriPlatform(): Platform {
     async readSession() { return invoke<unknown>("read_session"); },
     async writeSession(snapshot) { await invoke("write_session", { snapshot }); },
     async clearSession() { await invoke("clear_session"); },
+    async importLegacySession() { return importTauriLegacySession(); },
     async setTheme(mode) { await invoke("set_theme", { mode }); },
   };
 }

@@ -15,6 +15,16 @@ function project(): ProjectFileV1 {
 }
 
 describe('.wosdx project document', () => {
+  it('reports unrecognized fields by path instead of dropping them silently', () => {
+    const value = project();
+    const parsed = parseProject({ ...value, mystery: 1, timing: { ...value.timing, swing: 0.5 }, output: { ...value.output, gain: 2 } });
+    expect(parsed.kind).toBe('supported');
+    if (parsed.kind === 'supported') {
+      expect(parsed.unknownFields).toEqual(['mystery', 'timing.swing', 'output.gain']);
+      const clean = parseProject(value);
+      expect(clean.kind === 'supported' && clean.unknownFields).toEqual([]);
+    }
+  });
   it('creates the current one-source document as one track and one full-source clip', () => {
     const value = project();
     expect(value.format).toBe('wosdx');
@@ -57,6 +67,58 @@ describe('.wosdx project document', () => {
     if (parsed.kind !== 'supported') throw new Error('Expected supported project');
     expect(parsed.project.media[0]?.originHint).toEqual(media.originHint);
     expect(() => parseProject({ ...value, media: [{ ...media, originHint: { kind: 'browser', pathHint: 'C:\\Audio\\audio.wav' } }] })).toThrow();
+  });
+
+  it('preserves the exact complex file alongside its normalized known fields', () => {
+    const value = project();
+    const track = value.tracks[0];
+    const media = value.media[0];
+    if (!track || !media) throw new Error('Expected track and media');
+    const input = {
+      ...value,
+      name: '音楽',
+      extension: { largeInteger: '9007199254740993' },
+      slicing: { ...value.slicing, markers: [48, 0, 24] },
+      media: [{ ...media, integrity: { algorithm: 'sha256', digest: 'AB'.repeat(32) } }],
+      tracks: [
+        { ...track, views: { ...track.views, spectrum: null }, extension: { color: 'blue' } },
+        { ...track, trackId: 'second', clips: [] },
+      ],
+    };
+    // A BOM, CRLF, trailing whitespace and numeric spelling must also survive.
+    const text = '\uFEFF' + JSON.stringify(input, null, 2).replaceAll('\n', '\r\n').replace('"bpm": 120', '"bpm": 1.20e2') + '\r\n ';
+    const bytes = new TextEncoder().encode(text);
+    const decoded = decodeProject(bytes);
+    if (decoded.kind !== 'supported') throw new Error('Expected supported schema');
+    expect(decoded.capability).toEqual({ kind: 'unsupported-arrangement', trackCount: 2, clipCount: 1 });
+    expect(decoded.project.slicing.markers).toEqual([0, 24, 48]);
+    expect(decoded.project.media[0]?.integrity?.digest).toBe('ab'.repeat(32));
+    expect(decoded.project.tracks[0]?.views.spectrum).toBe('reserved');
+    expect(decoded.sourceBytes).toEqual(bytes);
+    expect(decoded.sourceBytes).not.toEqual(encodeProject(decoded.project));
+    const reopened = decodeProject(decoded.sourceBytes);
+    expect(reopened).toEqual(decoded);
+  });
+
+  it('owns a copy of the exact input view, including when the input is a Node buffer', () => {
+    const bytes = encodeProject(project());
+    const buffer = Buffer.concat([Buffer.from([0xff]), Buffer.from(bytes), Buffer.from([0xff])]);
+    const input = buffer.subarray(1, buffer.length - 1);
+    const decoded = decodeProject(input);
+    input.fill(0);
+    expect(decoded.sourceBytes).toEqual(bytes);
+    decoded.sourceBytes.fill(1);
+    expect(input.every(byte => byte === 0)).toBe(true);
+  });
+
+  it('preserves future file bytes without interpreting them as a v1 document', () => {
+    const bytes = new TextEncoder().encode('{ "format": "wosdx", "schemaVersion": 99, "future": [1, 2] }\n');
+    const decoded = decodeProject(bytes);
+    expect(decoded).toMatchObject({ kind: 'unsupported-version', version: 99, raw: { future: [1, 2] } });
+    expect(decoded).not.toHaveProperty('project');
+    expect(decoded.sourceBytes).toEqual(bytes);
+    bytes.fill(0);
+    expect(decodeProject(decoded.sourceBytes).kind).toBe('unsupported-version');
   });
 
   it('rejects duplicate IDs, dangling media references and invalid numeric ranges', () => {

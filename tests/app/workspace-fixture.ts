@@ -1,7 +1,7 @@
 import { createPinia, disposePinia } from 'pinia';
 import { createAudioProcessor, type AudioEngine } from '../../src/audio/audio-jobs';
 import { useEditorStore } from '../../src/slicing/editor-store';
-import { createWorkspace } from '../../src/workspace/workspace';
+import { createWorkspace, type WorkspaceOptions } from '../../src/workspace/workspace';
 import { encodeWav16 } from '../../src/core/wav';
 import type { Platform, OpenedFile, OutputFile } from '../../src/platform/contracts';
 
@@ -36,8 +36,19 @@ export function fixture(createEngine = processorEngine) {
     async exportFiles(files) { let count = 0; for await (const file of files) { exported.push(file); count++; } return count; },
     async readClipboard() { return clipboard; }, async writeClipboard(value) { clipboard = value; },
     async readSession() { return session; }, async writeSession(value) { session = value; }, async clearSession() { session = null; },
+    async importLegacySession() { return null; },
     async setTheme() {},
   };
-  const workspace = createWorkspace({ editor, platform, createEngine });
-  return { pinia, editor, workspace, platform, saved, exported, get session() { return session; }, set session(value: unknown) { session = value; }, set opened(value: OpenedFile | null) { opened = value; }, async dispose() { await workspace.dispose(); disposePinia(pinia); } };
+  const confirmOptions: {
+    confirmDiscardRecovery?: WorkspaceOptions['confirmDiscardRecovery'];
+    confirmRelinkDifference?: WorkspaceOptions['confirmRelinkDifference'];
+    confirmLegacyImport?: WorkspaceOptions['confirmLegacyImport'];
+  } = {};
+  const workspace = createWorkspace({
+    editor, platform, createEngine,
+    confirmDiscardRecovery: block => confirmOptions.confirmDiscardRecovery?.(block) ?? false,
+    confirmRelinkDifference: difference => confirmOptions.confirmRelinkDifference?.(difference) ?? false,
+    confirmLegacyImport: summary => confirmOptions.confirmLegacyImport?.(summary) ?? false,
+  });
+  return { pinia, editor, workspace, platform, saved, exported, confirmOptions, get session() { return session; }, set session(value: unknown) { session = value; }, set opened(value: OpenedFile | null) { opened = value; }, async dispose() { await workspace.dispose(); disposePinia(pinia); } };
 }

@@ -61,12 +61,34 @@ export function parseEditorSession(input: unknown): EditorSession | null {
   const lastFile = object(f) && typeof f.reference === 'string' && f.reference.length > 0 && f.reference.length < 4096 && typeof f.name === 'string' ? { reference: f.reference, name: f.name } : null;
   return { version: 2, dirty: typeof input.dirty === 'boolean' ? input.dirty : true, options, project, lastFile };
 }
+export type SessionReadResult =
+  | { kind: 'absent' }
+  | { kind: 'restored'; session: EditorSession }
+  | { kind: 'invalid'; raw: unknown }
+  | { kind: 'future'; raw: unknown; version: number }
+  | { kind: 'read-failed'; error: unknown };
+export type LegacyConversion = { kind: 'converted'; session: EditorSession } | { kind: 'not-legacy' };
+/** Pure legacy-recovery conversion. A stored path stays a hint: it never grants file access. */
+export function convertLegacySession(input: unknown): LegacyConversion {
+  const envelope = object(input) && object(input.session) ? input.session : input;
+  const session = parseEditorSession(envelope);
+  return session ? { kind: 'converted', session } : { kind: 'not-legacy' };
+}
+/** Classifies raw recovery storage contents; damaged and future input is preserved, never reinterpreted. */
+export function readEditorSession(input: unknown): SessionReadResult {
+  if (input === null || input === undefined) return { kind: 'absent' };
+  const version = object(input) && typeof input.version === 'number' && Number.isInteger(input.version) ? input.version : 0;
+  if (version > 2) return { kind: 'future', raw: input, version };
+  const session = parseEditorSession(input);
+  return session ? { kind: 'restored', session } : { kind: 'invalid', raw: input };
+}
 export function captureEditorSession(editor: EditorStore): EditorSession {
   const s = editor;
-  return { version: 2, dirty: s.isDirty, options: optionsFrom(s), project: s.document, lastFile: s.source?.reference ? { reference: s.source.reference, name: s.source.name } : null };
+  return { version: 2, dirty: s.isDirty, options: optionsFrom(s), project: s.document, lastFile: s.lastFile };
 }
 export function restoreEditorSession(editor: EditorStore, session: EditorSession): void {
   editor.replaceDocument(session.project, { saved: !session.dirty });
   Object.assign(editor, session.options);
+  editor.setLastFile(session.lastFile);
   editor.setSelectedTicks(editor.selectedTicks);
 }

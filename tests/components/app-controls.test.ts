@@ -60,9 +60,9 @@ describe('application controls', () => {
         if (!found) throw new Error(`missing ${label}`);
         return found;
       };
-      expect(button('Import .wos...').attributes('disabled')).toBeUndefined();
+      expect(button('Import .wos settings...').attributes('disabled')).toBeUndefined();
       expect(button('Export .wos...').attributes('disabled')).toBeUndefined();
-      await button('Import .wos...').trigger('click');
+      await button('Import .wos settings...').trigger('click');
       expect(wrapper.emitted('command')).toEqual([['import-wos']]);
       expect(button('Calibrate').attributes('disabled')).toBeDefined();
       instance.editor.setSource(source); await nextTick();
@@ -92,6 +92,29 @@ describe('application controls', () => {
         }
       }
     } finally { wrapper.unmount(); instance.dispose(); }
+  });
+  it('keeps limited projects saving while disabling editing and media menu entries', () => {
+    const instance = setup();
+    try {
+      const groups = createApplicationMenu(instance.editor);
+      const find = (id: string) => groups.flatMap(group => group.commands).find(item => item.id === id);
+      if (!find) throw new Error('Missing menu items');
+      instance.editor.setTicks([24]);
+      expect(find('open-audio')?.enabled()).toBe(true);
+      expect(find('clear-markers')?.enabled()).toBe(true);
+      instance.editor.setLimited(true);
+      expect(find('open-audio')?.enabled()).toBe(false);
+      expect(find('import-wos')?.enabled()).toBe(false);
+      expect(find('export-wos')?.enabled()).toBe(false);
+      expect(find('clear-markers')?.enabled()).toBe(false);
+      expect(find('select-cut')?.enabled()).toBe(false);
+      expect(find('select-paste')?.enabled()).toBe(false);
+      expect(find('save-project')?.enabled()).toBe(true);
+      expect(find('open-project')?.enabled()).toBe(true);
+      expect(find('about')?.enabled()).toBe(true);
+      instance.editor.setLimited(false);
+      expect(find('open-audio')?.enabled()).toBe(true);
+    } finally { instance.dispose(); }
   });
   it('filters BMHelper cuts with one undo entry and preserves BPM and project across tabs', async () => {
     const instance = setup();

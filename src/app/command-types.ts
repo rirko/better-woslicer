@@ -1,6 +1,6 @@
 export const APP_COMMANDS = [
   'open-project', 'save-project', 'relink-audio',
-  'open-audio', 'import-wos', 'export-wos', 'close-project',
+  'open-audio', 'new-project-wos', 'import-wos', 'import-legacy', 'export-wos', 'close-project',
   'export-slice', 'export-all', 'undo', 'redo', 'select-copy', 'select-cut', 'select-paste',
   'select-all', 'clear-markers', 'zoom-in', 'zoom-out', 'about', 'play-pause', 'place-breakpoint',
   'preview', 'preview-previous', 'grid-down', 'grid-up', 'bmse-out', 'bmse-in', 'clear-selection',
@@ -12,14 +12,14 @@ export const APP_COMMANDS = [
 export type AppCommand = (typeof APP_COMMANDS)[number];
 export type MenuCommand = Extract<AppCommand,
   | 'open-project' | 'save-project' | 'relink-audio'
-  | 'open-audio' | 'import-wos' | 'export-wos' | 'close-project'
+  | 'open-audio' | 'new-project-wos' | 'import-wos' | 'import-legacy' | 'export-wos' | 'close-project'
   | 'export-slice' | 'export-all' | 'undo' | 'redo' | 'select-copy' | 'select-cut' | 'select-paste'
   | 'select-all' | 'clear-markers' | 'zoom-in' | 'zoom-out' | 'about'
 >;
 
 const MENU_COMMANDS: readonly MenuCommand[] = [
   'open-project', 'save-project', 'relink-audio',
-  'open-audio', 'import-wos', 'export-wos', 'close-project', 'export-slice', 'export-all',
+  'open-audio', 'new-project-wos', 'import-wos', 'import-legacy', 'export-wos', 'close-project', 'export-slice', 'export-all',
   'undo', 'redo', 'select-copy', 'select-cut', 'select-paste', 'select-all', 'clear-markers',
   'zoom-in', 'zoom-out', 'about',
 ];

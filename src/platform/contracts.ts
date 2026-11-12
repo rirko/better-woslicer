@@ -34,5 +34,7 @@ export interface Platform {
   readSession(): Promise<unknown>;
   writeSession(snapshot: unknown): Promise<void>;
   clearSession(): Promise<void>;
+  /** Explicitly selected legacy recovery JSON stays untrusted until the workspace validates it. */
+  importLegacySession(): Promise<unknown | null>;
   setTheme(mode: ColorMode): Promise<void>;
 }

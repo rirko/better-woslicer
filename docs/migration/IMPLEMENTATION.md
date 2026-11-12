@@ -1,6 +1,6 @@
 # Vue / Tauri 实施计划与差异台账
 
-状态核对基准：`feature/tauri`，代码 `161fc52`，此前文档 `e959a97`，2026-11-10 JST。
+状态核对基准：`feature/tauri`，**W2 已完成**（`6c57457` 字节保全基础、`5375e68` 受限打开与原字节保存、`fa1b652` 两类 WOS 操作、`53a5f57` 未知字段披露），2026-11-10 JST。
 此文描述目标和尚需实施的工作，不表示功能已全部实现。下一次工作从 [RESUME.md](RESUME.md) 开始。
 证据见 [时序](THIRD_SESSION_EVIDENCE.md) 和 [最终批准原文](THIRD_SESSION_APPROVED_PLAN.md)。
 
@@ -79,10 +79,10 @@
 
 | ID | 当前事实与源码入口 | 尚需实现 / 验收 |
 |---|---|---|
-| G01 | `project/schema.ts`、`codec.ts` 已有有界 v1、IDs、元数据、复杂 tracks/clips；codec 能解析复杂布局 | workspace 仍直接拒绝复杂布局；需受限打开/原样保全；future raw 不能仅抛错后丢弃；检查规范化是否损失输入 |
+| G01 | **已完成**：受限打开与原字节保存（5375e68，见 W2a.2）；未知字段经 `parseProject.unknownFields` 收集路径并在可编辑工程打开时以 `projectUnknownFields` 披露，保存规范化不保留已明确告知（53a5f57）；future 版本打开前抛错、不改动工作区、不落盘，原文件即保全 | 无未决项；复杂工程的媒体查看/重关联体验属 W4 项目属性范围 |
 | G02 | `project/editor.ts` 单一冻结文档、有界历史；saving revision 守卫已接入 | 跨入口规则/手势取消/历史大文档成本仍需补足；不能仅因类型统一就说输入审计完成 |
-| G03 | `workspace/persistence.ts` 串行写、close/reset 防旧写复活已测试 | dirty 在写成功前清除；timer/dispose 吞错，失败无可见重试状态。优先修复 |
-| G04 | `workspace/session.ts` 将 absent/invalid/future 都变成 null；恢复后重新允许写 | 区分恢复结果、保留坏/未来输入、显式替换确认；持久保存基线；不要悄悄覆盖原恢复记录 |
+| G03 | 已修复（618d445）：`workspace/persistence.ts` 写以 attempt ACK 结算，失败经 `sessionSaveFailed` 可见、保持 pending、重试写出最新快照；dispose 失败上抛不静默；串行写与 close/reset 防复活行为保持并有回归测试 | W1 范围内无未决项；定时器失败已上报（不再吞错） |
+| G04 | 已区分（5a40e7b）：`workspace/session.ts` 的 `readEditorSession` 输出 absent/restored/invalid/future/read-failed；非 restored 的原输入保留且恢复写暂停，打开内容前需显式确认丢弃（App.vue 对话框），`reset` 为显式清档 | 持久保存基线与 binding 索引仍缺（属 W3/G05）；被阻塞时状态条提示可被后续操作覆盖，暂无持久指示，W5 输入验收时复核 |
 | G05 | session lastFile 从 decoded source 捕获，`reopen` 走 loadAudio | 失败会在下次捕获丢本机引用；成功重建也需验证不会重置项目 ID/媒体/dirty。绑定独立于 decoded source |
 | G06 | `workspace/project-media.ts`、workspace relink 先 decode/比较 hash 等，匹配才绑定 | 不匹配当前硬拒绝；最终计划要求明确差异确认。取消/失败保留旧绑定；确认导致元数据变更时须走事务 |
 | G07 | schema 已存 global/track playback/views；editor-store 控件仍是 session refs | 接有效视图和单轨播放投影，master/cue 路由明确，mute 优先 solo；不追加多轨混音 |
@@ -91,7 +91,7 @@
 | G10 | `app/menu.ts` 禁用规则与 commands 执行分离，部分面板/画布直达 action | 做 D08 同操作、同禁用、同确认的跨入口验收 |
 | G11 | `playback/index.ts` cue 监听整个 docRevision | 改为相关 marker/timebase 变化，非相关参数不得丢 crossing；用播放行为测试证明 |
 | G12 | Tauri bounded chunk/final close 已有；reader 按 reference/grant 区分 | 不同引用并行已测，同一引用双读取仍需独立 transfer ID；grant 生命周期上限/取消清理需验证 |
-| G13 | `workspace.loadWos` 保留已加载的 media/tracks；旧接管任务要求空轨 | 明确“向当前项目导入设置”与“从 WOS 新建”的模式，不能虚构关联；现有断言不是新产品决定 |
+| G13 | **已完成**（fa1b652）：拆为 `importWosSettings`（原地单事务导入时序/切点，保留 projectId/media/output，一步可撤销，无音频时不虚构媒体）与 `newProjectFromWos`（整体替换为新工程，走替换确认，清空 source）；`savedWos` 文案明确仅时序与切点 | 无未决项；BMSE/MIDI 互通验收仍属 W5 |
 | G14 | `src-tauri/src/lib.rs` + 薄 main 已有；bundle.active=false；默认 npm/CI 仍为 Electron | 新入口、常规打包、真实 Tauri profiles、各目标平台包/归档未完成；不得宣称已迁完 |
 
 保留旧 i18n key 以让旧测试通过是临时回归桥梁，不意味着以后继续维护旧菜单或旧 DOM 翻译体系。
@@ -103,15 +103,15 @@
 
 | 工作包 | 原阶段 | 入口与内容 | 退出条件 / 依赖 |
 |---|---|---|---|
-| W1 恢复写可靠性 | C | G03/G04；persistence、session、workspace 和恢复状态 UI | 写失败可见且可重试；失败保持 pending；并发新修改不被旧 ACK 清掉；坏/future 记录确认前不覆写；close 不复活；从这里开始 |
-| W2 文档能力与无损边界 | A/C/D | G01/G13；codec、workspace、项目模式 UI、WOS use case | 合法复杂工程能查看限制并无损保存；正常编辑/播放/flatten 导出禁用；future 输入保留但不能覆盖编辑；两类 WOS 操作语义清楚 |
+| W1 恢复写可靠性 | C | G03/G04；persistence、session、workspace 和恢复状态 UI | **已完成**（618d445 + 5a40e7b，2026-11-10）：写失败可见且可重试；失败保持 pending；并发新修改不被旧 ACK 清掉；坏/future 记录确认前不覆写；close 不复活。下一包从 W2 开始 |
+| W2 文档能力与无损边界 | A/C/D | G01/G13 | **已完成**（`6c57457` + `5375e68` + `fa1b652` + `53a5f57`，2026-11-10）：复杂工程受限查看与原字节保存；future 输入保留且不覆盖编辑；两类 WOS 操作语义清楚。下一包从 W3 开始 |
 | W3 绑定与恢复身份 | C/D | G05/G06/G09/G12；session、project-media、platform/Rust reader | 绑定独立、恢复不重建身份、不丢 dirty；relink 差异确认；legacy 预览；transfer 隔离/回收。依赖 W1 的恢复结果模型 |
 | W4 项目属性与 BMHelper | B/D | G07/G08/G11；effective view/playback、BMHelper workspace service | 单轨 dB/mute/solo/视图可验证；cue 独立且不漏事件；BMH 随项目开存/undo；异步不跨项目。使用 W2 能力边界 |
 | W5 输入与业务生命周期验收 | B/D | G02/G10；commands/menu/actions/gestures/worker/export | 完成逐项操作清单和按钮↔键盘↔鼠标等价测试；modal/busy/取消一致；释放 AudioContext/Worker/RAF/observer/pointer capture；不加手柄运行时 |
 | W6 产品入口与常规构建 | E | G14；package scripts、Vite、Tauri config、CI/version docs | 新 Web/Tauri 是正式入口；旧工具按引用清理退出；真实产物测试、平台前置依赖、Rust 缓存和离线 WebView2 方案；依赖前述业务可验收 |
 | W7 最终审查与交付文档 | F | 历史 smell findings、许可证、README×4、changelog×2 | 每个 finding 有 disposition；只写实际 UX；真实验收矩阵，未测/fixture unavailable 保持明确；无未授权发布 |
 
-W1 的具体起手用例及命令见 [恢复指南](RESUME.md)。每包可以拆成更小可提交单元，不把整包堆到限额末尾。
+W2 的具体起手用例及命令见 [恢复指南](RESUME.md)。每包可以拆成更小可提交单元，不把整包堆到限额末尾。
 除非新证据或用户改变优先级，下一次恢复不要重新从菜单样式、旧 packaging 优化或新多轨功能开始。
 
 ## 6. 构建替换与验收门槛
@@ -130,4 +130,4 @@ W1 的具体起手用例及命令见 [恢复指南](RESUME.md)。每包可以拆
 
 在 RESUME 中写下提交、工作树状态、当前工作包、具体下一步、已执行命令/结果/跳过原因、未完成验证和临时产物位置。
 在本文件更新对应 G/W 状态和依据；新增需求才更新 D，不把实现妥协改写成已获批要求。
-完成代码修改时先读对应 TypeScript/Vue/Rust 等 skill；这轮仅回填文档，没有改应用代码或新增产品功能。
+完成代码修改时先读对应 TypeScript/Vue/Rust 等 skill；W2 各步的入口、文案与禁用状态均已按用户可见行为验收。

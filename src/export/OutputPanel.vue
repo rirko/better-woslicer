@@ -26,7 +26,7 @@ const gate = computed({ get: () => { void editor.docRevision; return editor.doc.
       <el-button type="primary" :loading="editor.exportLock" :disabled="!editor.source || !editor.ticks.length" @click="workspace.exportAll()">{{ t('chrome.export') }}</el-button>
       <el-button :disabled="!editor.source || !editor.ticks.length || editor.exportLock" @click="workspace.exportSlice()">{{ t('chrome.exportSliceAtCursor') }}</el-button>
       <el-button @click="workspace.saveWos()">{{ t('chrome.saveWos') }}</el-button>
-      <el-button @click="workspace.loadWos()">{{ t('chrome.loadWos') }}</el-button>
+      <el-button @click="workspace.importWosSettings()">{{ t('menu.importWos') }}</el-button>
       <el-button :disabled="!editor.ticks.length" @click="workspace.bmseOut()">{{ t('chrome.bmseOut') }}</el-button>
       <el-button @click="workspace.bmseIn()">{{ t('chrome.bmseIn') }}</el-button>
     </div>

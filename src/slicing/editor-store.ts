@@ -39,6 +39,10 @@ export const useEditorStore = defineStore('editor', () => {
   const phase = shallowRef<EditorPhase>({ kind: 'empty' });
   const status = shallowRef<{ segments: StatusSegment[] }>({ segments: [{ key: 'statusEmpty' }] });
   const isError = shallowRef(false);
+  // Limited (read-only) projects: every document mutation funnels through transact/undo/redo.
+  const limited = shallowRef(false);
+  // Host binding of the last opened audio, independent of the decoded source's lifetime.
+  const lastFile = shallowRef<{ reference: string; name: string } | null>(null);
   const grid = shallowRef(8), snap = shallowRef(true), cursorTick = shallowRef(0);
   const selectedTicks = shallowRef<number[]>([]);
   const selectionStartTick = shallowRef<number | null>(null), selectionEndTick = shallowRef<number | null>(null);
@@ -69,6 +73,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
   function setPreviewTicks(value: readonly number[] | null): void { previewTicks.value = value === null ? null : Object.freeze([...value]); }
   function transact<T>(edit: (draft: ProjectFileV1) => T) {
+    if (limited.value) throw new Error('This project is read-only: a multi-track layout opened with limited support cannot be edited');
     cancelDraft();
     const result = project.value.transact(edit);
     if (result.changed) publish();
@@ -78,8 +83,10 @@ export const useEditorStore = defineStore('editor', () => {
     cancelDraft(); project.value.replace(value, options); selectedTicks.value = []; setSelection(null, null); publish();
   }
   function markSaved(revision: number): boolean { const saved = project.value.markSaved(revision); if (saved) triggerRef(project); return saved; }
-  function undo(): boolean { cancelDraft(); const changed = project.value.undo(); if (changed) publish(); return changed; }
-  function redo(): boolean { cancelDraft(); const changed = project.value.redo(); if (changed) publish(); return changed; }
+  function undo(): boolean { cancelDraft(); if (limited.value) return false; const changed = project.value.undo(); if (changed) publish(); return changed; }
+  function redo(): boolean { if (limited.value) return false; const changed = project.value.redo(); if (changed) publish(); return changed; }
+  function setLimited(value: boolean): void { limited.value = value; }
+  function setLastFile(value: { reference: string; name: string } | null): void { lastFile.value = value; }
   function setTicks(value: readonly number[]): boolean { return transact(draft => { draft.slicing.markers = normalizeSelection(value); }).changed; }
   function addTicks(value: readonly number[]): number {
     return transact(draft => {
@@ -125,12 +132,13 @@ export const useEditorStore = defineStore('editor', () => {
     });
   }
   function reset(): void {
+    limited.value = false; lastFile.value = null;
     replaceDocument(createEmptyProject()); setSource(null); phase.value = { kind: 'empty' }; setStatus('statusEmpty');
     grid.value = 8; snap.value = true; cursorTick.value = 0; setSelection(null, null); pxPerTick.value = 6; scrollTick.value = 0;
     volume.value = dbToAmp(DEFAULT_PLAYBACK_DB); cueVolume.value = dbToAmp(DEFAULT_CUE_DB); playbackRate.value = 1; followPlayhead.value = true; cueMode.value = 'off';
     exportLock.value = false; bandsVisible.value = false; rmsVisible.value = false;
     bandDetectBands.value = { low: true, mid: true, high: true }; bandThresholdDb.value = 6; bandMinGapUnits.value = 1; bandSnap.value = true; tapOffsetMs.value = 0; bandBusy.value = false;
   }
-  return { document, doc, docRevision, isDirty, markSaved, previewTicks, source, peaks, phase, status, isError, grid, snap, cursorTick, selectedTicks, selectionStartTick, selectionEndTick, pxPerTick, scrollTick, playing, playheadSample, volume, cueVolume, playbackRate, followPlayhead, cueMode, noisegateEnabled, baseName, clipStartNumber, useFfNumbering, exportLock, bandsVisible, rmsVisible, bandAnalysis, bandDetectBands, bandThresholdDb, bandMinGapUnits, bandSnap, tapOffsetMs, bandEstimate, bandBusy, ticks, canUndo, canRedo, transact, replaceDocument, undo, redo, setTicks, addTicks, setOutputOptions, setNoisegateEnabled, cancelDraft, registerDraftCancellation, setPreviewTicks, setStatus, tickBeyondEnd, legalTick, setCursorTick, setSelectedTicks, setSelection, setScrollTick, snapTick, zoomAt, setPlaybackRate, setVolume, setCueVolume, setPlaying, setPlayheadSample, setSource, setPhase, setBandAnalysis, setDocumentOptions, reset };
+  return { document, doc, docRevision, isDirty, limited, lastFile, markSaved, previewTicks, source, peaks, phase, status, isError, grid, snap, cursorTick, selectedTicks, selectionStartTick, selectionEndTick, pxPerTick, scrollTick, playing, playheadSample, volume, cueVolume, playbackRate, followPlayhead, cueMode, noisegateEnabled, baseName, clipStartNumber, useFfNumbering, exportLock, bandsVisible, rmsVisible, bandAnalysis, bandDetectBands, bandThresholdDb, bandMinGapUnits, bandSnap, tapOffsetMs, bandEstimate, bandBusy, ticks, canUndo, canRedo, transact, replaceDocument, undo, redo, setLimited, setLastFile, setTicks, addTicks, setOutputOptions, setNoisegateEnabled, cancelDraft, registerDraftCancellation, setPreviewTicks, setStatus, tickBeyondEnd, legalTick, setCursorTick, setSelectedTicks, setSelection, setScrollTick, snapTick, zoomAt, setPlaybackRate, setVolume, setCueVolume, setPlaying, setPlayheadSample, setSource, setPhase, setBandAnalysis, setDocumentOptions, reset };
 });
 export type EditorStore = ReturnType<typeof useEditorStore>;
