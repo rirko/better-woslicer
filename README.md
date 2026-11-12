@@ -4,73 +4,68 @@
 
 An offline audio slicer for BMS, based on wosderge's woslicerIII.
 
-![Timeline](screenshots/timeline.png)
+![Main workspace](docs/screenshots/main-ui.png)
 
 ## Features
 
-- WAV/OGG import, WAV slice export, `.wos` projects and BMSE clipboard support.
+- Import WAV and OGG and export WAV slices. Source details show the original encoding. Audio processing and WAV output currently use 16-bit PCM.
+- Save and reopen `.wosdx` projects. Import or export legacy `.wos` settings and exchange markers with BMSE.
 - Timeline editing with snapping, selection, quantization and undo/redo.
 - Variable-speed monitoring, cue sounds and tap calibration.
 - Frequency-band display and automatic cut detection.
-- Built-in BMHelper: divide a key-sound MIDI part into a recording sequence with WAVE definitions, then apply its cut positions to the timeline.
-- English, Chinese, Japanese and Korean UI; About shows version, commit and build date.
+- Built-in BMHelper divides key-sound MIDI into a recording sequence with WAVE definitions. Apply its cut positions to the timeline.
+- Open and save original BMHelper beta 4′ `.bmh` files. DX projects preserve Unicode division names. BMH export uses the original CP932 character substitutions and warns when names change.
+- English, Chinese, Japanese and Korean UI. About shows the version, commit and build date.
 
 ## Run
 
-Download a build from the repository's Actions artifacts and extract it:
+Download the package for your system from Releases (prereleases) or Actions artifacts:
 
-| Platform | Archive | Application |
+| Platform | Package | Usage |
 | --- | --- | --- |
-| Windows | `.7z` | `woslicer-dx.exe` |
-| Linux | `.tar.xz` | `woslicer-dx` |
-| macOS | `.zip` | `woslicer-dx.app` |
+| Windows | .zip | Extract the ZIP. Run the app. WebView2 is required. |
+| Linux | .deb / .AppImage | Install the deb or run the AppImage |
+| macOS | .dmg | Open the disk image. Drag the app to Applications. |
+| Web | .zip | Extract the ZIP. Serve the files as a static website. |
 
-macOS CI builds are not notarized. The application processes files locally and does not require a network connection.
+Windows x64 is the primary desktop package. Other Windows architectures, Linux and macOS packages are included when available. The application processes files locally and works offline.
 
-The web version runs directly in the browser: [woslicer-dx app](https://woslicer-dx.pages.dev/) — no installation needed.
-
-For source builds, use Node.js 24, npm and Git:
-
-```sh
-npm ci
-node node_modules/electron/install.js
-npm start
-```
+Use the [web version](https://woslicer-dx.pages.dev/) directly in your browser. No installation is needed.
 
 ## Controls
+
+Desktop projects store absolute audio paths and reconnect available files when opened. Use **Relink audio** after moving a file. Browsers require manual relinking. A banner shows session recovery and audio loading stages.
 
 | Key | Action |
 | --- | --- |
 | Space | Play / pause |
 | Enter / `,` / `.` | Add a cut at the playhead or cursor |
 | Z | Toggle a cut at the cursor |
-| Arrow keys | Move by grid / measure; Shift+Left/Right moves one tick |
+| Arrow keys | Move by grid / measure. Shift+Left/Right moves one tick. |
 | P / O | Preview current / previous slice |
 | Q / W | Decrease / increase grid density |
 | `[` / `]` | Decrease / increase monitoring speed |
 | Ctrl+C / X / V | Copy / cut / paste selected markers |
 | Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
 | M | Export all slices |
-| T / Y | Save / load `.wos` |
+| Ctrl+O / Ctrl+Shift+O / Ctrl+S | Open audio / open a `.wosdx` project / save the project |
+| T / Y | Import / export `.wos` settings |
 | V / B | Write / read BMSE clipboard |
 
-Left-drag paints cuts, right-drag erases, Shift/Ctrl+drag selects, and dragging a cut moves the selection. Ctrl+wheel zooms; middle-drag pans. Hold Alt to bypass snapping.
+- Drag with the left button to add cuts.
+- Drag with the right button to erase cuts.
+- Hold Shift or Ctrl while dragging to select cuts.
+- Drag a cut to move the selection.
+- Use Ctrl+wheel to zoom.
+- Drag with the middle button to pan.
+- Hold Alt to bypass snapping.
 
-## Development
+## Project links
 
-```sh
-npm run typecheck
-npm test
-npm run build
-npm run test:ui
-npm run package
-npm run test:ui:packaged
-```
-
-Audio is converted to 16-bit internally and exports use 16-bit PCM. Original-program comparison tests require external fixtures and are skipped when those are absent.
-
-See [CI](docs/CI.md), [versioning](docs/VERSIONING.md) and [changelog](CHANGELOG.md).
+[Changelog](CHANGELOG.md) · [Development guide](docs/DEVELOPMENT.md)
 
 ## License and credits
 
-Original woslicer II/III: **wosderge**. Contributor-owned material uses [MIT](LICENSE); original-derived portions and third-party dependencies are excluded from that grant. See [NOTICE](NOTICE) for scope and attribution.
+Original woslicer II/III: **wosderge**. Contributor-owned material uses [MIT](LICENSE). This grant excludes portions derived from the original and third-party dependencies. See [NOTICE](NOTICE) for scope and attribution.
+
+The built-in BMHelper reimplements Be-Music Helper (beta 4′). This implementation uses source code published by its author, **exclusion**. The original README permits secondary use when no money is involved and the author is credited. [Original BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)

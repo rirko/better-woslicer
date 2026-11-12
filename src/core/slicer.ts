@@ -23,8 +23,8 @@
  * therefore a clean zero-duration slice.
  */
 
-import { DEG_TO_RAD_F32, DEG_TO_RAD_F64, intDiv, toInt32 } from "./float32.js";
-import { encodeWav16 } from "./wav.js";
+import { DEG_TO_RAD_F32, DEG_TO_RAD_F64, intDiv, toInt32 } from './float32.js';
+import { encodeWav16 } from './wav.js';
 
 export interface SourceAudio {
   sampleRate: number;
@@ -169,7 +169,7 @@ export function applyCut(
   channelsData: Int16Array[],
   length: number,
   noisegateDb: number,
-  msec: number
+  msec: number,
 ): number {
   // Original: dB == 0 forces threshold = 0 and msec = 0 before scanning.
   const threshold = noisegateDb === 0 ? 0 : toInt32(32768.0 / Math.pow(2.0, noisegateDb / -6.0));

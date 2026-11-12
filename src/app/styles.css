@@ -1,0 +1,22 @@
+/* Global reset and base typography. */
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: system-ui, 'Segoe UI', sans-serif;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+}
+button,
+input {
+  font: inherit;
+}
+
+/* App-owned layout rules (shell, workspace, timeline, overlays, narrow windows) now live in src/app/App.vue. */

@@ -1,0 +1,416 @@
+import { describe, expect, it } from 'vitest';
+import { WOS_FILE_SIZE, writeWos } from '../../src/core/wos';
+import {
+  createSingleTrackProject,
+  decodeProject,
+  encodeProject,
+  parseProject,
+  ProjectFormatError,
+} from '../../src/project/codec';
+import { PROJECT_FILE_MAX_BYTES, type ProjectFileV1 } from '../../src/project/schema';
+import { bmhelperToDocument } from '../../src/project/bmhelper';
+import { readBmh } from '../../src/core/bmh';
+import { readFileSync } from 'node:fs';
+
+function project(): ProjectFileV1 {
+  return createSingleTrackProject({
+    projectId: 'project-1',
+    name: 'Song',
+    mediaId: 'media-1',
+    media: {
+      mediaId: 'media-1',
+      name: 'audio.wav',
+      format: 'wav',
+      byteLength: 192044,
+      sampleRateHz: 48000,
+      channels: 2,
+      framesPerChannel: 48000,
+      integrity: null,
+      originHint: { kind: 'desktop', pathHint: 'C:\\Audio\\audio.wav' },
+    },
+  });
+}
+
+describe('.wosdx project document', () => {
+  it.each([
+    null,
+    [],
+    {},
+    { format: 'other', schemaVersion: 99 },
+    { format: 'wosdx', schemaVersion: '99' },
+    { format: 'wosdx', schemaVersion: 1.5 },
+    { format: 'wosdx', schemaVersion: 0 },
+    { format: 'wosdx', schemaVersion: 1_000_001 },
+  ])('rejects an invalid version envelope: %j', (input) => {
+    expect(() => parseProject(input)).toThrow(ProjectFormatError);
+  });
+
+  it.each(['120', null, undefined, NaN, Infinity, -1, 0, 10001])(
+    'rejects invalid BPM without coercion: %s',
+    (bpm) => {
+      const value = project();
+      expect(() => parseProject({ ...value, timing: { ...value.timing, bpm } })).toThrow(
+        /timing.bpm/,
+      );
+    },
+  );
+
+  it('retains UTF-16 string bounds and accepts an empty output basename', () => {
+    const value = project();
+    expect(
+      parseProject({ ...value, name: '😀'.repeat(256), output: { ...value.output, baseName: '' } })
+        .kind,
+    ).toBe('supported');
+    expect(() => parseProject({ ...value, name: '😀'.repeat(257) })).toThrow(/name/);
+  });
+
+  it('distinguishes nullable metadata from absent required fields', () => {
+    const value = project();
+    const media = value.media[0];
+    if (!media) throw new Error('Expected media');
+    expect(parseProject({ ...value, media: [{ ...media, channels: null }] }).kind).toBe(
+      'supported',
+    );
+    expect(() => parseProject({ ...value, media: [{ ...media, channels: undefined }] })).toThrow();
+    expect(() => parseProject({ ...value, media: [{ ...media, channels: 1.5 }] })).toThrow();
+    expect(() =>
+      parseProject({ ...value, global: { ...value.global, masterMuted: 'false' } }),
+    ).toThrow();
+  });
+
+  it('preserves origin variant normalization and reports only unknown keys', () => {
+    const value = project();
+    const media = value.media[0];
+    if (!media) throw new Error('Expected media');
+    const parsed = parseProject({
+      ...value,
+      media: [
+        {
+          ...media,
+          originHint: { kind: 'desktop', pathHint: 'audio.wav', name: 7, extension: true },
+        },
+      ],
+    });
+    if (parsed.kind !== 'supported') throw new Error('Expected supported project');
+    expect(parsed.project.media[0]?.originHint).toEqual({ kind: 'desktop', pathHint: 'audio.wav' });
+    expect(parsed.unknownFields).toEqual(['media[0].originHint.extension']);
+  });
+
+  it('bounds unknown-field diagnostics and strips extensions from normalized output', () => {
+    const value = project();
+    const extensions = Object.fromEntries(
+      Array.from({ length: 20 }, (_, index) => ['extra' + index, index]),
+    );
+    const parsed = parseProject({ ...value, ...extensions });
+    if (parsed.kind !== 'supported') throw new Error('Expected supported project');
+    expect(parsed.unknownFields).toHaveLength(16);
+    expect(parsed.project).toEqual(value);
+  });
+
+  it('omits undefined browser hints without mutating an in-memory draft', () => {
+    const value = project();
+    const media = value.media[0];
+    if (!media) throw new Error('Expected media');
+    const hint = {
+      kind: 'browser' as const,
+      name: 'audio.wav',
+      relativePathHint: undefined,
+      lastModified: undefined,
+    };
+    const parsed = parseProject({ ...value, media: [{ ...media, originHint: hint }] });
+    if (parsed.kind !== 'supported') throw new Error('Expected supported project');
+    expect(parsed.project.media[0]?.originHint).toEqual({ kind: 'browser', name: 'audio.wav' });
+    expect(hint).toHaveProperty('relativePathHint');
+    expect(hint).toHaveProperty('lastModified');
+  });
+
+  it('rejects duplicate markers and invalid embedded BMHelper data', () => {
+    const value = project();
+    expect(() =>
+      parseProject({ ...value, slicing: { ...value.slicing, markers: [24, 24] } }),
+    ).toThrow(/duplicate ticks/);
+    expect(() =>
+      parseProject({ ...value, bmhelper: { format: 'bmh', bytesBase64: 'not base64' } }),
+    ).toThrow(/bmhelper/);
+    expect(
+      parseProject({
+        ...value,
+        bmhelper: {
+          format: 'bmhelper',
+          source: { quantize: 480, notes: [], pitches: [], controls: [] },
+          divisions: [],
+        },
+      }).kind,
+    ).toBe('supported');
+  });
+
+  it('reports unrecognized fields by path instead of dropping them silently', () => {
+    const value = project();
+    const parsed = parseProject({
+      ...value,
+      mystery: 1,
+      timing: { ...value.timing, swing: 0.5 },
+      output: { ...value.output, gain: 2 },
+    });
+    expect(parsed.kind).toBe('supported');
+    if (parsed.kind === 'supported') {
+      expect(parsed.unknownFields).toEqual(['mystery', 'timing.swing', 'output.gain']);
+      const clean = parseProject(value);
+      expect(clean.kind === 'supported' && clean.unknownFields).toEqual([]);
+    }
+  });
+  it('creates the current one-source document as one track and one full-source clip', () => {
+    const value = project();
+    expect(value.format).toBe('wosdx');
+    expect(value.tracks).toHaveLength(1);
+    expect(value.tracks[0]?.gainDb).toBe(0);
+    expect(value.tracks[0]?.muted).toBe(false);
+    expect(value.tracks[0]?.solo).toBe(false);
+    expect(value.tracks[0]?.clips).toEqual([
+      {
+        // vitest types expect.any() as `any`; pin it to the matched property type.
+        clipId: expect.any(String) as string,
+        mediaId: 'media-1',
+        timelineStartSeconds: 0,
+        sourceOffsetFrames: 0,
+        frameCount: 48000,
+      },
+    ]);
+  });
+
+  it('round-trips a reserved multi-track arrangement with independent clip positions and leading silence', () => {
+    const value = project();
+    const first = value.tracks[0];
+    if (!first) throw new Error('Expected the initial track');
+    first.views.rms = true;
+    first.gainDb = -3;
+    first.clips = [
+      {
+        clipId: 'clip-a',
+        mediaId: 'media-1',
+        timelineStartSeconds: 2,
+        sourceOffsetFrames: 100,
+        frameCount: 1200,
+      },
+      {
+        clipId: 'clip-b',
+        mediaId: 'media-1',
+        timelineStartSeconds: 8,
+        sourceOffsetFrames: 4000,
+        frameCount: 2400,
+      },
+    ];
+    value.tracks.push({
+      trackId: 'track-b',
+      name: 'Second',
+      gainDb: 0,
+      muted: false,
+      solo: true,
+      views: { rms: null, bands: false, spectrum: 'reserved' },
+      clips: [
+        {
+          clipId: 'clip-c',
+          mediaId: 'media-1',
+          timelineStartSeconds: 0,
+          sourceOffsetFrames: 8000,
+          frameCount: 400,
+        },
+      ],
+    });
+    const decoded = decodeProject(encodeProject(value));
+    expect(decoded.kind).toBe('supported');
+    if (decoded.kind !== 'supported') throw new Error('Expected supported project');
+    expect(decoded.project).toEqual(value);
+    expect(decoded.capability).toEqual({
+      kind: 'unsupported-arrangement',
+      trackCount: 2,
+      clipCount: 3,
+    });
+  });
+
+  it('treats desktop and browser references as distinct non-interchangeable variants', () => {
+    const value = project();
+    const media = value.media[0];
+    if (!media) throw new Error('Expected media metadata');
+    media.originHint = {
+      kind: 'browser',
+      name: 'audio.wav',
+      relativePathHint: 'folder/audio.wav',
+      lastModified: 1234,
+    };
+    const parsed = parseProject(JSON.parse(new TextDecoder().decode(encodeProject(value))));
+    expect(parsed.kind).toBe('supported');
+    if (parsed.kind !== 'supported') throw new Error('Expected supported project');
+    expect(parsed.project.media[0]?.originHint).toEqual(media.originHint);
+    expect(() =>
+      parseProject({
+        ...value,
+        media: [{ ...media, originHint: { kind: 'browser', pathHint: 'C:\\Audio\\audio.wav' } }],
+      }),
+    ).toThrow();
+  });
+
+  it('preserves the exact complex file alongside its normalized known fields', () => {
+    const value = project();
+    const track = value.tracks[0];
+    const media = value.media[0];
+    if (!track || !media) throw new Error('Expected track and media');
+    const input = {
+      ...value,
+      name: '音楽',
+      extension: { largeInteger: '9007199254740993' },
+      slicing: { ...value.slicing, markers: [48, 0, 24] },
+      media: [{ ...media, integrity: { algorithm: 'sha256', digest: 'AB'.repeat(32) } }],
+      tracks: [
+        { ...track, views: { ...track.views, spectrum: null }, extension: { color: 'blue' } },
+        { ...track, trackId: 'second', clips: [] },
+      ],
+    };
+    // A BOM, CRLF, trailing whitespace and numeric spelling must also survive.
+    const text =
+      '\uFEFF' +
+      JSON.stringify(input, null, 2)
+        .replaceAll('\n', '\r\n')
+        .replace('"bpm": 120', '"bpm": 1.20e2') +
+      '\r\n ';
+    const bytes = new TextEncoder().encode(text);
+    const decoded = decodeProject(bytes);
+    if (decoded.kind !== 'supported') throw new Error('Expected supported schema');
+    expect(decoded.capability).toEqual({
+      kind: 'unsupported-arrangement',
+      trackCount: 2,
+      clipCount: 1,
+    });
+    expect(decoded.project.slicing.markers).toEqual([0, 24, 48]);
+    expect(decoded.project.media[0]?.integrity?.digest).toBe('ab'.repeat(32));
+    expect(decoded.project.tracks[0]?.views.spectrum).toBe('reserved');
+    expect(decoded.sourceBytes).toEqual(bytes);
+    expect(decoded.sourceBytes).not.toEqual(encodeProject(decoded.project));
+    const reopened = decodeProject(decoded.sourceBytes);
+    expect(reopened).toEqual(decoded);
+  });
+
+  it('owns a copy of the exact input view, including when the input is a Node buffer', () => {
+    const bytes = encodeProject(project());
+    const buffer = Buffer.concat([Buffer.from([0xff]), Buffer.from(bytes), Buffer.from([0xff])]);
+    const input = buffer.subarray(1, buffer.length - 1);
+    const decoded = decodeProject(input);
+    input.fill(0);
+    expect(decoded.sourceBytes).toEqual(bytes);
+    decoded.sourceBytes.fill(1);
+    expect(input.every((byte) => byte === 0)).toBe(true);
+  });
+
+  it('preserves future file bytes without interpreting them as a v1 document', () => {
+    const bytes = new TextEncoder().encode(
+      '{ "format": "wosdx", "schemaVersion": 99, "future": [1, 2] }\n',
+    );
+    const decoded = decodeProject(bytes);
+    expect(decoded).toMatchObject({
+      kind: 'unsupported-version',
+      version: 99,
+      raw: { future: [1, 2] },
+    });
+    expect(decoded).not.toHaveProperty('project');
+    expect(decoded.sourceBytes).toEqual(bytes);
+    bytes.fill(0);
+    expect(decodeProject(decoded.sourceBytes).kind).toBe('unsupported-version');
+  });
+
+  it('rejects duplicate IDs, dangling media references and invalid numeric ranges', () => {
+    const value = project();
+    expect(() => parseProject({ ...value, tracks: [value.tracks[0], value.tracks[0]] })).toThrow(
+      /duplicate/i,
+    );
+    const track = value.tracks[0];
+    if (!track) throw new Error('Expected track');
+    expect(() =>
+      parseProject({
+        ...value,
+        tracks: [{ ...track, clips: [{ ...track.clips[0], mediaId: 'missing' }] }],
+      }),
+    ).toThrow(/media/i);
+    expect(() => parseProject({ ...value, tracks: [{ ...track, gainDb: Number.NaN }] })).toThrow();
+    expect(() =>
+      parseProject({
+        ...value,
+        tracks: [
+          { ...track, clips: [{ ...track.clips[0], sourceOffsetFrames: 48000, frameCount: 1 }] },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it('distinguishes future schemas from invalid data and enforces a bounded input size', () => {
+    const value = project();
+    const future = parseProject({ ...value, schemaVersion: 99 });
+    expect(future).toMatchObject({
+      kind: 'unsupported-version',
+      version: 99,
+      raw: { schemaVersion: 99 },
+    });
+    expect(() => decodeProject(new Uint8Array(PROJECT_FILE_MAX_BYTES + 1))).toThrow(
+      /64 MiB limit/i,
+    );
+    expect(() => decodeProject(new TextEncoder().encode('{bad json'))).toThrow(/json/i);
+  });
+
+  it('round-trips structured BMHelper data above the old 16 MiB cap', () => {
+    const value = project();
+    const notes = Array.from({ length: 350_000 }, (_, index) => ({
+      position: index * 120,
+      gate: 60,
+      nn: 60,
+      vel: 100,
+    }));
+    value.bmhelper = {
+      format: 'bmhelper',
+      source: { quantize: 480, notes, pitches: [], controls: [] },
+      divisions: [],
+    };
+    const bytes = encodeProject(value);
+    expect(bytes.byteLength).toBeGreaterThan(16 * 1024 * 1024);
+    const result = decodeProject(bytes);
+    if (result.kind !== 'supported') throw new Error('Expected a supported project');
+    expect(result.project.bmhelper?.source.notes.length).toBe(notes.length);
+    expect(result.project.bmhelper?.source.notes[349_999]).toEqual(notes[349_999]);
+  });
+  it('validates BMHelper references and Unicode at the project boundary', () => {
+    const bmhelper = bmhelperToDocument(
+      readBmh(new Uint8Array(readFileSync('tests/fixtures/bmh/original.bmh'))),
+    );
+    const value = { ...project(), bmhelper };
+    bmhelper.divisions[0].name = '简体中文・한국어・🎵';
+    expect(parseProject(value).kind).toBe('supported');
+    bmhelper.divisions[0].src2def[0] = 999;
+    expect(() => parseProject(value)).toThrow(/source-to-definition/);
+    bmhelper.divisions[0].src2def[0] = 0;
+    bmhelper.divisions[0].definitions[0].div = 999;
+    expect(() => parseProject(value)).toThrow(/missing recording note/);
+    bmhelper.divisions[0].definitions[0].div = 0;
+    bmhelper.divisions[0].name = '\ud800';
+    expect(() => parseProject(value)).toThrow(/Unicode/);
+  });
+
+  it('keeps spectrum explicitly reserved and keeps global view defaults separate from detection settings', () => {
+    const value = project();
+    expect(value.global.views).toEqual({ rms: false, bands: false, spectrum: 'reserved' });
+    expect(value.tracks[0]?.views).toEqual({ rms: null, bands: null, spectrum: 'reserved' });
+    expect(value.slicing).toHaveProperty('bandDetection');
+  });
+
+  it('does not alter the locked legacy WOS byte layout', () => {
+    const value = project();
+    expect(
+      writeWos({
+        bpm: value.timing.bpm,
+        shift: value.timing.shiftTicks,
+        fadeoutMs: value.slicing.fadeoutMs,
+        noisegateDb: value.slicing.noisegateDb,
+        markers: Uint8Array.from({ length: 49152 }, (_, i) =>
+          Number(value.slicing.markers.includes(i)),
+        ),
+      }),
+    ).toHaveLength(WOS_FILE_SIZE);
+  });
+});

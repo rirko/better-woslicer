@@ -77,19 +77,21 @@ class ByteReader {
   }
 
   u8(): number {
-    if (this.pos >= this.bytes.length) throw new SmfFormatError("unexpected end of MIDI data");
+    if (this.pos >= this.bytes.length) throw new SmfFormatError('unexpected end of MIDI data');
     return this.bytes[this.pos++];
   }
 
   u16(): number {
-    if (this.pos + 2 > this.bytes.length) throw new SmfFormatError("unexpected end of MIDI data");
+    if (this.pos + 2 > this.bytes.length) throw new SmfFormatError('unexpected end of MIDI data');
     const value = (this.bytes[this.pos] << 8) | this.bytes[this.pos + 1];
     this.pos += 2;
     return value;
   }
 
   u32(): number {
-    if (this.pos + 4 > this.bytes.length) throw new SmfFormatError("unexpected end of MIDI data");
+    // Same truncation boundary and big-endian assembly as bmh.ts's ByteReader;
+    // the two format readers must stay in step.
+    if (this.pos + 4 > this.bytes.length) throw new SmfFormatError('unexpected end of MIDI data');
     const value =
       this.bytes[this.pos] * 0x1000000 +
       (this.bytes[this.pos + 1] << 16) +
@@ -109,14 +111,16 @@ class ByteReader {
   }
 
   raw(length: number): Uint8Array {
-    if (this.pos + length > this.bytes.length) throw new SmfFormatError("unexpected end of MIDI data");
+    if (this.pos + length > this.bytes.length)
+      throw new SmfFormatError('unexpected end of MIDI data');
     const out = this.bytes.subarray(this.pos, this.pos + length);
     this.pos += length;
     return out;
   }
 
   skip(length: number): void {
-    if (this.pos + length > this.bytes.length) throw new SmfFormatError("unexpected end of MIDI data");
+    if (this.pos + length > this.bytes.length)
+      throw new SmfFormatError('unexpected end of MIDI data');
     this.pos += length;
   }
 }
@@ -124,13 +128,13 @@ class ByteReader {
 function parseTrack(reader: ByteReader, end: number): ParsedTrack {
   let tick = 0;
   let running = 0;
-  let name = "";
+  let name = '';
   const events: ChannelEvent[] = [];
   while (reader.position < end) {
     tick += reader.varlen();
     let status = reader.u8();
     if (status < 0x80) {
-      if (running === 0) throw new SmfFormatError("running status without a status byte");
+      if (running === 0) throw new SmfFormatError('running status without a status byte');
       // Re-use the running status: the byte just read is the first data byte,
       // so step back and re-read it through the normal path.
       reader.skip(-1);
@@ -142,8 +146,8 @@ function parseTrack(reader: ByteReader, end: number): ParsedTrack {
       const type = reader.u8();
       const length = reader.varlen();
       const data = reader.raw(length);
-      if (type === 0x03 && name === "") {
-        name = new TextDecoder("utf-8").decode(data).replace(/\0+$/, "");
+      if (type === 0x03 && name === '') {
+        name = new TextDecoder('utf-8').decode(data).replace(/\0+$/, '');
       } else if (type === 0x2f) {
         break; // end of track
       }
@@ -172,7 +176,11 @@ interface PairedNote extends MidiNoteEvent {
   channel: number;
 }
 
-function pairTrack(events: ChannelEvent[]): { notes: PairedNote[]; pitches: MidiParamEvent[]; controls: MidiControlEvent[] } {
+function pairTrack(events: ChannelEvent[]): {
+  notes: PairedNote[];
+  pitches: MidiParamEvent[];
+  controls: MidiControlEvent[];
+} {
   const open = new Map<number, { tick: number; vel: number; channel: number }>();
   const notes: PairedNote[] = [];
   const pitches: MidiParamEvent[] = [];
@@ -186,7 +194,13 @@ function pairTrack(events: ChannelEvent[]): { notes: PairedNote[]; pitches: Midi
     } else if (kind === 0x80 || (kind === 0x90 && ev.d1 === 0)) {
       const on = open.get(ev.d0);
       if (on !== undefined) {
-        notes.push({ position: on.tick, gate: ev.tick - on.tick, nn: ev.d0, vel: on.vel, channel: on.channel });
+        notes.push({
+          position: on.tick,
+          gate: ev.tick - on.tick,
+          nn: ev.d0,
+          vel: on.vel,
+          channel: on.channel,
+        });
         open.delete(ev.d0);
       }
     } else if (kind === 0xe0) {
@@ -201,9 +215,10 @@ function pairTrack(events: ChannelEvent[]): { notes: PairedNote[]; pitches: Midi
 
 function parseSmf(bytes: Uint8Array): ParsedFile {
   const reader = new ByteReader(bytes);
-  if (reader.u32() !== 0x4d546864) throw new SmfFormatError("not a Standard MIDI File (missing MThd)");
+  if (reader.u32() !== 0x4d546864)
+    throw new SmfFormatError('not a Standard MIDI File (missing MThd)');
   const headerSize = reader.u32();
-  if (headerSize < 6) throw new SmfFormatError("malformed MIDI header");
+  if (headerSize < 6) throw new SmfFormatError('malformed MIDI header');
   const format = reader.u16();
   if (format !== 0 && format !== 1) {
     throw new SmfFormatError(`unsupported MIDI format ${format} (only 0 and 1)`);
@@ -211,12 +226,12 @@ function parseSmf(bytes: Uint8Array): ParsedFile {
   const trackCount = reader.u16();
   const division = reader.u16();
   if ((division & 0x8000) !== 0) {
-    throw new SmfFormatError("SMPTE-time-coded MIDI files are not supported");
+    throw new SmfFormatError('SMPTE-time-coded MIDI files are not supported');
   }
   reader.skip(headerSize - 6);
   const tracks: ParsedTrack[] = [];
   for (let index = 0; index < trackCount && reader.remaining >= 8; index++) {
-    if (reader.u32() !== 0x4d54726b) throw new SmfFormatError("missing MTrk chunk");
+    if (reader.u32() !== 0x4d54726b) throw new SmfFormatError('missing MTrk chunk');
     const size = reader.u32();
     const end = reader.position + size;
     tracks.push(parseTrack(reader, end));
@@ -226,7 +241,11 @@ function parseSmf(bytes: Uint8Array): ParsedFile {
 }
 
 /** Lists the tracks of an SMF file for the import dialog. */
-export function inspectSmf(bytes: Uint8Array): { division: number; format: number; tracks: SmfTrackInfo[] } {
+export function inspectSmf(bytes: Uint8Array): {
+  division: number;
+  format: number;
+  tracks: SmfTrackInfo[];
+} {
   const parsed = parseSmf(bytes);
   return {
     division: parsed.division,
@@ -243,7 +262,7 @@ export function inspectSmf(bytes: Uint8Array): { division: number; format: numbe
 export function readSmfSequence(
   bytes: Uint8Array,
   trackIndex: number,
-  channels: ReadonlySet<number>
+  channels: ReadonlySet<number>,
 ): MidiSequence {
   const parsed = parseSmf(bytes);
   if (trackIndex < 0 || trackIndex >= parsed.tracks.length) {
@@ -257,7 +276,7 @@ export function readSmfSequence(
 }
 
 function pushVarlen(target: number[], value: number): void {
-  if (value < 0) throw new RangeError("negative MIDI delta time");
+  if (value < 0) throw new RangeError('negative MIDI delta time');
   const buffer = [value & 0x7f];
   for (let rest = value >> 7; rest > 0; rest >>= 7) {
     buffer.unshift((rest & 0x7f) | 0x80);
@@ -281,7 +300,11 @@ export function writeSmfSequence(sequence: MidiSequence): Uint8Array {
     const vel = Math.max(1, Math.min(127, Math.trunc(note.vel)));
     const nn = Math.max(0, Math.min(127, Math.trunc(note.nn)));
     const gate = Math.max(0, Math.trunc(note.gate));
-    events.push({ tick: Math.max(0, Math.trunc(note.position)), order: events.length, bytes: [0x90, nn, vel] });
+    events.push({
+      tick: Math.max(0, Math.trunc(note.position)),
+      order: events.length,
+      bytes: [0x90, nn, vel],
+    });
     events.push({
       tick: Math.max(0, Math.trunc(note.position)) + gate,
       order: events.length,
@@ -303,17 +326,18 @@ export function writeSmfSequence(sequence: MidiSequence): Uint8Array {
   const ascii = (text: string) => {
     for (const ch of text) out.push(ch.charCodeAt(0));
   };
-  const u32 = (value: number) => out.push((value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff);
+  const u32 = (value: number) =>
+    out.push((value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff);
   const u16 = (value: number) => out.push((value >> 8) & 0xff, value & 0xff);
-  ascii("MThd");
+  ascii('MThd');
   u32(6);
   u16(1); // format 1
   u16(2); // track 0 = EOT only, track 1 = notes
   u16(sequence.quantize & 0x7fff);
-  ascii("MTrk");
+  ascii('MTrk');
   u32(4);
   out.push(0x00, 0xff, 0x2f, 0x00);
-  ascii("MTrk");
+  ascii('MTrk');
   u32(track.length);
   out.push(...track);
   return Uint8Array.from(out);

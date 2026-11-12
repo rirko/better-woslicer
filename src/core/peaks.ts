@@ -30,7 +30,7 @@ export interface PeakCache {
 
 /** Builds a hierarchical peak cache for int16 channel data. */
 export function buildPeakCache(channelsData: Int16Array[], baseBucket = 256): PeakCache {
-  if (baseBucket < 1) throw new RangeError("baseBucket must be >= 1");
+  if (baseBucket < 1) throw new RangeError('baseBucket must be >= 1');
   const channels = channelsData.length;
   const length = channels === 0 ? 0 : channelsData[0].length;
 
@@ -62,7 +62,9 @@ export function buildPeakCache(channelsData: Int16Array[], baseBucket = 256): Pe
     baseRms[b] = count > 0 ? Math.sqrt(sumSquares / count) : 0;
   }
 
-  const levels: PeakLevel[] = [{ framesPerBucket: baseBucket, minMax: base, rms: baseRms, buckets }];
+  const levels: PeakLevel[] = [
+    { framesPerBucket: baseBucket, minMax: base, rms: baseRms, buckets },
+  ];
   // Hierarchical x4 summary levels keep even extreme zoom-outs cheap.
   while (levels[levels.length - 1].buckets > 1) {
     const prev = levels[levels.length - 1];
@@ -90,7 +92,12 @@ export function buildPeakCache(channelsData: Int16Array[], baseBucket = 256): Pe
       // mean of the child RMS values.
       nextRms[i] = members > 0 ? Math.sqrt(sumSquares / members) : 0;
     }
-    levels.push({ framesPerBucket: prev.framesPerBucket * 4, minMax: next, rms: nextRms, buckets: count });
+    levels.push({
+      framesPerBucket: prev.framesPerBucket * 4,
+      minMax: next,
+      rms: nextRms,
+      buckets: count,
+    });
   }
   return { levels };
 }
@@ -107,7 +114,12 @@ export interface MinMaxRms {
  * RMS of unequal-width bucket groups is the quadratic mean weighted by
  * bucket width (the last group may be partial).
  */
-export function peakRange(cache: PeakCache, length: number, startFrame: number, endFrame: number): MinMaxRms {
+export function peakRange(
+  cache: PeakCache,
+  length: number,
+  startFrame: number,
+  endFrame: number,
+): MinMaxRms {
   const clampedStart = Math.max(0, Math.min(length, Math.floor(startFrame)));
   const clampedEnd = Math.max(clampedStart, Math.min(length, Math.ceil(endFrame)));
   if (clampedEnd === clampedStart) return { min: 0, max: 0, rms: 0 };
