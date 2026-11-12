@@ -35,8 +35,12 @@ const store = useBmhelperStore();
 // The workspace service is injected once by the app shell and stays stable
 // across panel remounts, so in-flight dialog actions keep one platform identity.
 const platform = useWorkspace().platform;
+// Shared async state: every action funnels through one busy flag and one error message.
 const busy = ref(false);
 const error = ref('');
+// Both dialogs stay in this panel by decision: settingsOpen serves MIDI import and
+// new divisions alike, definitionsOpen shows the definition text; pending holds the
+// imported file until the settings dialog is confirmed or closed.
 const settingsOpen = ref(false);
 const definitionsOpen = ref(false);
 const pending = shallowRef<OpenedFile | null>(null);
@@ -45,6 +49,7 @@ const track = ref(0);
 const channels = ref<number[]>(Array.from({ length: 16 }, (_, index) => index));
 const filename = ref('');
 const startNumber = ref('01');
+// Draft values for the settings dialog; beat-level numbers are converted to ticks on create.
 const settings = reactive({
   name: '',
   srcCopy: false,
@@ -58,6 +63,7 @@ const settings = reactive({
   startDefinition: '01',
   mlThreshold: 0.5,
 });
+// Sort modes offered by the settings dialog select.
 const sorts: SortType[] = [
   'none',
   'nn_gate_vel',
@@ -67,9 +73,11 @@ const sorts: SortType[] = [
   'vel_nn_gate',
   'vel_gate_nn',
 ];
+// Definition text for the selected division, shown in the definitions dialog.
 const definitionText = computed(() =>
   store.selectedDivision ? wavDefinitionText(store.selectedDivision, filename.value) : '',
 );
+// Numeric dialog fields iterated in the settings grid, each with its step size.
 const numericSettings = [
   { field: 'headMargin', key: 'bmhHeadMargin', step: 0.125 },
   { field: 'minInterval', key: 'bmhMinInterval', step: 0.125 },
@@ -77,6 +85,7 @@ const numericSettings = [
   { field: 'velocityThreshold', key: 'bmhVelThreshold', step: 1 },
   { field: 'mlThreshold', key: 'bmhMlThreshold', step: 0.125 },
 ] as const;
+// Shared action wrapper: re-entrancy guard, error capture, busy release in finally.
 async function run(action: () => void | Promise<void>): Promise<void> {
   if (busy.value) return;
   busy.value = true;
@@ -91,6 +100,8 @@ async function run(action: () => void | Promise<void>): Promise<void> {
     busy.value = false;
   }
 }
+// Defaults use a 480-tick TPQN reference; tick-based defaults are divided by 480 into
+// beat-level values and re-truncated at the project quantize in create().
 function resetSettings(): void {
   const defaults = defaultDivisionSetting(
     `division ${(store.project?.divisions.length ?? 0) + 1}`,
@@ -104,6 +115,7 @@ function resetSettings(): void {
     startDefinition: zzToString(defaults.startDefinition),
   });
 }
+// Import flow: pick a MIDI file, inspect its tracks, then open the settings dialog.
 async function openMidi(): Promise<void> {
   await run(async () => {
     const file = await platform.openFile('midi');
@@ -117,15 +129,19 @@ async function openMidi(): Promise<void> {
     settingsOpen.value = true;
   });
 }
+// New-division flow: the same settings dialog without a pending MIDI file.
 function newDivision(): void {
   pending.value = null;
   resetSettings();
   settingsOpen.value = true;
 }
+// Start definition text: one or two base-36 characters, parsed to a number.
 function parseStart(value: string): number {
   if (!/^[0-9a-z]{1,2}$/i.test(value.trim())) throw new Error('invalid-start');
   return parseInt(value.trim(), 36);
 }
+// Confirm the settings dialog: validate fields, import the pending MIDI if present,
+// then add the division; beat-level values are truncated to ticks at the project quantize.
 async function create(): Promise<void> {
   await run(() => {
     const start = parseStart(settings.startDefinition);
@@ -156,12 +172,14 @@ async function create(): Promise<void> {
     pending.value = null;
   });
 }
+// Project IO: open a saved .bmh file into the store.
 async function openProject(): Promise<void> {
   await run(async () => {
     const file = await platform.openFile('bmh');
     if (file) store.openProject(file.bytes, file.name);
   });
 }
+// Save through the platform dialog; a save that did not complete leaves the project dirty.
 async function saveProject(): Promise<void> {
   await run(async () => {
     const saved = await store.saveBmhProject((bytes) =>
@@ -170,6 +188,7 @@ async function saveProject(): Promise<void> {
     if (!saved) store.dirty = true;
   });
 }
+// Export the selected division recording as a .mid file.
 async function exportMidi(): Promise<void> {
   await run(async () => {
     await platform.saveFile(
@@ -179,6 +198,7 @@ async function exportMidi(): Promise<void> {
     );
   });
 }
+// Clipboard variants: cut positions, BMS sequence, or the definition text.
 async function copy(kind: 'cuts' | 'bms' | 'definitions'): Promise<void> {
   await run(async () => {
     const division = store.selectedDivision;
@@ -193,6 +213,7 @@ async function copy(kind: 'cuts' | 'bms' | 'definitions'): Promise<void> {
     );
   });
 }
+// Definitions dialog: seed the file-name draft with the current project name.
 function showDefinitions(): void {
   filename.value = store.name;
   definitionsOpen.value = true;
@@ -204,6 +225,7 @@ function showDefinitions(): void {
     class="bmhelper"
     :aria-label="t('chrome.tabBmhelper')"
   >
+    <!-- panel actions: open MIDI, open/save project, new division -->
     <div class="actions">
       <ElButton
         :disabled="busy"
@@ -233,6 +255,7 @@ function showDefinitions(): void {
       :closable="false"
       role="alert"
     />
+    <!-- source summary and division selector -->
     <template v-if="store.project">
       <p>
         {{ t('chrome.bmhSourceLabel') }}: {{ store.name }} · {{ store.project.source.notes.length }}
@@ -257,6 +280,7 @@ function showDefinitions(): void {
           >{{ t('chrome.bmhDelete') }}</ElButton
         >
       </div>
+      <!-- selected division: piano roll, export/apply/copy actions, transpose and start number -->
       <template v-if="store.selectedDivision">
         <PianoRoll
           :notes="store.selectedDivision.recording"
@@ -311,6 +335,7 @@ function showDefinitions(): void {
         </div>
       </template>
     </template>
+    <!-- division settings dialog: track/channel picking while a MIDI import is pending, plain defaults for a new division -->
     <ElDialog
       v-model="settingsOpen"
       :title="t('chrome.bmhNewDivision')"
@@ -392,6 +417,7 @@ function showDefinitions(): void {
         ></template
       >
     </ElDialog>
+    <!-- definitions dialog: file-name draft and read-only definition text -->
     <ElDialog
       v-model="definitionsOpen"
       :title="t('chrome.bmhDefsTitle')"
@@ -417,31 +443,42 @@ function showDefinitions(): void {
   </section>
 </template>
 <style scoped>
+/* Panel layout: one grid column with even gaps. */
 .bmhelper {
   display: grid;
   gap: 12px;
   padding: 12px;
   min-width: 0;
 }
+
+/* Action rows: wrapping flex rows; resets Element Plus adjacent-button margins
+   and fixes the division select width. */
 .actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
+
 .actions :deep(.el-button + .el-button) {
   margin-left: 0;
 }
+
 .actions :deep(.el-select) {
   width: 240px;
 }
+
+/* Start-number input and inline definition text on the transpose row. */
 .start-number {
   width: 72px;
 }
+
 .definitions {
   overflow-wrap: anywhere;
   font-family: monospace;
 }
+
+/* Settings dialog: two-column grid of numeric and select fields. */
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

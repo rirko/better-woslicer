@@ -6,15 +6,19 @@ import { useWorkspace } from '../workspace/workspace';
 const { t } = useI18n();
 const workspace = useWorkspace();
 const editor = workspace.editor;
+// Virtual list: a window of rows is derived from the viewport scroll offset.
 const viewport = useTemplateRef<HTMLDivElement>('viewport');
 const offset = shallowRef(0);
 const rowHeight = 32;
 const first = computed(() => Math.max(0, Math.floor(offset.value / rowHeight) - 3));
 const rows = computed(() => editor.ticks.slice(first.value, first.value + 22));
 const selected = computed(() => new Set(editor.selectedTicks));
+// Viewport scroll drives the rendered window.
 function scroll(event: Event): void {
   if (event.currentTarget instanceof HTMLElement) offset.value = event.currentTarget.scrollTop;
 }
+// Click protocol: plain click replaces the selection; Ctrl/Meta toggles the clicked tick.
+// Afterwards: cursor, scroll keep-alive, and playhead update only while playback is stopped.
 function choose(tick: number, event: MouseEvent): void {
   editor.setCursorTick(tick);
   editor.setSelectedTicks(
@@ -34,6 +38,7 @@ function choose(tick: number, event: MouseEvent): void {
       }),
     );
 }
+// Reset the scroll window when the tick list shrinks below the current offset.
 watch(
   () => editor.ticks.length,
   (count) => {
@@ -51,6 +56,7 @@ watch(
     :aria-label="t('chrome.tabCuts')"
     data-testid="marker-list"
   >
+    <!-- marker actions: quantize selection, clear all -->
     <div class="marker-actions">
       <el-button
         size="small"
@@ -65,6 +71,7 @@ watch(
         >{{ t('chrome.clearMarkers') }}</el-button
       >
     </div>
+    <!-- virtualized list: spacer keeps the scroll height, window offsets the visible rows -->
     <div
       ref="viewport"
       class="marker-viewport"
@@ -95,6 +102,7 @@ watch(
 </template>
 
 <style scoped>
+/* Panel padding and marker action buttons. */
 .marker-list {
   padding: 12px;
 }
@@ -107,6 +115,8 @@ watch(
 .marker-actions :deep(.el-button) {
   margin: 0;
 }
+
+/* Virtual scroll scaffold: fixed-height viewport, spacer, offset window. */
 .marker-viewport {
   height: 384px;
   max-height: 40vh;
@@ -120,6 +130,8 @@ watch(
   position: absolute;
   inset: 0 0 auto;
 }
+
+/* Row buttons: full-width, square, tabular numerals; selected highlight. */
 .marker-row {
   display: flex;
   width: 100%;

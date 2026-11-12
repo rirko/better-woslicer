@@ -5,6 +5,7 @@ import { useWorkspace } from '../workspace/workspace';
 const { t } = useI18n();
 const workspace = useWorkspace();
 const editor = workspace.editor;
+// Output fields written through editor transactions.
 const clipStart = computed({
   get: () => editor.clipStartNumber,
   set: (value: number | undefined) => {
@@ -24,6 +25,7 @@ const ffNumbering = computed({
   get: () => editor.useFfNumbering,
   set: (value: boolean) => editor.setOutputOptions({ useFfNumbering: value }),
 });
+// Fade and gate track the document revision (undo) and forward only defined numbers.
 const fade = computed({
   get: () => {
     void editor.docRevision;
@@ -50,6 +52,7 @@ const gate = computed({
     :aria-label="t('chrome.tabOutput')"
     data-testid="output-panel"
   >
+    <!-- output fields: base name, fade, gate, clip start numbering -->
     <el-form
       label-position="top"
       size="small"
@@ -89,6 +92,7 @@ const gate = computed({
       /></el-form-item>
       <el-checkbox v-model="ffNumbering">{{ t('chrome.ffNumberingLabel') }}</el-checkbox>
     </el-form>
+    <!-- export actions: export all, slice at cursor, save/import settings, BMSE out/in -->
     <div class="output-actions">
       <el-button
         type="primary"
@@ -115,9 +119,12 @@ const gate = computed({
 </template>
 
 <style scoped>
+/* Panel padding. */
 .output-panel {
   padding: 12px;
 }
+
+/* Export actions stacked vertically; strip adjacent-button margin. */
 .output-actions {
   display: grid;
   gap: 8px;

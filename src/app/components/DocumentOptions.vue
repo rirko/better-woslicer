@@ -6,6 +6,7 @@ import { GRID_DENSITIES } from '../../core/gridlines';
 import { useEditorStore } from '../../slicing/editor-store';
 const editor = useEditorStore();
 const { t } = useI18n();
+// Document fields are read through docRevision and written via editor transactions.
 type Option = 'bpm' | 'shift' | 'fadeoutMs' | 'noisegateDb';
 function option(key: Option) {
   return computed({
@@ -18,20 +19,27 @@ function option(key: Option) {
     },
   });
 }
-const bpm = option('bpm'),
-  shift = option('shift'),
-  fade = option('fadeoutMs'),
-  gate = option('noisegateDb');
+// Bound fields used by the template.
+const bpm = option('bpm');
+const shift = option('shift');
+const fade = option('fadeoutMs');
+const gate = option('noisegateDb');
+
+// Session toggle: enables or disables the noisegate without touching its level.
 const gateEnabled = computed({
   get: () => editor.noisegateEnabled,
   set: (value: boolean) => editor.setNoisegateEnabled(value),
 });
+// Grid density is a session property restricted to canonical densities.
 function setGrid(value: unknown): void {
   if (typeof value === 'number' && GRID_DENSITIES.includes(value)) editor.grid = value;
 }
 </script>
 <template>
   <div class="document-options">
+    <!-- document options row: bpm, grid, snap, shift, fade, gate.
+         Labels are inline, so each label text must stay adjacent to its control;
+         the folded closing tags below are formatter-mandated. -->
     <label
       >{{ t('chrome.bpmLabel')
       }}<ElInputNumber

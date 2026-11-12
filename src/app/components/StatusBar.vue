@@ -9,6 +9,7 @@ defineProps<{ identity: BuildIdentity | null }>();
 const emit = defineEmits<{ about: [] }>();
 const editor = useEditorStore();
 const { t } = useI18n();
+// Status segments joined into one live-region message.
 const status = computed(() =>
   editor.status.segments
     .map((segment) => t(`status.${segment.key}`, segment.params ?? {}))
@@ -20,6 +21,7 @@ const status = computed(() =>
     class="statusbar"
     :class="{ 'status-error': editor.isError }"
   >
+    <!-- status message: polite live region -->
     <span
       class="status-message"
       role="status"
@@ -27,6 +29,7 @@ const status = computed(() =>
       :title="status"
       >{{ status }}</span
     >
+    <!-- cursor readout and marker count -->
     <span>{{
       t('chrome.readoutTick', {
         measure: Math.floor(editor.cursorTick / MEASURE_TICKS) + 1,
@@ -34,6 +37,7 @@ const status = computed(() =>
       })
     }}</span>
     <span>{{ t('chrome.tabCuts') }}: {{ editor.ticks.length }}</span>
+    <!-- about entry, shown only with build identity -->
     <ElButton
       v-if="identity"
       link
@@ -45,6 +49,7 @@ const status = computed(() =>
   </footer>
 </template>
 <style scoped>
+/* Status bar strip: wraps on narrow windows. */
 .statusbar {
   display: flex;
   flex-wrap: wrap;
@@ -56,6 +61,8 @@ const status = computed(() =>
   color: var(--el-text-color-secondary);
   font-size: 12px;
 }
+
+/* Status message fills the remaining width; error state recolors it. */
 .status-message {
   flex: 1 1 300px;
   min-width: 0;

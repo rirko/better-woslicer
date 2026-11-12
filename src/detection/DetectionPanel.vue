@@ -7,6 +7,7 @@ import { useWorkspace } from '../workspace/workspace';
 const { t } = useI18n();
 const workspace = useWorkspace();
 const editor = workspace.editor;
+// Rise threshold accepted only when a finite number within 0–120 dB.
 const threshold = computed({
   get: () => editor.bandThresholdDb,
   set: (value: number | undefined) => {
@@ -14,6 +15,7 @@ const threshold = computed({
       editor.bandThresholdDb = value;
   },
 });
+// Band checkboxes project the per-band flags on the editor.
 const selectedBands = computed({
   get: () => BAND_NAMES.filter((band) => editor.bandDetectBands[band]),
   set: (bands: BandName[]) => {
@@ -25,11 +27,13 @@ const selectedBands = computed({
   },
 });
 const bandLabels = { low: 'chrome.bandLow', mid: 'chrome.bandMid', high: 'chrome.bandHigh' };
+// Selection range text for the scope line; null means the whole track.
 const range = computed(() =>
   editor.selectionStartTick === null || editor.selectionEndTick === null
     ? null
     : `${Math.min(editor.selectionStartTick, editor.selectionEndTick)}–${Math.max(editor.selectionStartTick, editor.selectionEndTick)}`,
 );
+// Keep decoded bands available whenever detection becomes visible with a source present.
 watch(
   () => [editor.bandsVisible, editor.source],
   () => {
@@ -44,8 +48,10 @@ watch(
     :aria-label="t('chrome.bandDetect')"
     data-testid="detection-panel"
   >
+    <!-- visibility toggles: overlay bands and RMS on the timeline -->
     <el-checkbox v-model="editor.bandsVisible">{{ t('chrome.bands') }}</el-checkbox>
     <el-checkbox v-model="editor.rmsVisible">{{ t('chrome.titleRms') }}</el-checkbox>
+    <!-- band detection form: bands, rise threshold, minimum gap, snap, scope, actions -->
     <el-form
       label-position="top"
       size="small"
@@ -83,6 +89,7 @@ watch(
         </el-select>
       </el-form-item>
       <el-checkbox v-model="editor.bandSnap">{{ t('chrome.bandSnapLabel') }}</el-checkbox>
+      <!-- scope readout and detect actions -->
       <p class="scope">
         {{ range ? `${t('status.bandDetectInSelection')}: ${range}` : t('chrome.bandScopeWhole') }}
       </p>
@@ -103,11 +110,14 @@ watch(
 </template>
 
 <style scoped>
+/* Panel layout: stacked controls with even gaps. */
 .detection-panel {
   display: grid;
   gap: 8px;
   padding: 12px;
 }
+
+/* Scope hint line under the form items. */
 .scope {
   color: var(--el-text-color-secondary);
   font-size: 12px;

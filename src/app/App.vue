@@ -20,6 +20,7 @@ import WorkspacePanels from './components/WorkspacePanels.vue';
 import StatusBar from './components/StatusBar.vue';
 import AboutDialog from './components/AboutDialog.vue';
 
+// Assembly: platform, stores, workspace and playback providers.
 const platform = getPlatform();
 const editor = useEditorStore(pinia);
 const bmhelper = useBmhelperStore(pinia);
@@ -34,18 +35,20 @@ const workspace = createWorkspace({
 const playback = createPlayback(editor);
 provideWorkspace(workspace);
 providePlayback(playback);
+// Localized app state.
 const { t } = useI18n({ useScope: 'global' });
 const { elementLocale } = localization;
-const calibrating = ref(false),
-  aboutOpen = ref(false),
-  closing = ref(false),
-  dragActive = ref(false);
+const calibrating = ref(false);
+const aboutOpen = ref(false);
+const closing = ref(false);
+const dragActive = ref(false);
 const panelGeneration = ref(0);
 const identity = shallowRef<BuildIdentity | null>(null);
 const bpm = computed(() => {
   void editor.docRevision;
   return editor.doc.bpm;
 });
+// Command dispatch for menu and toolbar events.
 const commands = createCommands({
   editor,
   workspace,
@@ -57,6 +60,7 @@ const commands = createCommands({
     aboutOpen.value = true;
   },
 });
+// Unmount guard, status reporting and command execution.
 let disposed = false;
 let stopAppearance: (() => void) | undefined;
 function report(error: unknown): void {
@@ -74,6 +78,7 @@ async function execute(command: AppCommand): Promise<void> {
     report(error);
   }
 }
+// Confirmation dialogs; the shared closing lock rejects reentry.
 async function confirmProjectReplacement(): Promise<boolean> {
   if (!editor.isDirty) return true;
   if (closing.value) return false;
@@ -159,6 +164,7 @@ async function confirmLegacyImport(summary: {
     closing.value = false;
   }
 }
+// Project open and import commands that require confirmation.
 async function openProject(): Promise<void> {
   if (await confirmProjectReplacement()) {
     calibrating.value = false;
@@ -171,6 +177,7 @@ async function newProjectFromWos(): Promise<void> {
     await workspace.newProjectFromWos();
   }
 }
+// Keyboard gating, calibration entry and tap offset.
 function keydown(event: KeyboardEvent): void {
   if (!calibrating.value && !aboutOpen.value && !closing.value) commands.onKeyDown(event);
 }
@@ -187,6 +194,7 @@ function applyOffset(offset: number): void {
   editor.tapOffsetMs = offset;
   editor.setStatus('tapOffsetApplied', { offset });
 }
+// Workspace close keeps its own lock across confirm, playback stop and full reset.
 async function closeWorkspace(): Promise<void> {
   if (closing.value) return;
   closing.value = true;
@@ -209,6 +217,7 @@ async function closeWorkspace(): Promise<void> {
     closing.value = false;
   }
 }
+// Drag and drop of project or audio files.
 async function drop(event: DragEvent): Promise<void> {
   event.preventDefault();
   dragActive.value = false;
@@ -219,6 +228,7 @@ async function drop(event: DragEvent): Promise<void> {
     await workspace.openDroppedFile(file);
   }
 }
+// Lifecycle.
 onMounted(() => {
   stopAppearance = localization.syncAppearance(platform, report);
   window.addEventListener('keydown', keydown);
@@ -247,12 +257,15 @@ onUnmounted(() => {
       @dragleave.self="dragActive = false"
       @drop="drop"
     >
+      <!-- menu -->
       <ApplicationMenu @command="execute" />
+      <!-- toolbar: file actions, undo, calibration, preferences, document options -->
       <EditorToolbar
         :calibrating="calibrating"
         @command="execute"
         @calibrate="calibrate"
       />
+      <!-- workspace: playback strip and timeline on the left, side panels on the right -->
       <section class="workspace">
         <div class="editor-column">
           <div
@@ -268,10 +281,12 @@ onUnmounted(() => {
           :platform="platform"
         />
       </section>
+      <!-- status bar -->
       <StatusBar
         :identity="identity"
         @about="aboutOpen = true"
       />
+      <!-- dialogs -->
       <CalibrationDialog
         v-model="calibrating"
         :audio-context="playback.getAudioContext()"
@@ -283,6 +298,7 @@ onUnmounted(() => {
         v-model="aboutOpen"
         :identity="identity"
       />
+      <!-- drop overlay -->
       <div
         v-if="dragActive"
         class="drop-overlay"

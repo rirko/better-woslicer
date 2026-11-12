@@ -10,25 +10,31 @@ import { usePlayback } from './index';
 const editor = useEditorStore();
 const playback = usePlayback();
 const { t } = useI18n();
+// Transport controls stay disabled until an audio source is loaded.
 const disabled = computed(() => !editor.source || editor.phase.kind === 'loading');
+// The store keeps linear amplitudes; sliders show a 0..100 position over a -60..0 dB fader.
 const volume = computed(() => dbToSlider(ampToDb(editor.volume)));
 const cueVolume = computed(() => dbToSlider(ampToDb(editor.cueVolume)));
 // ElSlider re-emits the stale modelValue with its change event under a one-way
 // binding, so drags are tracked locally and committed once on release.
 const volumeDrag = ref<number | null>(null);
 const cueDrag = ref<number | null>(null);
+// Cue monitor modes offered by the select.
 const cues: { value: CueMode; label: string }[] = [
   { value: 'off', label: 'chrome.cueOff' },
   { value: 'cowbell', label: 'chrome.cueCowbell' },
   { value: 'triangle', label: 'chrome.cueTriangle' },
   { value: 'metronome', label: 'chrome.cueMetronome' },
 ];
+// Draft tracking: each update accepts only the number branch of the payload.
 function onVolumeUpdate(value: number | number[]): void {
   if (typeof value === 'number') volumeDrag.value = value;
 }
 function onCueVolumeUpdate(value: number | number[]): void {
   if (typeof value === 'number') cueDrag.value = value;
 }
+// Commit on release: fall back to the bound value when no drag happened, clear the draft,
+// then write the converted amplitude to the store exactly once.
 function commitVolume(): void {
   const target = volumeDrag.value ?? volume.value;
   volumeDrag.value = null;
@@ -39,6 +45,7 @@ function commitCueVolume(): void {
   cueDrag.value = null;
   editor.setCueVolume(dbToAmp(sliderToDb(target)));
 }
+// Select payloads are narrowed before they reach playback or the store.
 function setRate(value: unknown): void {
   if (typeof value === 'number') playback.setRate(value);
 }
@@ -46,6 +53,7 @@ function setCue(value: unknown): void {
   if (value === 'off' || value === 'cowbell' || value === 'triangle' || value === 'metronome')
     editor.cueMode = value;
 }
+// Slider tooltip: the dB fader value for the hovered position.
 const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} dB`;
 </script>
 
@@ -55,6 +63,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
     role="group"
     :aria-label="t('chrome.titlePlay')"
   >
+    <!-- transport: play/pause and stop -->
     <ElButton
       :disabled="disabled"
       :type="editor.playing ? 'primary' : 'default'"
@@ -68,6 +77,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
       @click="playback.stop()"
       >{{ t('chrome.stop') }}</ElButton
     >
+    <!-- master volume: drag drafts locally, commits once on release -->
     <ElSlider
       class="volume-slider"
       :model-value="volumeDrag ?? volume"
@@ -77,6 +87,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
       @update:model-value="onVolumeUpdate"
       @change="commitVolume"
     />
+    <!-- playback rate select (monitoring only) -->
     <label class="control-label"
       >{{ t('chrome.rateLabel') }}
       <ElSelect
@@ -93,6 +104,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
         />
       </ElSelect>
     </label>
+    <!-- cue monitor mode select -->
     <label class="control-label"
       >{{ t('chrome.cueLabel') }}
       <ElSelect
@@ -109,6 +121,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
         />
       </ElSelect>
     </label>
+    <!-- cue volume: same draft protocol as the master slider, independent draft -->
     <ElSlider
       class="volume-slider"
       :model-value="cueDrag ?? cueVolume"
@@ -118,6 +131,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
       @update:model-value="onCueVolumeUpdate"
       @change="commitCueVolume"
     />
+    <!-- follow playhead toggle (session preference on the editor store) -->
     <ElCheckbox
       v-model="editor.followPlayhead"
       :title="t('chrome.titleFollow')"
@@ -127,6 +141,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
 </template>
 
 <style scoped>
+/* Playback strip: one wrapping row of transport, sliders and selects. */
 .playback-controls {
   display: flex;
   align-items: center;
@@ -134,20 +149,28 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
   gap: 10px;
   min-width: 0;
 }
+
+/* Override Element Plus adjacent-button margin inside the strip. */
 .playback-controls :deep(.el-button + .el-button) {
   margin-left: 0;
 }
+
+/* Volume sliders share one fixed width between transport and selects. */
 .volume-slider {
   width: 90px;
   flex: 0 0 90px;
   margin: 0 6px;
 }
+
+/* Inline label wrapping each select. */
 .control-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
 }
+
+/* Fixed widths keep the strip layout stable while wrapping. */
 .rate-select {
   width: 90px;
 }

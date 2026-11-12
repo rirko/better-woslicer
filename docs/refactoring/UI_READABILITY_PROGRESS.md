@@ -40,7 +40,41 @@
 
 T1（oxfmt 全量格式化，5 个格式专用提交）完成后已重采全部 22 个基线产物：`test-artifacts/ui-baseline/` 现为 **post-T1** 基线（R1a–R1d 的对照基准）；R0 当时的捕获归档在 `test-artifacts/ui-baseline-pre-t1/`。对照结论：10 个产物逐字节相同（含全部对话框与 computed-styles.json），12 个仅有亚 perceptual 像素抖动（≤0.28% 像素，文字抗锯齿/标尺刻度 1 设备像素位移，逐对 pixel-diff 定量见 [LINT_FORMAT_PROGRESS.md](LINT_FORMAT_PROGRESS.md) T1 节）。行为链（typecheck/202 组件/build/lint 计数 301 不变）在 T1 后全部复验通过。
 
-## R1a–R1d / R2–R10：pending（见方案第 3/4 节）
+## R1a — app shell 可读性整理：**完成（2026-11-11，`fe90ca3`）**
+
+- owner：协调者委派执行者起草、协调者验证提交。输入：T1 后 HEAD `1ffc81c`。可写集恰为卡内五文件（App.vue、styles.css、EditorToolbar.vue、DocumentOptions.vue、WorkspacePanels.vue）。
+- 实际改动：逗号连声明拆为逐条（App.vue 四个 ref、DocumentOptions 四个 option 投影）；script/template/CSS 增加区域注释；CSS 以空行+注释分组，声明顺序未动；无 DOM/属性/事件/选择器/值变化、无改名/提取。
+- 验证：`fmt:check` exit 0（formatter 稳定）；`lint` 恰好 301 problems 不变；`typecheck` 通过；app-controls + app-root 组件测试 2 files / 9 passed。视觉对照合并到 R1 全部完成后统一做。
+- 备注：执行子进程在验证长命令阶段无输出超时中止，其文件改动完整且合规，由协调者接手完成验证；无白名单外改动。
+
+## R1b — 面板与对话框可读性整理：**完成（2026-11-11，`31a7162`）**
+
+- owner：协调者委派执行者、协调者独立复核提交。输入：`2f2e824`。可写集恰为卡内八文件（ApplicationMenu/PreferencesControls/SourceInfo/StatusBar/AboutDialog/MarkerList/DetectionPanel/OutputPanel）。
+- 实际改动：+62 行全部为注释与 CSS 空行分组（协调者以"非注释/空行新增行为空"的过滤器独立复核）；无逗号连声明可拆（T1 后已是一条一行）；MarkerList 的嵌套三元与裸 192、OutputPanel 的本地 setter 判定一字未动（R8/R6 领域，只加描述注释）。
+- 验证（协调者重跑）：fmt:check exit 0；lint 恰好 301；typecheck 通过；editor-panels + preferences + app-controls 3 files / 17 passed。
+- 视觉对照合并到 R1 全部完成后统一做。
+
+## R1c — 播放/时间轴/校准可读性整理：**完成（2026-11-11，`723f584`）**
+
+- owner：协调者委派执行者、协调者独立复核提交。输入：`31a7162`。可写集恰为卡内三文件（PlaybackControls/TimelineEditor/CalibrationDialog）。
+- 实际改动：+94/−4；唯一语义面变化是 `let frame/fullDraw/activePointer` 逗号连声明拆三条（协调者过滤器复核）；TimelineEditor 按 render/gestures/生命周期分层注释（H-4：不搬家、不分模块）；PlaybackControls 滑杆草稿协议与 CalibrationDialog 会话/令牌清理路径按现状注释，未改代码。
+- 验证（协调者重跑）：fmt:check exit 0（执行者一处手工 CSS 空行被 oxfmt 改写后已按 formatter 为准收敛）；lint 恰好 301；typecheck 通过；timeline-render + timeline-gestures + timeline-playback + calibration + calibration-audio 5 files / 47 passed。
+- 执行者如实报告起点工作树含协调者未提交的 R1b 进度记录（归属明确、未触碰）；视觉对照合并到 R1 完成后统一做。
+
+## R1d — BMHelper 可读性整理：**完成（2026-11-11，`d80c9e9`）**
+
+- owner：协调者委派执行者、协调者独立复核提交。输入：`723f584`。可写集恰为两文件（BMHelperPanel/PianoRoll）。
+- 实际改动：src 纯插入 +52 行（注释与 CSS 空行分组；协调者复核 0 删除）；R9 领域（480 换算/parseStart base-36/copy 三元链）与两 dialog 生命周期一字未动，仅加如实注释；oxfmt 折叠 `>{{ }}<` 保留（空白敏感稳定形式）。
+- 验证（协调者重跑）：fmt:check exit 0；lint 恰好 301；bmhelper-panel + bmhelper 组件测试 2 files / 5 passed（typecheck 在 R1 合并验证统一跑）。
+
+## R1a–R1d 合并验证：**完成（2026-11-11，协调者）**
+
+- 行为链全部复验：typecheck 通过；组件 18 files / **202 passed**；`build:app` 通过；`test:app-ui` 双 profile 2/2；lint 恰好 301（R1 期间每卡均复核不变）。
+- 视觉对照（对照 post-T1 归档 `test-artifacts/ui-baseline-pre-r1/`）：重采 22 产物，10 个逐字节相同（全部对话框 + computed-styles.json 两份）；12 个含 canvas/工具栏的场景经逐像素定量全部为亚 perceptual 抖动（≤0.33% 像素、maxDelta ≤164 的单设备像素刻度线/抗锯齿位移；low/main 的 1717px 差异计数与 T1 对照时完全一致，属运行间确定性 AA 模式差，与 R1 编辑无关）。
+- 基线轮换：`test-artifacts/ui-baseline/` 现为 **post-R1** 基线；post-T1 归档保留在 `ui-baseline-pre-r1/`。
+- 结论：R1a–R1d 达到卡验收（读模板能按导航表识别区域；diff 只有注释、声明拆分与 CSS 分组；formatter 再运行无变化）。H-1/H-2/H-3 的"展开"部分已处置；其中牵涉语义分组的 F-7/F-8/F-9/F-10/F-39/F-44 仍由 R2–R9 处置，不因 R1 完成而改变状态。
+
+## R2–R10：pending（见方案第 3/4 节）
 
 - 前置：R0（已完成）＋ T0（已完成）＋ T1 格式基线（已完成，2026-11-11）。
 - 下一卡：**R1a–R1d**（按区域审查 T1 格式化输出、做少量语义分组整理；文件集合见方案 §4）——之后 T2 lint 清理（清单 `test-artifacts/lint-baseline/eslint-baseline.json`，301 条）与 R2–R10。

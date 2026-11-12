@@ -13,14 +13,19 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; apply: [offsetMs: number] }>();
 const { t } = useI18n();
+// Calibration session state: running flag, async-start guard, live result,
+// elapsed beats and the last failure message.
 const active = ref(false);
 const starting = ref(false);
 const result = shallowRef<CalibrationResult | null>(null);
 const elapsed = ref(0);
 const error = ref('');
+// The calibrator instance, its 50 ms polling timer, and a generation token that
+// invalidates in-flight async starts after any stop.
 let calibrator: TapCalibrator | null = null;
 let timer: ReturnType<typeof setInterval> | undefined;
 let generation = 0;
+// Localized progress summary; distinguishes unmatched taps from live/final results.
 const summary = computed(() => {
   const value = result.value;
   if (!value) return '';
@@ -33,6 +38,8 @@ const summary = computed(() => {
     spread: value.stdMs.toFixed(1),
   });
 });
+// Stop everything: bump the generation so a stale start() aborts itself,
+// clear the polling timer and the calibrator, and reset the active/starting flags.
 function stop(): void {
   generation++;
   starting.value = false;
@@ -42,12 +49,15 @@ function stop(): void {
   calibrator = null;
   active.value = false;
 }
+// Poll step: keeps audio scheduling alive and refreshes the displayed result.
 function update(): void {
   if (!calibrator) return;
   calibrator.ensureScheduled();
   result.value = calibrator.currentResult();
   elapsed.value = calibrator.elapsedBeats();
 }
+// Start a fresh calibration: resume audio, create the calibrator, begin polling.
+// A stop in between (generation mismatch or dialog closed) makes the attempt abort quietly.
 async function start(): Promise<void> {
   stop();
   result.value = null;
@@ -74,19 +84,23 @@ async function start(): Promise<void> {
     if (token === generation) starting.value = false;
   }
 }
+// Finish freezes the final result, then runs the same stop path.
 function finish(): void {
   if (calibrator) result.value = calibrator.finish();
   stop();
 }
+// Closing the dialog also stops any active calibration.
 function close(): void {
   stop();
   emit('update:modelValue', false);
 }
+// Apply forwards the rounded median offset to the parent, then closes.
 function apply(): void {
   if (!result.value?.matched) return;
   emit('apply', Math.round(result.value.medianMs));
   close();
 }
+// Capture-phase window handler so calibration keys win over app shortcuts.
 function keydown(event: KeyboardEvent): void {
   if (!props.modelValue) return;
   if (event.key === 'Escape') {
@@ -111,6 +125,7 @@ function keydown(event: KeyboardEvent): void {
   calibrator?.tap();
   update();
 }
+// Dialog visibility drives the window key listener and the calibration lifecycle.
 watch(
   () => [props.modelValue, props.audioContext] as const,
   ([open]) => {
@@ -122,6 +137,7 @@ watch(
   },
   { immediate: true },
 );
+// Unmount removes the key listener and stops calibration and polling.
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', keydown, true);
   stop();
@@ -138,6 +154,7 @@ onBeforeUnmount(() => {
     destroy-on-close
     @update:model-value="close"
   >
+    <!-- instructions, current offset and live tap progress -->
     <p>{{ t('chrome.calibrationHintPrefix') }} {{ bpm }} {{ t('chrome.calibrationHintBody') }}</p>
     <p>{{ t('chrome.offsetDisplay', { ms: offsetMs }) }}</p>
     <p>{{ t('chrome.beat') }} {{ elapsed }} · {{ t('chrome.taps') }} {{ result?.total ?? 0 }}</p>
@@ -147,6 +164,7 @@ onBeforeUnmount(() => {
     >
       {{ summary }}
     </p>
+    <!-- warnings: missing audio context, failed start -->
     <ElAlert
       v-if="!audioContext"
       :title="t('status.calibrationNeedsSource')"
@@ -159,6 +177,7 @@ onBeforeUnmount(() => {
       type="error"
       :closable="false"
     />
+    <!-- footer actions: restart, finish, apply, close -->
     <template #footer>
       <ElButton
         :disabled="!audioContext || starting"

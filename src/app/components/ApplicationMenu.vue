@@ -9,7 +9,9 @@ import { isMenuCommand, type MenuCommand } from '../command-types';
 const emit = defineEmits<{ command: [command: MenuCommand] }>();
 const { t } = useI18n();
 const editor = useEditorStore();
+// Menu groups derive from the current editor state.
 const groups = computed(() => createApplicationMenu(editor));
+// Forward only commands that are still present in the visible menu.
 function dispatch(value: unknown): void {
   if (
     isMenuCommand(value) &&
@@ -19,6 +21,7 @@ function dispatch(value: unknown): void {
 }
 </script>
 <template>
+  <!-- menu bar: one dropdown trigger per command group -->
   <nav
     class="application-menu"
     :aria-label="t('menu.application')"
@@ -52,6 +55,7 @@ function dispatch(value: unknown): void {
   </nav>
 </template>
 <style scoped>
+/* Menu bar strip: dropdown triggers laid out horizontally. */
 .application-menu {
   display: flex;
   align-items: center;
@@ -61,6 +65,8 @@ function dispatch(value: unknown): void {
   border-bottom: 1px solid var(--el-border-color);
   background: var(--el-bg-color);
 }
+
+/* Element Plus button override: remove default margin/padding inside the bar. */
 .application-menu :deep(.el-button) {
   margin: 0;
   padding: 5px 10px;

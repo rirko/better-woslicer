@@ -7,8 +7,10 @@ import { useWorkspace } from '../../workspace/workspace';
 import { activeMedia } from '../../workspace/project-media';
 const editor = useEditorStore();
 const workspace = useWorkspace();
+// Resolved missing-media descriptor; null while a source is loaded.
 const missing = computed(() => (editor.source ? null : activeMedia(editor.document)));
 const { t } = useI18n();
+// Length in seconds at fixed precision; "0" while no source is loaded.
 const duration = computed(() =>
   editor.source ? (editor.source.length / editor.source.sampleRate).toFixed(3) : '0',
 );
@@ -18,6 +20,7 @@ const duration = computed(() =>
     :aria-label="t('chrome.tabSource')"
     class="source-info"
   >
+    <!-- loaded source: file details table -->
     <ElDescriptions
       v-if="editor.source"
       :column="1"
@@ -36,6 +39,7 @@ const duration = computed(() =>
       }}</ElDescriptionsItem>
       <ElDescriptionsItem :label="t('chrome.durationLabel')">{{ duration }} s</ElDescriptionsItem>
     </ElDescriptions>
+    <!-- missing media: relink entry -->
     <ElEmpty
       v-else-if="missing"
       :description="t('chrome.mediaMissing', { name: missing.name })"
@@ -47,6 +51,7 @@ const duration = computed(() =>
         >{{ t('menu.relinkAudio') }}</ElButton
       >
     </ElEmpty>
+    <!-- no media yet: drop-or-open hint -->
     <ElEmpty
       v-else
       :description="t('chrome.hintDropOrOpen')"
@@ -55,6 +60,7 @@ const duration = computed(() =>
   </section>
 </template>
 <style scoped>
+/* File names wrap instead of stretching the descriptions table. */
 .source-name {
   overflow-wrap: anywhere;
 }

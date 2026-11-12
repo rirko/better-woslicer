@@ -24,7 +24,9 @@ const editor = useEditorStore();
 const playback = usePlayback();
 const preferences = useUiPreferencesStore();
 const { t } = useI18n();
+// Canvas colors follow the UI theme.
 const palette = computed(() => paletteFor(preferences.theme));
+// Layer stack: ruler strip, wave + overlay canvases inside the viewport, overview strip.
 const viewport = useTemplateRef<HTMLElement>('viewport');
 const ruler = useTemplateRef<HTMLCanvasElement>('ruler');
 const wave = useTemplateRef<HTMLCanvasElement>('wave');
@@ -32,15 +34,21 @@ const overlay = useTemplateRef<HTMLCanvasElement>('overlay');
 const overview = useTemplateRef<HTMLCanvasElement>('overview');
 const { pixelRatio } = useDevicePixelRatio();
 const dimensions = shallowRef({ width: 0, height: 0 });
+// Gestures own pointer semantics; this component owns the DOM, RAF and observer lifecycle.
 const gestures = createTimelineGestures(editor);
 const { ghost, cursor } = gestures;
-let frame = 0,
-  fullDraw = false,
-  activePointer: number | null = null;
+// One pending animation frame coalesces redraws; fullDraw marks a full repaint of all
+// layers versus an overlay-only pass (playhead, hover ghost). activePointer is the
+// captured viewport pointer; overviewPointer the captured overview pointer.
+let frame = 0;
+let fullDraw = false;
+let activePointer: number | null = null;
 let overviewPointer: number | null = null;
+// Widest scroll offset in ticks: timeline length minus one viewport width.
 const scrollMaximum = computed(() =>
   Math.max(0, MAX_TICKS - dimensions.value.width / editor.pxPerTick),
 );
+// Coalesced repaint: one RAF redraws wave/ruler/overview when fullDraw, then the overlay.
 function invalidate(all = true): void {
   fullDraw ||= all;
   if (frame) return;
@@ -76,8 +84,11 @@ function measure(): void {
   if (viewport.value)
     dimensions.value = { width: viewport.value.clientWidth, height: viewport.value.clientHeight };
 }
+// Viewport size from the resize observer, re-measured once after mount.
 useResizeObserver(viewport, measure);
 onMounted(measure);
+// Full repaints: layout, palette, document revision, preview ticks, source/peaks,
+// grid/zoom/scroll, selections and rms/band overlays.
 watch(
   [
     dimensions,
@@ -99,7 +110,9 @@ watch(
   ],
   () => invalidate(),
 );
+// Overlay-only repaints: the moving playhead and the gesture hover ghost.
 watch([() => editor.playheadSample, () => editor.cursorTick, ghost], () => invalidate(false));
+// Auto-scroll: while playing with follow enabled, keep the playhead inside the window.
 watch([() => editor.playheadSample, () => editor.followPlayhead], () => {
   if (!editor.playing || !editor.followPlayhead || !editor.source || dimensions.value.width <= 0)
     return;
@@ -123,6 +136,8 @@ function point(event: PointerEvent): TimelinePointer {
     ctrlKey: event.ctrlKey || event.metaKey,
   };
 }
+// Viewport gesture protocol: one captured pointer drives begin/move/end;
+// cancel and lost capture abort the gesture and drop the capture slot.
 function pointerDown(event: PointerEvent): void {
   if (activePointer !== null || event.button > 2) return;
   event.preventDefault();
@@ -146,6 +161,7 @@ function cancelGesture(): void {
   gestures.cancel();
   activePointer = null;
 }
+// Escape aborts an active gesture before any other key handling.
 function keydown(event: KeyboardEvent): void {
   if (event.key === 'Escape' && gestures.cancel()) {
     activePointer = null;
@@ -153,6 +169,8 @@ function keydown(event: KeyboardEvent): void {
     event.stopPropagation();
   }
 }
+// Wheel pans in timeline ticks; Ctrl/Meta (or ruler-originated wheel) zooms instead.
+// Delta units are normalized to pixels per deltaMode (line=16px, page=viewport width).
 function wheel(event: WheelEvent, rulerZoom = false): void {
   event.preventDefault();
   const rect = viewport.value?.getBoundingClientRect();
@@ -164,6 +182,7 @@ function wheel(event: WheelEvent, rulerZoom = false): void {
     rulerZoom || event.ctrlKey || event.metaKey,
   );
 }
+// Ruler click seeks: snapped cursor tick, then playback re-anchored to the same tick.
 function seek(event: PointerEvent): void {
   if (event.button !== 0) return;
   const rect = ruler.value?.getBoundingClientRect();
@@ -180,6 +199,7 @@ function seek(event: PointerEvent): void {
       }),
     );
 }
+// Overview strip: click or drag centers the viewport on the clicked ratio of the song.
 function overviewSeek(event: PointerEvent): void {
   const element = overview.value;
   if (!element || element.clientWidth <= 0) return;
@@ -200,9 +220,12 @@ function overviewDown(event: PointerEvent): void {
   overview.value?.setPointerCapture(event.pointerId);
   overviewSeek(event);
 }
+// Horizontal scroll slider accepts only the number branch of the payload.
 function scroll(value: number | number[]): void {
   if (typeof value === 'number') editor.setScrollTick(value);
 }
+// Cleanup: abort the gesture, unregister the editor draft-cancellation hook,
+// and cancel any pending animation frame.
 onBeforeUnmount(() => {
   cancelGesture();
   gestures.dispose();
@@ -215,12 +238,14 @@ onBeforeUnmount(() => {
     class="timeline"
     :aria-label="t('chrome.tabCuts')"
   >
+    <!-- ruler: click to seek, wheel zooms -->
     <canvas
       ref="ruler"
       class="timeline-ruler"
       @pointerdown="seek"
       @wheel="wheel($event, true)"
     />
+    <!-- viewport: keyboard-focusable gesture surface over stacked wave + overlay canvases -->
     <div
       ref="viewport"
       class="timeline-viewport"
@@ -243,6 +268,7 @@ onBeforeUnmount(() => {
         ref="overlay"
         class="timeline-canvas timeline-overlay"
       />
+      <!-- empty placeholder while no audio source is loaded -->
       <div
         v-if="!editor.source"
         class="timeline-empty"
@@ -250,6 +276,7 @@ onBeforeUnmount(() => {
         {{ t('chrome.emptySub') }}
       </div>
     </div>
+    <!-- overview: click/drag pans the viewport across the whole song -->
     <canvas
       ref="overview"
       class="timeline-overview"
@@ -259,6 +286,7 @@ onBeforeUnmount(() => {
       @pointercancel="overviewPointer = null"
       @lostpointercapture="overviewPointer = null"
     />
+    <!-- horizontal scrollbar bound to scrollTick -->
     <ElSlider
       class="timeline-scroll"
       :model-value="Math.min(editor.scrollTick, scrollMaximum)"
@@ -272,6 +300,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* Timeline column: ruler, viewport, overview and scrollbar stacked vertically. */
 .timeline {
   min-width: 0;
   min-height: 160px;
@@ -280,10 +309,14 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
 }
+
+/* Ruler strip: fixed height, pointer cursor for seeking. */
 .timeline-ruler {
   flex: 0 0 28px;
   cursor: pointer;
 }
+
+/* Viewport fills the remaining height; pointer events drive gestures. */
 .timeline-viewport {
   position: relative;
   flex: 1;
@@ -293,14 +326,20 @@ onBeforeUnmount(() => {
   touch-action: none;
   outline-offset: -2px;
 }
+
+/* Wave and overlay canvases are stacked layers; gestures hit the viewport only. */
 .timeline-canvas {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
+
+/* Overlay sits above the wave to carry playhead, selection and ghost. */
 .timeline-overlay {
   z-index: 1;
 }
+
+/* Empty hint centered over the canvases while no source is loaded. */
 .timeline-empty {
   position: absolute;
   inset: 0;
@@ -310,6 +349,8 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-secondary);
   font-size: 13px;
 }
+
+/* Overview strip and scrollbar close the column below the viewport. */
 .timeline-overview {
   flex: 0 0 36px;
   cursor: pointer;

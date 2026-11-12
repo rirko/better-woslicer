@@ -12,6 +12,7 @@ import SourceInfo from './SourceInfo.vue';
 defineProps<{ platform: Platform }>();
 const editor = useEditorStore();
 const { t } = useI18n();
+// Local tab state; inactive panes are unmounted through their v-if guards.
 const activeTab = ref('source');
 const bpm = computed(() => {
   void editor.docRevision;
@@ -35,6 +36,7 @@ function applyCuts(payload: { bpm: number; ticks: number[] }): void {
 }
 </script>
 <template>
+  <!-- side panel tabs: source info, cuts, detection, output, bmhelper -->
   <aside class="side-panel">
     <ElTabs
       v-model="activeTab"
@@ -72,6 +74,7 @@ function applyCuts(payload: { bpm: number; ticks: number[] }): void {
   </aside>
 </template>
 <style scoped>
+/* Panel frame: the pane fills the workspace column and scrolls internally. */
 .side-panel {
   min-width: 0;
   min-height: 0;
@@ -81,6 +84,7 @@ function applyCuts(payload: { bpm: number; ticks: number[] }): void {
 .side-panel > .el-tabs {
   height: 100%;
 }
+/* Tab chrome: content padding, header margin and item sizing. */
 :deep(.el-tabs__content) {
   padding: 10px;
   overflow: auto;

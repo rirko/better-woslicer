@@ -12,9 +12,11 @@ const { t } = useI18n();
 </script>
 <template>
   <header class="editor-toolbar">
+    <!-- top row: file actions and preferences -->
     <div class="toolbar-top">
       <div class="file-actions">
         <ElButton @click="emit('command', 'open-project')">{{ t('menu.openProject') }}</ElButton>
+        <!-- save button shows a star (aria-labelled below) while the project has unsaved changes -->
         <ElButton @click="emit('command', 'save-project')"
           >{{ t('menu.saveProject')
           }}<span
@@ -58,10 +60,12 @@ const { t } = useI18n();
       </div>
       <PreferencesControls />
     </div>
+    <!-- document options row -->
     <DocumentOptions />
   </header>
 </template>
 <style scoped>
+/* Toolbar layout: options row below the top row. */
 .editor-toolbar {
   display: grid;
   gap: 8px;
@@ -69,6 +73,7 @@ const { t } = useI18n();
   border-bottom: 1px solid var(--el-border-color);
   background: var(--el-bg-color);
 }
+/* Top row: file actions on the left, preferences on the right. */
 .toolbar-top {
   display: flex;
   flex-wrap: wrap;
@@ -82,6 +87,7 @@ const { t } = useI18n();
   align-items: center;
   gap: 6px;
 }
+/* Override Element Plus adjacent-button margin and default padding inside the actions row. */
 .file-actions :deep(.el-button + .el-button) {
   margin-left: 0;
 }

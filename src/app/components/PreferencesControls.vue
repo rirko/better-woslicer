@@ -3,11 +3,13 @@ import { ElOption, ElSegmented, ElSelect } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { LANGUAGES, LANGUAGE_LABELS } from '../../core/language';
 import { useUiPreferencesStore } from '../../ui/preferences';
+// Language and theme come from the ui preferences store.
 const preferences = useUiPreferencesStore();
 const { t } = useI18n();
 </script>
 <template>
   <div class="preferences-controls">
+    <!-- language -->
     <ElSelect
       :model-value="preferences.language"
       :aria-label="t('chrome.titleLanguage')"
@@ -25,6 +27,7 @@ const { t } = useI18n();
         :label="LANGUAGE_LABELS[language]"
       />
     </ElSelect>
+    <!-- theme -->
     <ElSegmented
       :model-value="preferences.theme"
       :aria-label="t('chrome.titleTheme')"
@@ -38,12 +41,15 @@ const { t } = useI18n();
   </div>
 </template>
 <style scoped>
+/* Preferences row: select and segmented control inline, wrapping when narrow. */
 .preferences-controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* Fixed select width so language names do not resize the toolbar. */
 .el-select {
   width: 126px;
 }
