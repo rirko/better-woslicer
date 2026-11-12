@@ -83,7 +83,11 @@ describe('BMHelper project integration', () => {
     expect(editor.canUndo).toBe(true);
     editor.undo();
     expect(editor.document.bmhelper).toEqual(afterImport);
-    expect(store.selectedDivision?.name).toBe('first'); // the working copy keeps its state
+    expect(store.selectedDivision).toBeNull();
+    const importedBytes = store.saveProjectBytes();
+    editor.redo();
+    expect(store.selectedDivision?.name).toBe('first');
+    expect(store.saveProjectBytes()).not.toEqual(importedBytes);
     editor.replaceDocument(createEmptyProject('other'));
     await nextTick();
     expect(store.project).toBeNull();
@@ -109,6 +113,183 @@ describe('BMHelper project integration', () => {
     release();
     expect(await saving).toBe(true);
     expect(store.dirty).toBe(true);
+    editor.undo();
+    expect(store.dirty).toBe(false);
+    editor.redo();
+    expect(store.dirty).toBe(true);
+    disposePinia(pinia);
+  });
+  it('starts a new edit from the undone document without restoring removed divisions', () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    store.addDivision(defaultDivisionSetting('removed', 480));
+    editor.undo();
+    store.addDivision(defaultDivisionSetting('replacement', 480));
+    expect(store.project?.divisions.map((division) => division.name)).toEqual(['replacement']);
+    expect(editor.canRedo).toBe(false);
+    disposePinia(pinia);
+  });
+  it('reloads changed payloads when the replacement document keeps the same project ID', () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    store.addDivision(defaultDivisionSetting('first', 480));
+    const original = structuredClone(editor.document);
+    const bytes = store.saveProjectBytes();
+    store.addDivision(defaultDivisionSetting('second', 480));
+    editor.replaceDocument(original);
+    expect(store.project?.divisions.map((division) => division.name)).toEqual(['first']);
+    expect(store.saveProjectBytes()).toEqual(bytes);
+    expect(store.selectedIndex).toBe(0);
+    expect(store.name).toBe('');
+    expect(store.dirty).toBe(false);
+    editor.replaceDocument({ ...original, bmhelper: null });
+    expect(store.project).toBeNull();
+    expect(store.cutTicks()).toEqual([]);
+    disposePinia(pinia);
+  });
+  it('resets session-only numbering when the same BMH bytes are opened again', () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    store.addDivision({ ...defaultDivisionSetting('ff', 480), zzDefinition: false });
+    const bytes = store.saveProjectBytes();
+    expect(store.selectedDivision?.zzDefinition).toBe(false);
+    store.openProject(bytes, 'reopened.bmh');
+    expect(store.selectedDivision?.zzDefinition).toBe(true);
+    expect(store.saveProjectBytes()).toEqual(bytes);
+    expect(store.dirty).toBe(false);
+    disposePinia(pinia);
+  });
+  it('starts a fresh session on same-ID replacement and ignores the earlier save completion', async () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    let release = () => {};
+    const saving = store.saveBmhProject(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = () => resolve(true);
+        }),
+    );
+    store.addDivision({ ...defaultDivisionSetting('ff', 480), zzDefinition: false });
+    editor.replaceDocument(structuredClone(editor.document));
+    expect(store.selectedDivision?.zzDefinition).toBe(true);
+    expect(store.name).toBe('');
+    expect(store.dirty).toBe(false);
+    release();
+    await saving;
+    expect(store.dirty).toBe(false);
+    disposePinia(pinia);
+  });
+  it('keeps local selection, filename and FF numbering through unrelated edits and history', async () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    store.addDivision(defaultDivisionSetting('first', 480));
+    store.addDivision({ ...defaultDivisionSetting('ff', 480), zzDefinition: false });
+    await store.saveBmhProject(() => Promise.resolve(true));
+    editor.setOutputOptions({ baseName: 'unrelated' });
+    editor.setDocumentOptions({ bpm: 130 });
+    editor.setDocumentOptions({ bpm: 140 });
+    expect(store.name).toBe('source');
+    expect(store.selectedIndex).toBe(1);
+    expect(store.dirty).toBe(false);
+    expect(store.selectedDivision?.zzDefinition).toBe(false);
+    store.setStart(35);
+    expect(store.selectedDivision?.definitions.map((definition) => definition.zz)).toEqual([
+      35, 36,
+    ]);
+    store.transpose(1);
+    expect(store.selectedDivision?.definitions.map((definition) => definition.zz)).toEqual([
+      36, 37,
+    ]);
+    editor.undo();
+    editor.undo();
+    expect(store.selectedDivision?.zzDefinition).toBe(false);
+    editor.undo();
+    expect(editor.doc.bpm).toBe(130);
+    expect(store.selectedDivision?.zzDefinition).toBe(false);
+    editor.undo();
+    expect(store.selectedDivision?.zzDefinition).toBe(false);
+    editor.redo();
+    editor.redo();
+    editor.redo();
+    expect(store.selectedDivision?.zzDefinition).toBe(false);
+    expect(store.selectedDivision?.definitions[0]?.zz).toBe(35);
+    store.transpose(1);
+    expect(store.selectedDivision?.definitions[0]?.zz).toBe(36);
+    disposePinia(pinia);
+  });
+  it('leaves content and local state unchanged when a read-only document rejects an edit', async () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    store.addDivision(defaultDivisionSetting('first', 480));
+    await store.saveBmhProject(() => Promise.resolve(true));
+    const bytes = store.saveProjectBytes();
+    editor.setLimited(true);
+    for (const edit of [
+      () => store.transpose(1),
+      () => store.setStart(35),
+      () => store.deleteDivision(),
+      () => store.addDivision(defaultDivisionSetting('rejected', 480)),
+      () => store.openProject(bytes, 'rejected.bmh'),
+      () => store.importMidi(midi, 'rejected.mid', trackOf(store), new Set([0])),
+    ]) {
+      expect(edit).toThrow('read-only');
+      expect(store.saveProjectBytes()).toEqual(bytes);
+      expect(store.name).toBe('source');
+      expect(store.selectedIndex).toBe(0);
+      expect(store.dirty).toBe(false);
+    }
+    disposePinia(pinia);
+  });
+  it('does not apply an old save baseline after switching away and back to a project', async () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    const original = editor.document;
+    let release = () => {};
+    const saving = store.saveBmhProject(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = () => resolve(true);
+        }),
+    );
+    editor.replaceDocument(createEmptyProject('other'));
+    editor.replaceDocument(original);
+    store.addDivision(defaultDivisionSetting('new', 480));
+    await store.saveBmhProject(() => Promise.resolve(true));
+    release();
+    await saving;
+    expect(store.dirty).toBe(false);
+    disposePinia(pinia);
+  });
+  it('keeps the current saved state when a save is cancelled', async () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    expect(await store.saveBmhProject(() => Promise.resolve(false))).toBe(false);
+    expect(store.dirty).toBe(true);
+    await store.saveBmhProject(() => Promise.resolve(true));
+    expect(await store.saveBmhProject(() => Promise.resolve(false))).toBe(false);
+    expect(store.dirty).toBe(false);
     disposePinia(pinia);
   });
 });

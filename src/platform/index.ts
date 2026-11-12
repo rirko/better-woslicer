@@ -1,10 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core';
-import {
-  createBrowserPlatform,
-  getBrowserBuildIdentity,
-  importBrowserLegacySession,
-} from './browser';
-import { createTauriPlatform, getTauriBuildIdentity, importTauriLegacySession } from './tauri';
+import { createBrowserPlatform, getBrowserBuildIdentity } from './browser';
+import { createTauriPlatform, getTauriBuildIdentity } from './tauri';
 import type { BuildIdentity, Platform } from './contracts';
 
 export const platform: Platform = isTauri() ? createTauriPlatform() : createBrowserPlatform();
@@ -47,9 +43,4 @@ export async function getBuildIdentity(): Promise<BuildIdentity> {
   return parseBuildIdentity(
     await (platform.kind === 'tauri' ? getTauriBuildIdentity() : getBrowserBuildIdentity()),
   );
-}
-
-/** Explicitly selected legacy JSON remains untrusted until the workspace validates it. */
-export async function importLegacySession(): Promise<unknown> {
-  return platform.kind === 'tauri' ? importTauriLegacySession() : importBrowserLegacySession();
 }

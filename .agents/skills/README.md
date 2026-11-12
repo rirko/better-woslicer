@@ -4,6 +4,7 @@ These entry points load pinned upstream skills. They do not contain copies of th
 
 | Task | Skill | Upstream repository |
 | --- | --- | --- |
+| Human handoff and selective refactoring | [maintainability-review](maintainability-review/SKILL.md) | sgqy/maintainability-review |
 | English technical writing | [asd-ste100](asd-ste100/SKILL.md) | danyuchn/asd-ste100-skill |
 | Chinese technical writing | [zh-tech-writing](zh-tech-writing/SKILL.md) | leter/zh-tech-writing |
 | TypeScript | [typescript-best-practices](typescript-best-practices/SKILL.md) | cursor/plugins |
@@ -12,7 +13,8 @@ These entry points load pinned upstream skills. They do not contain copies of th
 | Rust review | [rust-review](rust-review/SKILL.md) | morganlinton/BeautifulRust |
 | Code and test smell audits | [smell-check](smell-check/SKILL.md) | Zhen-Bo/smell-check |
 
-Read only the skill needed for the task. Resolve references inside each upstream skill relative to its own directory.
+Read only the skills needed for the task.
+Resolve references inside each upstream skill relative to its own directory.
 The TypeScript entry point links both required principle skills.
 The Vue repository also contains its optional companion skills. Both Rust entry points share one repository.
 

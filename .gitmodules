@@ -16,3 +16,6 @@
 [submodule ".agents/upstream/smell-check"]
 	path = .agents/upstream/smell-check
 	url = https://github.com/Zhen-Bo/smell-check.git
+[submodule ".agents/upstream/maintainability-review"]
+	path = .agents/upstream/maintainability-review
+	url = https://github.com/sgqy/maintainability-review.git

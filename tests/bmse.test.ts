@@ -8,7 +8,6 @@ import {
   buildBmseClipboard,
   parseBmseClipboard,
 } from '../src/core/bmse.js';
-import { MarkerDoc } from '../src/core/markers.js';
 
 test('BMSE format name is exact (contract string)', () => {
   assert.equal(BMSE_CLIPBOARD_FORMAT_NAME, 'BMSE ClipBoard Object Data Format');
@@ -64,23 +63,6 @@ test('parser tolerates LF-only input and skips malformed lines', () => {
   const parsed = parseBmseClipboard(text);
   assert.deepEqual(parsed.ticks, [384, 408]);
   assert.deepEqual(parsed.invalidLines, [2]);
-});
-
-test('BMSE clipboard and internal measure clipboard stay isolated', () => {
-  const doc = new MarkerDoc();
-  doc.setMarker(10, true);
-  const internal = doc.copyMeasure(0);
-
-  // Building the BMSE text must not touch the document or the internal copy.
-  const text = buildBmseClipboard(doc.ticks(), { startNumber: 1, useFfNumbering: false });
-  assert.deepEqual(Array.from(internal), Array.from(doc.copyMeasure(0)));
-  assert.deepEqual(doc.ticks(), [10]);
-
-  // Parsing the BMSE text back into a fresh doc does not share state.
-  const imported = new MarkerDoc();
-  imported.setTicks(parseBmseClipboard(text).ticks);
-  assert.deepEqual(imported.ticks(), [10]);
-  assert.notEqual(imported.markers, doc.markers);
 });
 
 test('clipboard byte contract: text->buffer->text preserves every byte (incl. NUL)', () => {

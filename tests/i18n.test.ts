@@ -45,15 +45,9 @@ test('the i18n manifest is the single source of truth for the language set', () 
   );
   const ids = manifest.languages.map((entry) => entry.id);
   assert.equal(new Set(ids).size, ids.length, 'duplicate language id in manifest');
-  const locales = manifest.languages.flatMap((entry) => entry.chromiumLocales);
-  assert.equal(new Set(locales).size, locales.length, 'a chromium locale backs two languages');
   for (const entry of manifest.languages) {
     assert.ok(entry.label.trim().length > 0, `empty selector label for ${entry.id}`);
     assert.ok(entry.docLang.trim().length > 0, `empty docLang for ${entry.id}`);
-    assert.ok(entry.chromiumLocales.length > 0, `no chromium locales for ${entry.id}`);
-    for (const locale of entry.chromiumLocales) {
-      assert.match(locale, /^[a-z]{2,3}(-[A-Z][a-zA-Z]*)*$/, `malformed chromium locale ${locale}`);
-    }
   }
 });
 

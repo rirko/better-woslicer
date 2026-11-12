@@ -2,6 +2,12 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
+## Unreleased
+
+### Fixed
+
+- BMHelper follows project undo, redo and reopening, so its panel and exports use the current project contents.
+
 ## 1.0.0 — 2026-11-11
 
 ### Added

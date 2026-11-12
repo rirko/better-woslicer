@@ -39,6 +39,9 @@ export const useEditorStore = defineStore('editor', () => {
   const project = shallowRef(markRaw(new ProjectEditor(createEmptyProject())));
   const document = computed(() => project.value.document);
   const docRevision = computed(() => project.value.revision);
+  // Unlike docRevision, this changes only when the whole document is replaced,
+  // including reopening the same project ID. Feature sessions use it for cleanup.
+  const documentGeneration = shallowRef(0);
   const isDirty = computed(() => project.value.isDirty);
   // Read-only projections for consumers of the existing slicing time base.
   const doc = computed(() =>
@@ -205,6 +208,7 @@ export const useEditorStore = defineStore('editor', () => {
     selectedTicks.value = [];
     setSelection(null, null);
     publish();
+    documentGeneration.value++;
   }
   function markSaved(revision: number): boolean {
     const saved = project.value.markSaved(revision);
@@ -392,6 +396,7 @@ export const useEditorStore = defineStore('editor', () => {
     document,
     doc,
     docRevision,
+    documentGeneration,
     isDirty,
     limited,
     lastFile,

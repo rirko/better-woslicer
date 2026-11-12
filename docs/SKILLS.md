@@ -1,6 +1,6 @@
 # Project skills and submodules
 
-The project loads seven skills from six upstream repositories.
+The project loads eight skills from seven upstream repositories.
 Git records each repository at a specific commit. It does not follow the upstream branch automatically.
 
 The files in [`.agents/skills/`](../.agents/skills/README.md) are short entry points.
@@ -79,6 +79,7 @@ Check the project entry point if the upstream moves its skill or reference files
 
 | Submodule | Repository | Skill location |
 | --- | --- | --- |
+| `maintainability-review` | [sgqy/maintainability-review](https://github.com/sgqy/maintainability-review) | `SKILL.md` |
 | `asd-ste100` | [danyuchn/asd-ste100-skill](https://github.com/danyuchn/asd-ste100-skill) | `SKILL.md` |
 | `zh-tech-writing` | [leter/zh-tech-writing](https://github.com/leter/zh-tech-writing) | `skills/zh-tech-writing/SKILL.md` |
 | `cursor-plugins` | [cursor/plugins](https://github.com/cursor/plugins) | `pstack/skills/typescript-best-practices/SKILL.md` |

@@ -1,12 +1,7 @@
 // Generates src/i18n/generated.ts from the i18n JSON data files.
 //
-// The JSON files are the editable source of truth (shared with the packager,
-// which prunes the bundled Chromium locales from languages.json). The
-// generated module exposes the same data with `as const` literal types, so
-// the compiler derives the Language union, the chrome/status key unions and
-// checks record exhaustiveness, while the app itself keeps plain JS imports:
-// no runtime JSON loading, no import attributes, CommonJS main and
-// native-ESM renderer both unchanged.
+// Edit the JSON files. The generated literal types define the language and
+// message-key unions, so TypeScript can check language and message coverage.
 const fs = require('fs');
 const path = require('path');
 
@@ -35,14 +30,12 @@ function requireString(container, key, where) {
     fail(where + ' requires a non-empty string ' + key);
 }
 
-// Validate the manifest: it is the packager's input, so shape errors must
-// stop the build here rather than surface as a broken release layout.
+// Validate the language selector labels and document language identifiers.
 const manifest = readJson('languages.json');
 if (typeof manifest !== 'object' || manifest === null || !Array.isArray(manifest.languages)) {
   fail('languages.json must contain a languages array');
 }
 const seenIds = new Set();
-const seenLocales = new Set();
 for (const entry of manifest.languages) {
   if (typeof entry !== 'object' || entry === null) fail('languages.json entries must be objects');
   requireString(entry, 'id', 'language entry');
@@ -50,34 +43,12 @@ for (const entry of manifest.languages) {
   requireString(entry, 'docLang', 'language ' + entry.id);
   if (seenIds.has(entry.id)) fail('duplicate language id ' + entry.id);
   seenIds.add(entry.id);
-  if (!Array.isArray(entry.chromiumLocales) || entry.chromiumLocales.length === 0) {
-    fail('language ' + entry.id + ' needs at least one chromium locale');
-  }
-  for (const locale of entry.chromiumLocales) {
-    if (typeof locale !== 'string' || !/^[a-z]{2,3}(-[A-Z][a-zA-Z]*)*$/.test(locale)) {
-      fail('language ' + entry.id + ' has a malformed chromium locale: ' + locale);
-    }
-    if (seenLocales.has(locale)) fail('chromium locale ' + locale + ' backs two languages');
-    seenLocales.add(locale);
-  }
 }
 if (!seenIds.has('en'))
   fail('languages.json must declare English (en); it is the fallback language');
 // The language set is whatever the manifest declares — adding a language is a
 // data change only (a new <id>.json plus one manifest entry), never a code change.
 const languageFiles = manifest.languages.map((entry) => entry.id);
-
-// Every language file must exist, be declared, and carry the identical key
-// set per section as English; every {name} template placeholder must match
-// the English reference exactly, so a translation can never drop or rename a
-// parameter.
-for (const id of languageFiles) {
-  if (!seenIds.has(id)) fail(id + '.json exists but languages.json does not declare it');
-}
-for (const id of seenIds) {
-  if (!languageFiles.includes(id))
-    fail('languages.json declares ' + id + ' but ' + id + '.json is missing');
-}
 
 function placeholderNames(template) {
   return [...template.matchAll(/\{(\w+)\}/g)]
@@ -115,6 +86,8 @@ for (const template of [reference.scopeRange, ...Object.values(reference.status)
   }
 }
 
+// readJson checks that each declared file exists. Check its keys and template
+// parameters against English before generating the module.
 for (const id of languageFiles) {
   const data = readJson(id + '.json');
   if (typeof data !== 'object' || data === null) fail(id + '.json must be an object');

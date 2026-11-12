@@ -193,13 +193,12 @@ async function openProject(): Promise<void> {
     if (file) store.openProject(file.bytes, file.name);
   });
 }
-// Save through the platform dialog; a save that did not complete leaves the project dirty.
+// Cancelled saves leave the stored byte baseline unchanged.
 async function saveProject(): Promise<void> {
   await run(async () => {
-    const saved = await store.saveBmhProject((bytes) =>
+    await store.saveBmhProject((bytes) =>
       platform.saveFile('bmh', `${store.name || 'project'}.bmh`, bytes),
     );
-    if (!saved) store.dirty = true;
   });
 }
 // Export the selected division recording as a .mid file.

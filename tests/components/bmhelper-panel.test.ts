@@ -249,3 +249,29 @@ it('keeps the pending MIDI until the settings dialog finishes closing', async ()
     await harness.dispose();
   }
 });
+
+it('keeps the saved indicator unchanged when the save dialog is cancelled', async () => {
+  const platform = createPlatform();
+  const harness = mountPanel({
+    platform,
+    setup: (store) => {
+      importOneNote(store, oneNoteMidi(480));
+      store.addDivision(defaultDivisionSetting('recording', 480));
+    },
+  });
+  try {
+    await harness.findButton('Save project').trigger('click');
+    await flushPromises();
+    expect(harness.store.dirty).toBe(false);
+    platform.saveFile.mockResolvedValue(false);
+    await harness.findButton('Save project').trigger('click');
+    await flushPromises();
+    expect(harness.store.dirty).toBe(false);
+    harness.store.transpose(1);
+    await harness.findButton('Save project').trigger('click');
+    await flushPromises();
+    expect(harness.store.dirty).toBe(true);
+  } finally {
+    await harness.dispose();
+  }
+});

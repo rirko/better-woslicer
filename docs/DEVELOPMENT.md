@@ -14,6 +14,7 @@
 | Application menu | `src/app/components/ApplicationMenu.vue` renders `src/app/menu.ts`, which owns the menu entries, command type and availability. `src/app/commands.ts` dispatches actions and keyboard shortcuts. |
 | Waveform | `src/timeline/TimelineEditor.vue` owns the canvas lifecycle. `gestures.ts` handles pointer edits and `render.ts` draws the timeline. |
 | Cut list | `src/slicing/MarkerList.vue` owns selection controls. `editor-actions.ts` implements marker operations. |
+| BMHelper | `src/bmhelper/BMHelperPanel.vue` owns the panel. `store.ts` derives its content from the project payload and commits edits through the editor. |
 | Project open/save | `src/workspace/workspace.ts` coordinates file operations and recovery. `persistence.ts` serializes recovery writes. `src/project/schema.ts` defines Zod field schemas and derives document types. `codec.ts` owns version compatibility, normalization and business validation. |
 | Playback | `src/playback/PlaybackControls.vue` owns controls. `index.ts` manages audio playback and cleanup. |
 | Document/output settings | `src/app/components/DocumentOptions.vue` and `src/export/OutputPanel.vue` read reactive editor projections and write undoable transactions through `src/slicing/editor-store.ts`. |
@@ -23,6 +24,10 @@
 UI consumers read the editor's reactive document projections directly. Revision
 checks are for detecting stale asynchronous work and gestures. Platform file
 access stays in `src/platform/`, and audio worker processing stays in `src/audio/`.
+
+`tests/app/editor-actions.test.ts` checks marker actions through the same editor
+store as the interface. `tests/components/bmhelper.test.ts` checks BMHelper edits,
+project history and exports.
 
 ### Input, commands and platform boundaries
 
