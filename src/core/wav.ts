@@ -17,7 +17,14 @@
  * strictly more robust and reads identical results for all well-formed files.
  */
 
+/** Original encoding, independent of the internal Int16 sample representation. */
+export type SourceFormat =
+  | { kind: 'pcm'; bits: number }
+  | { kind: 'float'; bits: 32 }
+  | { kind: 'vorbis' };
+
 export interface DecodedWav {
+  sourceFormat: SourceFormat;
   /** Sample rate in Hz. */
   sampleRate: number;
   /** Channel count (the original only reads its low byte; 1 or 2 expected). */
@@ -26,8 +33,6 @@ export interface DecodedWav {
   length: number;
   /** Per-channel samples in int16 range. */
   data: Int16Array[];
-  /** True when the input was IEEE float (decoded exactly, not truncated). */
-  wasFloat: boolean;
 }
 
 export class WavParseError extends Error {}
@@ -218,7 +223,8 @@ export function parseWav(buffer: ArrayBuffer): DecodedWav {
     channels: layout.channels,
     length,
     data: decodeWavSamples(view, layout, length),
-    wasFloat: layout.formatTag === 3,
+    sourceFormat:
+      layout.formatTag === 3 ? { kind: 'float', bits: 32 } : { kind: 'pcm', bits: layout.bits },
   };
 }
 

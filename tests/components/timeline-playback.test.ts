@@ -109,6 +109,7 @@ function fixture(length = 480000) {
     sampleRate: 48000,
     length,
     data: [data],
+    sourceFormat: { kind: 'pcm' as const, bits: 16 },
     floatData: [Float32Array.from(data, (sample) => sample / 32768)],
   });
   const playback = createPlayback(editor);

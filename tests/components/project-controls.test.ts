@@ -1,3 +1,4 @@
+import { wavBytesDepth, writeWavHeader } from '../fixtures';
 import { flushPromises, mount } from '@vue/test-utils';
 import { expect, it, vi } from 'vitest';
 import { setupI18n } from '../../src/i18n/setup';
@@ -44,3 +45,46 @@ it('shows missing media, relinks through the actual button, and displays the sav
     await f.dispose();
   }
 });
+
+function floatWav(): Uint8Array {
+  const bytes = new Uint8Array(44 + 8);
+  const view = new DataView(bytes.buffer);
+  writeWavHeader(view, 8, 3, 1, 48000, 32);
+  view.setFloat32(44, 0.5, true);
+  view.setFloat32(48, -0.5, true);
+  return bytes;
+}
+
+it.each([
+  { bytes: wavBytesDepth([128, 255], 48000, 8), label: 'WAV PCM 8-bit' },
+  { bytes: wavBytesDepth([0, 32767], 48000, 16), label: 'WAV PCM 16-bit' },
+  { bytes: wavBytesDepth([0, 0x7fffff], 48000, 24), label: 'WAV PCM 24-bit' },
+  { bytes: wavBytesDepth([0, 0x7fffffff], 48000, 32), label: 'WAV PCM 32-bit' },
+  { bytes: floatWav(), label: 'WAV Float 32-bit' },
+])(
+  'shows the decoded source format separately from processing/output: $label',
+  async ({ bytes, label }) => {
+    const f = fixture();
+    const localization = setupI18n(f.pinia, { storage: null, locales: ['en'] });
+    const wrapper = mount(SourceInfo, {
+      global: {
+        plugins: [f.pinia, localization.i18n],
+        provide: { [workspaceKey]: f.workspace },
+      },
+    });
+    try {
+      await f.workspace.loadAudio({ name: 'source.wav', bytes, reference: null });
+      await flushPromises();
+      const rows = wrapper.findAll('tr');
+      expect(rows.find((row) => row.text().includes('Source format'))?.text()).toContain(label);
+      expect(rows.find((row) => row.text().includes('Processing / output'))?.text()).toContain(
+        'PCM 16-bit',
+      );
+      expect(f.editor.source?.data[0]).toBeInstanceOf(Int16Array);
+    } finally {
+      wrapper.unmount();
+      localization.stop();
+      await f.dispose();
+    }
+  },
+);

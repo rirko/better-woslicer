@@ -167,7 +167,13 @@ export function makeTestSource(sampleRate: number, bpm: number, measures = 2): D
       right[i] = Math.round(rng() * 60 - 30);
     }
   }
-  return { sampleRate, channels: 2, length, data: [left, right], wasFloat: false };
+  return {
+    sampleRate,
+    channels: 2,
+    length,
+    data: [left, right],
+    sourceFormat: { kind: 'pcm', bits: 16 },
+  };
 }
 
 /** Empty marker bitmap. */

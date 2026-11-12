@@ -16,6 +16,8 @@
 
 ### Fixed
 
+- Source details now show the original WAV bit depth and distinguish integer PCM from floating point; the separate processing/output row shows the current 16-bit limit.
+
 - If the session archive is damaged, the app now keeps the original file and explains the problem instead of silently starting over; it is only discarded after you agree.
 - If the session archive cannot be written, the app says so in the status bar and keeps your latest work ready to retry instead of quietly losing it.
 

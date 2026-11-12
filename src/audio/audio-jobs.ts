@@ -1,9 +1,10 @@
+import type { DecodedWav } from '../core/wav';
 import { detectEdges } from '../core/edge';
 import type { TimeBase } from '../core/timebase';
 import { decodeAudio } from '../core/decode';
 import { buildPeakCache, type PeakCache } from '../core/peaks';
 import { analyzeBands, type BandAnalysis } from '../core/bands';
-import { renderSliceToWav, type SliceParams, type SourceAudio } from '../core/slicer';
+import { renderSliceToWav, type SliceParams } from '../core/slicer';
 
 import { detectBandCuts, type DetectRequest, type DetectResult } from '../core/banddetect';
 export type DetectionParams = Omit<DetectRequest, 'analysis'>;
@@ -18,7 +19,7 @@ export type AudioReply =
   | {
       kind: 'decoded';
       id: number;
-      source: SourceAudio;
+      source: DecodedWav;
       floatData: Float32Array[];
       peaks: PeakCache;
     }
@@ -38,7 +39,7 @@ export interface AudioEngine {
 }
 /** Pure worker-side dispatcher, also exercised directly by DSP integration tests. */
 export function createAudioProcessor(): (request: AudioRequest) => Promise<AudioReply> {
-  let source: SourceAudio | null = null;
+  let source: DecodedWav | null = null;
   let analysis: BandAnalysis | null = null;
   return async (request) => {
     try {

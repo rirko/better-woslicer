@@ -8,6 +8,7 @@ test('parses canonical 16-bit stereo WAV', () => {
   const right = new Int16Array([0, -500, 500, -32768]);
   const wav = parseWav(wavBytes16([left, right], 48000).buffer.slice(0) as ArrayBuffer);
   assert.equal(wav.sampleRate, 48000);
+  assert.deepEqual(wav.sourceFormat, { kind: 'pcm', bits: 16 });
   assert.equal(wav.channels, 2);
   assert.equal(wav.length, 4);
   assert.equal(wav.data[0][3], 32767);
@@ -41,6 +42,7 @@ test('8-bit WAV decodes as (byte - 128) << 8 like the original', () => {
   assert.equal(wav.data[0][1], 32512);
   assert.equal(wav.data[0][2], -32768);
   assert.equal(wav.data[0][3], (200 - 128) << 8);
+  assert.deepEqual(wav.sourceFormat, { kind: 'pcm', bits: 8 });
 });
 
 test('24-bit WAV decodes as the top 16 bits (>> 8)', () => {
@@ -49,6 +51,7 @@ test('24-bit WAV decodes as the top 16 bits (>> 8)', () => {
     wavBytesDepth([0x010203, 0xfe5678], 48000, 24).buffer.slice(0) as ArrayBuffer,
   );
   assert.equal(wav.data[0][0], 0x0102);
+  assert.deepEqual(wav.sourceFormat, { kind: 'pcm', bits: 24 });
   assert.equal(wav.data[0][1], 0xfe56 - 0x10000); // sign-extended
 });
 
@@ -57,10 +60,11 @@ test('32-bit int WAV decodes as the top 16 bits (>> 16, original behaviour)', ()
     wavBytesDepth([0x01020304, -65536], 48000, 32).buffer.slice(0) as ArrayBuffer,
   );
   assert.equal(wav.data[0][0], 0x0102);
+  assert.deepEqual(wav.sourceFormat, { kind: 'pcm', bits: 32 });
   assert.equal(wav.data[0][1], -1); // -65536 >> 16 = -1
 });
 
-test('32-bit IEEE float WAV decodes exactly (documented extension)', () => {
+test('32-bit IEEE float WAV preserves its source format while quantizing to Int16', () => {
   const samples = [0.5, -0.25, 0.999, -1.0];
   const dataSize = samples.length * 4;
   const buf = new ArrayBuffer(44 + dataSize);
@@ -69,7 +73,7 @@ test('32-bit IEEE float WAV decodes exactly (documented extension)', () => {
   samples.forEach((s, i) => view.setFloat32(44 + i * 4, s, true));
 
   const wav = parseWav(buf);
-  assert.equal(wav.wasFloat, true);
+  assert.deepEqual(wav.sourceFormat, { kind: 'float', bits: 32 });
   assert.equal(wav.data[0][0], Math.round(0.5 * 32768));
   assert.equal(wav.data[0][1], Math.round(-0.25 * 32768));
   assert.equal(wav.data[0][3], -32768);

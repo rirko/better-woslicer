@@ -10,6 +10,18 @@ const workspace = useWorkspace();
 // Resolved missing-media descriptor; null while a source is loaded.
 const missing = computed(() => (editor.source ? null : activeMedia(editor.document)));
 const { t } = useI18n();
+const sourceFormat = computed(() => {
+  const format = editor.source?.sourceFormat;
+  if (!format) return '';
+  switch (format.kind) {
+    case 'pcm':
+      return t('chrome.srcPcm', { bits: format.bits });
+    case 'float':
+      return t('chrome.srcFloat', { bits: format.bits });
+    case 'vorbis':
+      return 'Ogg Vorbis';
+  }
+});
 // Length in seconds at fixed precision; "0" while no source is loaded.
 const duration = computed(() =>
   editor.source ? (editor.source.length / editor.source.sampleRate).toFixed(3) : '0',
@@ -32,8 +44,11 @@ const duration = computed(() =>
       >
       <ElDescriptionsItem :label="t('chrome.formatLabel')"
         >{{ editor.source.sampleRate }} Hz ·
-        {{ t('chrome.srcFormat', { channels: editor.source.channels }) }}</ElDescriptionsItem
+        {{
+          t('chrome.srcFormat', { format: sourceFormat, channels: editor.source.channels })
+        }}</ElDescriptionsItem
       >
+      <ElDescriptionsItem :label="t('chrome.processingFormatLabel')">PCM 16-bit</ElDescriptionsItem>
       <ElDescriptionsItem :label="t('chrome.lengthLabel')">{{
         t('chrome.framesCount', { count: editor.source.length.toLocaleString() })
       }}</ElDescriptionsItem>

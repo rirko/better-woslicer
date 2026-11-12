@@ -8,7 +8,7 @@ An offline audio slicer for BMS, based on wosderge's woslicerIII.
 
 ## Features
 
-- Import WAV and OGG and export WAV slices.
+- Import WAV and OGG and export WAV slices. Source details show the original encoding; audio processing and WAV output currently use 16-bit PCM.
 - Save and reopen `.wosdx` projects. Import or export legacy `.wos` settings and exchange markers with BMSE.
 - Timeline editing with snapping, selection, quantization and undo/redo.
 - Variable-speed monitoring, cue sounds and tap calibration.

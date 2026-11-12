@@ -1,3 +1,4 @@
+import { wavBytesDepth, writeWavHeader } from '../fixtures';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { encodeWav16 } from '../../src/core/wav';
@@ -71,3 +72,27 @@ test('opens, saves and relinks a project at native browser scale', async ({ page
   await page.screenshot({ path: info.outputPath('project-workflow.png'), fullPage: true });
   expect(errors).toEqual([]);
 });
+
+for (const kind of ['pcm', 'float'] as const) {
+  test(
+    'displays the original 32-bit ' + kind + ' WAV format through the worker',
+    async ({ page }) => {
+      let bytes: Uint8Array;
+      if (kind === 'pcm') {
+        bytes = wavBytesDepth([0, 0x7fffffff, -0x80000000], 48000, 32);
+      } else {
+        bytes = new Uint8Array(44 + 12);
+        const view = new DataView(bytes.buffer);
+        writeWavHeader(view, 12, 3, 1, 48000, 32);
+        view.setFloat32(48, 0.5, true);
+        view.setFloat32(52, -0.5, true);
+      }
+      await page.goto('/');
+      await pick(page, 'Open', 'source-32.wav', bytes);
+      const details = page.locator('.source-info');
+      await expect(details).toContainText(kind === 'pcm' ? 'WAV PCM 32-bit' : 'WAV Float 32-bit');
+      await expect(details).toContainText('Processing / output');
+      await expect(details).toContainText('PCM 16-bit');
+    },
+  );
+}

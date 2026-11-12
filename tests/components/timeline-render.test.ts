@@ -347,6 +347,7 @@ describe('Vue timeline ownership', () => {
         sampleRate: 48000,
         length: 480000,
         data: [new Int16Array(480000)],
+        sourceFormat: { kind: 'pcm' as const, bits: 16 },
         floatData: [new Float32Array(480000)],
       });
       editor.setPlaying(true);
@@ -376,6 +377,7 @@ describe('Vue timeline ownership', () => {
       sampleRate: 48000,
       length: 48000,
       data: [new Int16Array(48000)],
+      sourceFormat: { kind: 'pcm' as const, bits: 16 },
       floatData: [new Float32Array(48000)],
     });
     editor.setPhase({ kind: 'ready' });
@@ -409,6 +411,7 @@ describe('Vue timeline ownership', () => {
       sampleRate: 48000,
       length: 48000,
       data: [new Int16Array(48000)],
+      sourceFormat: { kind: 'pcm' as const, bits: 16 },
       floatData: [new Float32Array(48000)],
     });
     editor.setPhase({ kind: 'ready' });
@@ -453,6 +456,7 @@ describe('Vue timeline ownership', () => {
       sampleRate: 48000,
       length: 48000,
       data: [new Int16Array(48000)],
+      sourceFormat: { kind: 'pcm' as const, bits: 16 },
       floatData: [new Float32Array(48000)],
     });
     editor.setPhase({ kind: 'ready' });

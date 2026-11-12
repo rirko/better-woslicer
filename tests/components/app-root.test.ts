@@ -103,6 +103,7 @@ it('opens calibration from toolbar, isolates keyboard dispatch, and applies its 
     channels: 1,
     length: 1,
     data: [new Int16Array(1)],
+    sourceFormat: { kind: 'pcm' as const, bits: 16 },
     floatData: [new Float32Array(1)],
   });
   const wrapper = render();

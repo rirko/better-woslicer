@@ -59,5 +59,11 @@ export async function decodeOgg(buffer: Uint8Array): Promise<DecodedWav> {
     for (let i = 0; i < length; i++) out[i] = floatToInternal(ch[i]);
     return out;
   });
-  return { sampleRate: result.sampleRate, channels, length, data, wasFloat: false };
+  return {
+    sampleRate: result.sampleRate,
+    channels,
+    length,
+    data,
+    sourceFormat: { kind: 'vorbis' },
+  };
 }

@@ -153,6 +153,7 @@ describe('timeline gesture transactions', () => {
       channels: 1,
       length: 36000,
       data: [new Int16Array(36000)],
+      sourceFormat: { kind: 'pcm' as const, bits: 16 },
       floatData: [new Float32Array(36000)],
     });
     gestures.begin(point(96));
@@ -174,6 +175,7 @@ describe('timeline gesture transactions', () => {
       channels: 1,
       length: 48780,
       data: [new Int16Array(48780)],
+      sourceFormat: { kind: 'pcm' as const, bits: 16 },
       floatData: [new Float32Array(48780)],
     });
     expect(editor.legalTick(100)).toBe(true);

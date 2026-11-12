@@ -1,3 +1,4 @@
+import type { DecodedWav } from '../core/wav';
 import { computed, markRaw, shallowRef, triggerRef } from 'vue';
 import { defineStore } from 'pinia';
 import { normalizeSelection } from '../core/markers';
@@ -12,13 +13,9 @@ import type { PeakCache } from '../core/peaks';
 import type { BandAnalysis, BandName } from '../core/bands';
 import type { FormatParams, StatusKey } from '../core/messages';
 
-export interface AudioSource {
+export interface AudioSource extends DecodedWav {
   name: string;
   reference: string | null;
-  sampleRate: number;
-  channels: number;
-  length: number;
-  data: Int16Array[];
   floatData: Float32Array[];
 }
 export type EditorPhase =

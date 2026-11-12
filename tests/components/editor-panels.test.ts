@@ -141,6 +141,7 @@ describe('editor panels with real Element Plus controls', () => {
       channels: 1,
       length: 48000,
       data: [new Int16Array(48000)],
+      sourceFormat: { kind: 'pcm' as const, bits: 16 },
       floatData: [new Float32Array(48000)],
     });
     f.editor.addTicks([191, 192, 383]);
