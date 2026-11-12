@@ -49,8 +49,9 @@ These rules apply to all work in this repository. Keep this file in English.
 
 ## Validation and CI
 
-- Use Node.js 24 and npm. Use npm ci for a clean dependency install; do not rely on stale build output.
-- UI tests independently launch low (1280×720, DPR 1) and high (1920×1080, DPR 2) profiles against the production web output. Verify native scale and menu visibility, isolate temporary user data, enforce a separate 30-second hard timeout per profile, and clean up spawned processes before the next profile. Use a loopback server. Compare fractional DPR values with a numeric tolerance while checking canvas sizes. Native Tauri window testing additionally requires the real bundles and must not be claimed from browser profiles alone.
+- Use Node.js 26.x and npm; older Node majors are not supported. Use npm ci for a clean dependency install; do not rely on stale build output.
+- Local builds and tests default to debug for fast iteration. Use release only when explicitly requested through a command flag or profile setting. CI builds, Rust tests and Clippy use release exclusively to reuse the same profile cache. Optimize release artifacts for size; see docs/CI.md for commands and profile settings.
+- UI tests independently launch low (1280×720, DPR 1) and high (1920×1080, DPR 2) profiles against the built static web output (debug locally, release in CI). Verify native scale and menu visibility, isolate temporary user data, enforce a separate 30-second hard timeout per profile, and clean up spawned processes before the next profile. Use a loopback server. Compare fractional DPR values with a numeric tolerance while checking canvas sizes. Native Tauri window testing additionally requires the real bundles and must not be claimed from browser profiles alone.
 - Run checks appropriate to the change. Before reporting a complete application build, run typecheck, unit tests, UI profiles, and archive validation. If a required build or test fails, stop downstream packaging and diagnose it. Never claim an untested platform passed.
 - CI covers branch pushes and pull requests. Follow the current workflow and docs/CI.md for platform details and archive formats. Upload build archives and failure diagnostics as workflow artifacts. Do not add CD, deployment, or GitHub Release publishing unless requested.
 

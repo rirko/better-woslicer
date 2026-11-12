@@ -36,8 +36,7 @@ function floatToInternal(x: number): number {
 export async function decodeOgg(buffer: Uint8Array): Promise<DecodedWav> {
   let factory: DecoderFactory;
   try {
-    // Dynamic require keeps the dependency optional at runtime.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // Dynamic import keeps the dependency optional at runtime.
     const mod = await import('@wasm-audio-decoders/ogg-vorbis');
     factory = (mod as { OggVorbisDecoder: DecoderFactory }).OggVorbisDecoder;
   } catch (cause) {
@@ -45,6 +44,7 @@ export async function decodeOgg(buffer: Uint8Array): Promise<DecodedWav> {
       'OGG support requires the @wasm-audio-decoders/ogg-vorbis package ' +
         '(run npm install). Original error: ' +
         (cause instanceof Error ? cause.message : String(cause)),
+      { cause },
     );
   }
 

@@ -3,8 +3,10 @@ import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import VueI18n from '@intlify/unplugin-vue-i18n/vite';
+import { resolveBuildProfile } from './scripts/build-profile.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
+const release = resolveBuildProfile().profile === 'release';
 
 // The Tauri frontend needs the ipc custom protocol in connect-src for the
 // fetch-based IPC transport; the browser release keeps the strict 'none'.
@@ -36,7 +38,10 @@ export default defineConfig({
   build: {
     outDir: resolve(root, tauriFrontend ? 'dist/app-tauri' : 'dist/app'),
     emptyOutDir: true,
-    sourcemap: 'hidden',
+    minify: release ? 'oxc' : false,
+    cssMinify: release,
+    sourcemap: release ? false : 'hidden',
+    reportCompressedSize: release,
     target: 'es2022',
     manifest: true,
   },

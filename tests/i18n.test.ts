@@ -1,7 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { MANIFEST as manifest, DATA as GENERATED_DATA, EN as en } from '../src/i18n/generated.js';
 import {
   LANGUAGES,

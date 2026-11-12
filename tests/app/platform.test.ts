@@ -28,10 +28,10 @@ function outputStream() {
   const chunks: Uint8Array[] = [];
   const close = vi.fn();
   const abort = vi.fn();
-  const write = vi.fn(async (bytes: Uint8Array) => {
+  const write = vi.fn((bytes: Uint8Array) => {
     chunks.push(new Uint8Array(bytes));
   });
-  savePicker({ createWritable: async () => ({ write, close, abort }) });
+  savePicker({ createWritable: () => ({ write, close, abort }) });
   return { chunks, write, close, abort };
 }
 function pickerInput(): HTMLInputElement {
@@ -39,9 +39,23 @@ function pickerInput(): HTMLInputElement {
   if (!(input instanceof HTMLInputElement)) throw new Error('Missing real file input');
   return input;
 }
-async function* files(): AsyncIterable<OutputFile> {
-  yield { name: 'first.wav', bytes: new Uint8Array([0, 255, 128]) };
-  yield { name: '音声.wav', bytes: new Uint8Array([7, 8, 9]) };
+/**
+ * Adapts a lazily created sync iterable into the AsyncIterable that exportFiles expects.
+ * The factory runs when iteration starts, so sources stay unconsumed on cancellation.
+ */
+function asyncIterable<T>(items: () => Iterable<T>): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]: () => {
+      const iterator = items()[Symbol.iterator]();
+      return { next: () => Promise.resolve(iterator.next()) };
+    },
+  };
+}
+function files(): AsyncIterable<OutputFile> {
+  return asyncIterable(() => [
+    { name: 'first.wav', bytes: new Uint8Array([0, 255, 128]) },
+    { name: '音声.wav', bytes: new Uint8Array([7, 8, 9]) },
+  ]);
 }
 
 describe('browser host capabilities', () => {
@@ -112,14 +126,14 @@ describe('browser host capabilities', () => {
   it('does not consume export files when a save picker is cancelled', async () => {
     Object.defineProperty(window, 'showSaveFilePicker', {
       configurable: true,
-      value: async () => {
-        throw new DOMException('Cancelled', 'AbortError');
-      },
+      value: () => Promise.reject(new DOMException('Cancelled', 'AbortError')),
     });
     const consumed = vi.fn();
-    async function* source() {
-      consumed();
-      yield { name: 'a.wav', bytes: new Uint8Array() };
+    function source(): AsyncIterable<OutputFile> {
+      return asyncIterable(function* () {
+        consumed();
+        yield { name: 'a.wav', bytes: new Uint8Array() };
+      });
     }
     expect(await createBrowserPlatform().exportFiles(source(), 'slices.zip')).toBeNull();
     expect(consumed).not.toHaveBeenCalled();
@@ -143,8 +157,8 @@ describe('browser host capabilities', () => {
   });
   it('rejects traversal and aborts incomplete exports', async () => {
     const stream = outputStream();
-    async function* source() {
-      yield { name: '../escape.wav', bytes: new Uint8Array([1]) };
+    function source(): AsyncIterable<OutputFile> {
+      return asyncIterable(() => [{ name: '../escape.wav', bytes: new Uint8Array([1]) }]);
     }
     await expect(createBrowserPlatform().exportFiles(source(), 'slices.zip')).rejects.toThrow(
       'plain, portable',
@@ -171,7 +185,9 @@ describe('browser host capabilities', () => {
     });
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const clicks: string[] = [];
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
       clicks.push(this.download);
     });
     const bytes = new Uint8Array([0, 255, 128, 1]);
@@ -187,9 +203,11 @@ describe('browser host capabilities', () => {
   it('cancels fallback downloads before consuming the iterator', async () => {
     vi.stubGlobal('confirm', vi.fn().mockReturnValue(false));
     const consumed = vi.fn();
-    async function* source() {
-      consumed();
-      yield { name: 'a.wav', bytes: new Uint8Array() };
+    function source(): AsyncIterable<OutputFile> {
+      return asyncIterable(function* () {
+        consumed();
+        yield { name: 'a.wav', bytes: new Uint8Array() };
+      });
     }
     expect(await createBrowserPlatform().exportFiles(source(), 'slices.zip')).toBeNull();
     expect(consumed).not.toHaveBeenCalled();
@@ -233,7 +251,7 @@ describe('Tauri adapter boundary', () => {
     const bytes = new Uint8Array(1024 * 1024 + 3).fill(255);
     const calls: string[] = [];
     const chunks: Uint8Array[] = [];
-    mockIPC(async (command, payload) => {
+    mockIPC((command, payload) => {
       calls.push(command);
       if (command === 'prepare_save') return 'write-id';
       if (command === 'write_chunk') {
@@ -250,9 +268,11 @@ describe('Tauri adapter boundary', () => {
   it('does not consume cancelled exports', async () => {
     mockIPC(() => null);
     const consumed = vi.fn();
-    async function* source() {
-      consumed();
-      yield { name: 'a.wav', bytes: new Uint8Array() };
+    function source(): AsyncIterable<OutputFile> {
+      return asyncIterable(function* () {
+        consumed();
+        yield { name: 'a.wav', bytes: new Uint8Array() };
+      });
     }
     expect(await createTauriPlatform().exportFiles(source(), 'ignored.zip')).toBeNull();
     expect(consumed).not.toHaveBeenCalled();

@@ -16,10 +16,10 @@ interface CommandOptions {
   editor: EditorStore;
   workspace: Workspace;
   playback: Playback;
-  onClose(): void | Promise<void>;
-  onAbout(): void | Promise<void>;
-  onOpenProject?(): void | Promise<void>;
-  onNewProjectFromWos?(): void | Promise<void>;
+  onClose: () => void | Promise<void>;
+  onAbout: () => void | Promise<void>;
+  onOpenProject?: () => void | Promise<void>;
+  onNewProjectFromWos?: () => void | Promise<void>;
 }
 
 export function createCommands({

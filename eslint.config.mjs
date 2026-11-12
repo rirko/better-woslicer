@@ -101,6 +101,23 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      // Test runners await every registered test, so the promise returned by
+      // the test()/it()/describe() call itself is consumed by the framework
+      // (node --test and vitest). Calls inside the callbacks are NOT covered.
+      '@typescript-eslint/no-floating-promises': [
+        'error',
+        {
+          allowForKnownSafeCalls: [
+            { from: 'package', package: 'vitest', name: ['it', 'describe'] },
+            { from: 'package', package: 'node:test', name: ['test'] },
+          ],
+        },
+      ],
+      // Interface-mandated callback parameters conventionally use `_name`.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
     },
   },
 

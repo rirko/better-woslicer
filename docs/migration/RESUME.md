@@ -1,8 +1,16 @@
 # 从这里恢复 Vue / Tauri 移植
 
+2026-11-11 工具链批次（覆盖所有旧 Node/构建模式要求）：**统一 Node 26.x、本机默认 debug、CI 仅 release 已落地。** `.node-version` 供 CI 共用，npm engines=26.x、`@types/node`=26.6.6；本机 `build`/`build:app`/`build:app:tauri`/`package`/`tauri -- build` 与 IPC 探针默认 debug，显式 `--release` 或 `WOSLICER_BUILD_PROFILE=release` 才走 release。前端 debug 跳过压缩，release 压缩 JS/CSS 且无 sourcemap；Cargo release 使用 opt-level=z、LTO、单 codegen unit、strip symbols，保留 unwind 以复用 test/build 依赖。CI tests/Clippy 统一 release+all-features，先生成嵌入资源，打包复用前端并关闭重复 hook。规则、四语 README、CI 文档与活跃计划已同步，旧 Node 24 测试记录只保留为历史证据。
+
+本批验证（Windows x64，Node 26.12.1 / npm 11.20.0）：`npm ci` 干净安装、lint/fmt/typecheck、7 条工具链测试、202 组件与 180 core 测试通过（4 oracle 缺 fixture 跳过）；Rust fmt、debug/release 各 13 tests 与 release Clippy 全过；Web 两种模式 build、各自 low/high UI 2/2、ZIP 逐文件 SHA-256 往返校验通过（release 确认无 map）。Windows 两种模式 MSI/NSIS 均重建成功且 MSI ProductVersion=1.0.0：debug 6.39/4.76 MiB，release 2.43/1.80 MiB。默认 debug 与显式 release IPC 探针均通过；CI 的 release 环境及跳过重复 frontend hook 路径已用本机 Tauri 实际构建验证。actionlint、YAML 解析与 24 段 Bash 语法检查通过。日志位于 `test-artifacts/node26-*`。**托管 CI、其他 OS/arch 和 native UI 双 profile 仍未验证**；本批没有 push/tag/发布。下一卡仍为 R3，本批不改界面重构排期。
+
 2026-11-11 续做批次（T0+R0+T1 已提交）：**T0 lint/fmt 工具链落地 `8e601e6`**——ESLint 10 flat config（typed+Vue）+ Oxfmt 0.78.0 + 命令合同（lint/lint:fix/fmt/fmt:check/check:quality），lint 基线 301 problems/45 files、正反例 fixture、140 文件格式化两遍哈希一致、`npm ci` 重建验证；未装 hook/未动 CI（T3 范围）。**R0 视觉/行为基线落地 `c4b4970`**——typecheck/202 组件/build/双 profile UI/10 场景基线截图+computed style 全过（`test-artifacts/ui-baseline/`、`test-artifacts/lint-baseline/`），进度见 [UI_READABILITY_PROGRESS.md](../refactoring/UI_READABILITY_PROGRESS.md) 与 [LINT_FORMAT_PROGRESS.md](../refactoring/LINT_FORMAT_PROGRESS.md)。发现并已记录：web CSP 拦 build-info（web lane About body 为空、状态栏 Load failed 属预期）；Playwright `toBeVisible` 在对话框 opacity=0 即通过（spec 用 expect.poll 等 opacity 1）；Chromium fullPage 截图丢 fixed 对话框（用视口截图）。**T1 格式基线完成（5 个格式专用提交 `4cc9fd9`/`b204047`/`4c660df`/`914a3e2`/`33c5358`）**——fmt:check 全绿、二遍 fmt 零 diff、lint 计数 301 不变、202 组件/typecheck/build 复验过、UI 22 产物重采对照（10 个逐字节同、12 个仅 ≤0.28% 像素抖动）；`ui-baseline/` 已轮换为 post-T1 基线，pre-T1 归档保留。**下一卡：R1a–R1d**（审查格式化输出+少量语义分组），随后 T2 lint 清理（301 条）与 R2–R10。
 
 2026-11-11 续做批次 2（R1 全部完成）：**R1a `fe90ca3`（app shell：逗号声明拆分+区域注释）、R1b `31a7162`（面板八文件：+62 纯注释/空行）、R1c `723f584`（播放/时间轴/校准：+94，唯一语义面=声明拆三条）、R1d `d80c9e9`（bmhelper：+52 纯插入）**——每卡均协调者独立复核（非注释行过滤器 + fmt:check 0 + lint 恰好 301 + 定向组件测试），R1 合并验证 typecheck/202 组件/build/双 profile 2/2 全过，视觉对照 10/22 逐字节同、12 个仅 ≤0.33% 像素刻度线/AA 抖动（low/main 1717px 差异计数与 T1 时一致=运行间确定性 AA 差）。`ui-baseline/` 已轮换为 post-R1 基线（pre-r1 归档保留）。执行子代理教训：R1a 首个代理在验证长命令阶段无输出超时，后续代理经"输出重定向到 test-artifacts 日志再读退出码"约束后正常。**下一卡：T2 lint 清理**（301 条，tests 271/生产 30 分开派卡；约束见 LINT_FORMAT_PLAN §2——不得为过 lint 滥加 void），或并行推进 R2（删 platform prop，前置 R1a 已满足）。
+
+2026-11-11 续做批次 3（T2 完成，全仓 lint 0）：**301→0，七个提交**——配置 `e31e56b`（no-floating-promises 豁免 vitest/node:test 框架自消费调用 + no-unused-vars `^_`；**不豁免回调内部**）→ 生产 `59532e6`（16 项，含 `tsconfig.lint.shims.d.ts` 供纯 tsc lint 解析 .vue；BMHelperPanel defaultSort 具名常量——R9 重叠已记录）→ browser.ts `49da1e2`（守卫+require-await 等价改造，逐方法 throw 语义分析；reopenFile 保 rejection 供 `.rejects` 测试）→ 测试四卡 `0adfad0`/`853560e`/`80a664c`/`b743bc3`（34+17+13+9；satisfies 替代类型注解消 unbound-method；`expect.any(String) as string` 钉 matcher 类型）。终验全链绿：lint 0、fmt 0、typecheck 0、npm test（202+180/4 skipped）、build、双 profile UI 2/2、10 场景重采（14–15/22 逐字节同，余为既证抖动）。**失误记录**：T2 视觉对照先覆盖后归档，pre-T2 直接对照件丢失（补救链与教训见 LINT_FORMAT_PROGRESS T2 节；**以后归档必须在覆盖前**）。**下一卡：T3 hook/CI 上线**（前置已满足：隔离临时 repo 验证 pre-commit 正反例+部分暂存恢复+CI 命令顺序调整，见 LINT_FORMAT_PLAN §3/§4）或 R2。
+
+2026-11-11 续做批次 4（R2 + T3 完成，lint 方案 T0–T3 全部落地）：**R2 `466fdfd`**（删 WorkspacePanels 虚假 platform prop，F-9 resolved；lint/fmt/typecheck 0、app-controls+app-root 9 过）。**T3 hook `7c8a562` + CI `c24096e`**：husky 9.1.7 + lint-staged 16.4.0；`prepare`=husky、`lint:staged`=`lint-staged --concurrent false`；`.husky/pre-commit` 单行；`lint-staged.config.mjs` 三组（代码 eslint+oxfmt check / 其他文本 oxfmt check / 工具配置→`scripts/check-staged-quality.mjs` 全量 lint+fmt:check，**读工作树**）；CI web job 在 npm ci 后加 lint+fmt:check；CI.md+README×4 同步。验证：隔离临时 repo **13/13 场景**（正例/格式/TS/Vue 反例/部分暂存恢复/中文空格名/删除/无匹配/配置全量/无依赖明确失败不下载）+ 本仓两次真实提交现场通过（29.2s/13.8s）。**未验证**：托管 CI 首跑（需 push 授权）、Linux hook。**注意**：`R:\TEMP\woslicer-t3-*` 临时 repo 含指向本仓 node_modules 的 junction，处置须先解除 junction，禁止递归删除/跨盘移动。**从现在起每次本地提交都会跑 pre-commit**（配置类文件触发全量检查约 30s）。**下一卡：R3**（布局样式归位，协调者先确认级联——R0 computed-styles 为证据）→ R4–R10 按方案 §3 依赖顺序。
 
 2026-11-11 恢复批次（覆盖下文旧 CI/离线安装要求）：设计书先独立提交为 `a6728d4`。迁移后 CI 恢复 Web 与 Windows x64 必过、Windows ARM64/Linux x64/ARM64 可选；Rust cache 固定官方 v2.9.3 SHA；tag 直接公开 prerelease，按配置恢复 Pages。详见 [CI.md](../CI.md)。托管首跑与 native UI 双 profile 仍待验证，未执行 push/tag/发布。
 
@@ -19,7 +27,7 @@
 - 2026-11-11 **R0 完成（`c4b4970`）**：`tests/app/ui-readability.spec.ts`（5 场景，`WOSLICER_UI_BASELINE` 门控——默认 `test:app-ui` 不跑它们，保持 30s/profile 预算）+ `scripts/verify-ui-readability.mjs`（场景×profile 独立进程+30s watchdog+进程树清理）。基线：typecheck/202 组件/build:app/test:app-ui 双 profile/10 场景截图+computed-styles.json 全过；`.timeline` min-height 160px、`.workspace` grid 896/384（high 1344/576）、`.side-panel` border-left 1px+overflow auto。四条现场发现已写进 UI_READABILITY_PROGRESS.md（CSP 拦 identity、对话框 opacity 等待、fullPage 丢 fixed、Light 主题）。
 - 2026-11-11 **重构方案追加 lint/fmt 与 pre-commit**：见 [LINT_FORMAT_PLAN.md](../refactoring/LINT_FORMAT_PLAN.md)。Oxfmt + ESLint flat config（TS 类型感知/Vue template）+ Husky/lint-staged；T0 工具配置 → T1 格式基线 → T2 lint 清理 → T3 hook/CI 上线，之后继续局部重构。只检查、不在 hook 自动改写；T0 已落地（见上条），**T1 格式基线未开始**。
 
-- 2026-11-11 **界面等价重构方案已编写，尚未实施**：用户要求结合已有 smell-check 与人工可读性问题，为 flash 级 agent 编写可执行小任务。入口为 [UI_READABILITY_PLAN.md](../refactoring/UI_READABILITY_PLAN.md)，核对基准 HEAD `44a8192`、最新报告 `.smell-check/20261110-180802Z`（57 active / 5 dismissed）。先 R0 固定行为/视觉基线，再按卡实施；本轮仅文档，不表示发现已修复或测试通过。F-7 关闭流程锁范围与其余确认不同，禁止机械五合一；Node 现场为 26，实施验证前须切 Node 24。W6 原生验证等剩余项继续保留。
+- 2026-11-11 **界面等价重构方案已编写，尚未实施**：用户要求结合已有 smell-check 与人工可读性问题，为 flash 级 agent 编写可执行小任务。入口为 [UI_READABILITY_PLAN.md](../refactoring/UI_READABILITY_PLAN.md)，核对基准 HEAD `44a8192`、最新报告 `.smell-check/20261110-180802Z`（57 active / 5 dismissed）。先 R0 固定行为/视觉基线，再按卡实施；本轮仅文档，不表示发现已修复或测试通过。F-7 关闭流程锁范围与其余确认不同，禁止机械五合一；Node 现场为 26；当时要求切回 24，已被当前 Node 26 决定覆盖。W6 原生验证等剩余项继续保留。
 
 - 2026-11-10 本轮：**W1 恢复写可靠性已完成。** W1a `618d445`（写 ACK/失败可见/重试/dispose 上抛）、W1b `5a40e7b`（恢复结果区分 absent/restored/invalid/future/read-failed，坏/future/read-failed 原输入保留，恢复写暂停，打开内容需显式确认丢弃，`reset` 显式清档）。
 - 2026-11-10 续做：**W2a.2 受限打开与保全保存已完成（`5375e68`）**：复杂布局只读打开、editor 层单点拦截、保存原字节、恢复还原保持只读且保存明确不可用。
@@ -74,7 +82,7 @@ Rust/打包改动加载 Rust skill；跑 Cargo 前先 `node scripts/tauri-build-
 1. release.yml 已恢复为 v* tag 触发，复用迁移后构建并直接公开 prerelease；Pages 按仓库变量启用。旧 draft 流程不再适用。
 2. dev/typecheck/test 已切（本批）；剩余 build/package 主入口与旧脚本退场：与 CI 重写同批做（scripts 更名会断 build.yml 引用，必须一次成批）。
 3. Tauri 常规目标产物（本机平台先做），bundle 配置按 D10 裁剪；产物做归档校验。
-4. CI：Node24 + npm ci + Rust locked + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action；工作流待分支 push 验证；发布按 docs/CI.md 的 tag 流程。
+4. CI：Node26 + npm ci + Rust locked + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action；构建、Rust 测试与 Clippy 均用 release；工作流待分支 push 验证；发布按 docs/CI.md 的 tag 流程。
 5. native UI 双 profile（1280×720/DPR1、1920×1080/DPR2）用 Tauri 驱动验证；本机 WSL 路径可作为中间证据（标注"本机 WSL"），标准验收以真实平台包为准。
 
 W6 完成后进入 W7（历史 smell findings 处置、许可证、README×4、changelog×2）。
@@ -98,11 +106,9 @@ node --version
 npm --version
 ```
 
-要求 Node.js 24。此前可用的本机缓存 Node 为：
-`C:\Users\aya\AppData\Local\npm-cache\_npx\387698761821791d\node_modules\node\bin\node.exe`。
-若当前 node 不是 24，先确认该路径存在/版本，再临时将它的 bin 目录前置 PATH；不要依赖旧环境隐式选中。
-2026-11-11 补充（Git Bash 实测）：该缓存 bin 目录下的 `node` 是无执行位的空占位文件，PATH 前置不生效；须以绝对路径直接调 `node.exe`，npm 用 `"<node24>" "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" …`。
-其他机器使用其已安装的 Node24，无需复制这条机器路径。清洁安装用 npm ci；若需清理旧 node_modules，先按下节移动。
+要求 Node.js **26.x**，版本源为 `.node-version`（CI 共用），npm engines 与 Node 类型包同步。当前本机为 Node 26.12.1 / npm 11.20.0；不再使用旧 Node 24 缓存或切换指令。清洁安装用 npm ci；若需清理旧 node_modules，先按下节移动。
+
+本机 build/package/test 默认 debug，显式 `--release` 才用 release；也可设置 `WOSLICER_BUILD_PROFILE`。Cargo 本地测试保持默认 test profile；CI 使用 release 并与打包共享优化配置。入口与例子见 [CI.md](../CI.md)。下文旧版本测试记录仅为历史证据。
 
 原机器 Cargo target 曾使用 `A:\cargo.build`（仓库外）；写该缓存和 `.git` 可能需要工具沙箱提权。
 使用工具已有审批机制，不绕过权限、不误把获授权的本地 commit 当作需要再向用户询问的产品决策。

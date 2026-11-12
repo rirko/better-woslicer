@@ -52,7 +52,8 @@ describe('.wosdx project document', () => {
     expect(value.tracks[0]?.solo).toBe(false);
     expect(value.tracks[0]?.clips).toEqual([
       {
-        clipId: expect.any(String),
+        // vitest types expect.any() as `any`; pin it to the matched property type.
+        clipId: expect.any(String) as string,
         mediaId: 'media-1',
         timelineStartSeconds: 0,
         sourceOffsetFrames: 0,
@@ -210,7 +211,7 @@ describe('.wosdx project document', () => {
     expect(() =>
       parseProject({
         ...value,
-        tracks: [{ ...track, clips: [{ ...track.clips[0]!, mediaId: 'missing' }] }],
+        tracks: [{ ...track, clips: [{ ...track.clips[0], mediaId: 'missing' }] }],
       }),
     ).toThrow(/media/i);
     expect(() => parseProject({ ...value, tracks: [{ ...track, gainDb: Number.NaN }] })).toThrow();
@@ -218,7 +219,7 @@ describe('.wosdx project document', () => {
       parseProject({
         ...value,
         tracks: [
-          { ...track, clips: [{ ...track.clips[0]!, sourceOffsetFrames: 48000, frameCount: 1 }] },
+          { ...track, clips: [{ ...track.clips[0], sourceOffsetFrames: 48000, frameCount: 1 }] },
         ],
       }),
     ).toThrow();

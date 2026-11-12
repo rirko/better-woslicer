@@ -127,6 +127,6 @@ export function createTauriPlatform(): Platform {
 export async function getTauriBuildIdentity(): Promise<unknown> {
   return invoke<unknown>('build_identity');
 }
-export async function importTauriLegacySession(): Promise<unknown | null> {
+export async function importTauriLegacySession(): Promise<unknown> {
   return invoke<unknown>('import_legacy_session');
 }

@@ -74,7 +74,14 @@ T1（oxfmt 全量格式化，5 个格式专用提交）完成后已重采全部 
 - 基线轮换：`test-artifacts/ui-baseline/` 现为 **post-R1** 基线；post-T1 归档保留在 `ui-baseline-pre-r1/`。
 - 结论：R1a–R1d 达到卡验收（读模板能按导航表识别区域；diff 只有注释、声明拆分与 CSS 分组；formatter 再运行无变化）。H-1/H-2/H-3 的"展开"部分已处置；其中牵涉语义分组的 F-7/F-8/F-9/F-10/F-39/F-44 仍由 R2–R9 处置，不因 R1 完成而改变状态。
 
-## R2–R10：pending（见方案第 3/4 节）
+## R2 — 去掉标签容器的虚假 host 依赖（F-9）：**完成（2026-11-11，`466fdfd`）**
+
+- owner：协调者本地执行。可写集恰为卡内三文件（App.vue / WorkspacePanels.vue / app-controls.test.ts）。
+- 实际改动：删除 WorkspacePanels 的 `Platform` type import 与 `defineProps`（无其他 prop，整体删除）；App 模板删除 `:platform` 绑定（`:key="panelGeneration"`、activeTab、v-if、workspace/BMHelper 注入原样；App 真实 platform 仍用于 createCommands 与 syncAppearance）；测试删除仅为该 prop 构造的假 Platform 与 props 传入、移除随之无用的 type import。
+- 验收（协调者重跑）：lint 0 / fmt:check 0 / typecheck 0 / app-controls + app-root 2 files / 9 passed（BMHelper 跨 tab 用例保持原时机卸载/重建断言）。无需为删 prop 新建测试（按卡验收条款）。
+- finding 状态：F-9 **resolved**（其余 finding 状态仍按 §6 队列，不因本卡变动）。
+
+## R3–R10：pending（见方案第 3/4 节；R4/R6/R7 与 T2 已改文件的重叠已在各自卡面标注）
 
 - 前置：R0（已完成）＋ T0（已完成）＋ T1 格式基线（已完成，2026-11-11）。
 - 下一卡：**R1a–R1d**（按区域审查 T1 格式化输出、做少量语义分组整理；文件集合见方案 §4）——之后 T2 lint 清理（清单 `test-artifacts/lint-baseline/eslint-baseline.json`，301 条）与 R2–R10。

@@ -286,7 +286,7 @@ function componentFixture() {
   const pinia = createPinia();
   const editor = useEditorStore(pinia);
   const setup = setupI18n(pinia, { storage: null, locales: ['en'], prefersDark: () => false });
-  const playback: Playback = {
+  const playback = {
     play: vi.fn(),
     pause: vi.fn(),
     stop: vi.fn(),
@@ -299,7 +299,7 @@ function componentFixture() {
       throw new Error('Audio context not used by these views');
     },
     dispose: vi.fn(),
-  };
+  } satisfies Playback;
   const Host = defineComponent({
     setup() {
       providePlayback(playback);

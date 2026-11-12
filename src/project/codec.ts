@@ -62,7 +62,7 @@ function choice<const T extends readonly string[]>(
 ): T[number] {
   if (typeof value !== 'string' || !choices.includes(value))
     throw new ProjectFormatError(`${label} is unsupported`);
-  return value as T[number];
+  return value;
 }
 const UNKNOWN_FIELD_LIMIT = 16;
 function extraFields(item: Record<string, unknown>, known: readonly string[]): string[] {

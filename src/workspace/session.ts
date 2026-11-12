@@ -5,21 +5,23 @@ import { MAX_TICKS } from '../core/timebase';
 import { ampToDb } from '../core/volume';
 import type { EditorStore } from '../slicing/editor-store';
 
-const optionKeys = [
-  'followPlayhead',
-  'grid',
-  'snap',
-  'bandDetectBands',
-  'bandThresholdDb',
-  'bandMinGapUnits',
-  'bandSnap',
-  'tapOffsetMs',
-  'cursorTick',
-  'selectedTicks',
-  'scrollTick',
-  'pxPerTick',
-] as const;
-export type SessionOptions = Partial<Pick<EditorStore, (typeof optionKeys)[number]>>;
+export type SessionOptions = Partial<
+  Pick<
+    EditorStore,
+    | 'followPlayhead'
+    | 'grid'
+    | 'snap'
+    | 'bandDetectBands'
+    | 'bandThresholdDb'
+    | 'bandMinGapUnits'
+    | 'bandSnap'
+    | 'tapOffsetMs'
+    | 'cursorTick'
+    | 'selectedTicks'
+    | 'scrollTick'
+    | 'pxPerTick'
+  >
+>;
 export interface EditorSession {
   version: 2;
   dirty: boolean;

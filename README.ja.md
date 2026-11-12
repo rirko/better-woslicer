@@ -29,7 +29,7 @@ Windows x64 が主要なデスクトップ版です。ほかのアーキテク�
 
 Web 版はブラウザーで直接動作します：[woslicer-dx app](https://woslicer-dx.pages.dev/) （インストール不要）。
 
-ソースから実行するには Node.js 24、npm、Git、Rust stable ツールチェーンが必要です。Tauri のパッケージングにはプラットフォームごとの追加ツール（Linux は WebKit/GTK、Windows は WebView2）も必要です。
+ソースから実行するには Node.js 26.x、npm、Git、Rust stable ツールチェーンが必要です。Tauri のパッケージングにはプラットフォームごとの追加ツール（Linux は WebKit/GTK、Windows は WebView2）も必要です。
 
 ```sh
 npm ci
@@ -58,13 +58,18 @@ npm run dev
 ## 開発
 
 ```sh
+npm run lint
+npm run fmt:check
 npm run typecheck
 npm test
 npm run build
 npm run test:app-ui
 npm run package
-
 ```
+
+ローカルのビルドとテストは既定で debug を使用します。release ビルドには `npm run build -- --release` または `npm run package -- --release` を実行してください。CI は release のみを使用します。
+
+コミット時は pre-commit フックがステージ済みファイルの lint とフォーマット検査を行います。
 
 音声は内部的に 16-bit に変換され、書き出しは 16-bit PCM です。原版との比較テストには外部のフィクスチャが必要で、無い場合はスキップされます。
 

@@ -29,12 +29,12 @@ const BASE: TimeBase = { bpm: 120, shift: 0, sampleRate: SR };
 
 test('detectRiseOnsets finds the burst edges in the mid band', () => {
   const onsets = detectRiseOnsets(analysis.mid.rms[0], analysis.hopSamples, { thresholdDb: 6 });
-  assert.ok(onsets.length >= 3, `onsets=${onsets}`);
+  assert.ok(onsets.length >= 3, `onsets=${onsets.join(',')}`);
   // 0.5 s = sample 24000, 1.0 s = 48000, 1.5 s = 72000 (hop-rounded).
   for (const expected of [24000, 48000, 72000]) {
     assert.ok(
       onsets.some((s) => Math.abs(s - expected) <= analysis.hopSamples),
-      `expected an onset near ${expected}, got ${onsets}`,
+      `expected an onset near ${expected}, got ${onsets.join(',')}`,
     );
   }
 });
@@ -56,7 +56,7 @@ test('detectBandCuts snaps every hit to the grid', () => {
     base: BASE,
     existing: new Set<number>(),
   });
-  assert.ok(result.ticks.length >= 3, `ticks=${result.ticks}`);
+  assert.ok(result.ticks.length >= 3, `ticks=${result.ticks.join(',')}`);
   for (const tick of result.ticks) assert.equal(tick % 8, 0, `tick ${tick} is off-grid`);
   // Bursts at 0.5/1.0/1.5 s land on ticks 48/96/144 (already 8-multiples).
   assert.deepEqual(result.ticks.slice(0, 3), [48, 96, 144]);
@@ -157,7 +157,7 @@ test('a short loud hit inside an already loud passage is detected', () => {
   // The hit starts at t = 0.8 s = sample 38400.
   assert.ok(
     onsets.some((s) => Math.abs(s - 38400) <= hitAnalysis.hopSamples * 2),
-    `expected an onset near 38400, got ${onsets}`,
+    `expected an onset near 38400, got ${onsets.join(',')}`,
   );
 });
 
@@ -182,7 +182,7 @@ test('snap:false keeps the exact onset tick instead of the coarse grid', () => {
   for (const tick of snapped.ticks) assert.equal(tick % 4, 0, `snapped tick ${tick}`);
   assert.ok(
     exact.ticks.some((t) => t % 4 !== 0 || Math.abs(t - 48) <= 2),
-    `exact ticks should follow the onset, got ${exact.ticks}`,
+    `exact ticks should follow the onset, got ${exact.ticks.join(',')}`,
   );
   // The first burst (0.5 s = tick 48) is exactly on a cell boundary; the
   // second (1.0 s = tick 96) too — use a shifted-grid case to prove the
@@ -205,7 +205,7 @@ test('snap:false keeps the exact onset tick instead of the coarse grid', () => {
   for (const tick of snapped5.ticks) assert.equal(tick % 5, 0, `snapped tick ${tick}`);
   assert.ok(
     exact5.ticks.some((t) => t % 5 !== 0),
-    `exact ticks ${exact5.ticks} should not all be grid multiples`,
+    `exact ticks ${exact5.ticks.join(',')} should not all be grid multiples`,
   );
 });
 

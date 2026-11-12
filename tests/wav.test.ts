@@ -96,7 +96,7 @@ test('malformed inputs raise WavParseError with actionable messages', () => {
   new DataView(notWave).setUint32(0, 0x52534946, false); // "RSIF" reversed
   assert.throws(() => parseWav(notWave), /RIFF/);
   assert.throws(
-    () => parseWav(wavBytesDepth([1, 2], 48000, 16).slice(0, 30).buffer as ArrayBuffer),
+    () => parseWav(wavBytesDepth([1, 2], 48000, 16).slice(0, 30).buffer),
     WavParseError,
   );
 });
@@ -105,10 +105,7 @@ test('truncated data chunk clamps to the bytes actually present', () => {
   const full = wavBytes16([new Int16Array([1, 2, 3, 4, 5, 6])], 48000);
   const truncated = full.slice(0, 44 + 8); // claims 12 bytes of data, only 8 present
   const view = new DataView(
-    truncated.buffer.slice(
-      truncated.byteOffset,
-      truncated.byteOffset + truncated.byteLength,
-    ) as ArrayBuffer,
+    truncated.buffer.slice(truncated.byteOffset, truncated.byteOffset + truncated.byteLength),
   );
   view.setUint32(4, 44 + 8 - 8, true); // fix RIFF size
   const wav = parseWav(view.buffer);

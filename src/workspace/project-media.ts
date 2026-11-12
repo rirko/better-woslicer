@@ -90,6 +90,8 @@ export function projectFileName(name: string): string {
   const stem =
     name
       .replace(/\.wosdx$/i, '')
+      // Control characters are intentionally matched: they must never survive into a project file name.
+      // eslint-disable-next-line no-control-regex
       .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
       .replace(/[. ]+$/g, '')
       .slice(0, 60) || 'project';

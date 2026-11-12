@@ -438,9 +438,7 @@ describe('workspace and editor business operations', () => {
     });
     const restored = setup();
     restored.session = JSON.parse(JSON.stringify(snapshot));
-    restored.platform.reopenFile = async () => {
-      throw new Error('Missing source');
-    };
+    restored.platform.reopenFile = () => Promise.reject(new Error('Missing source'));
     await restored.workspace.restoreSession();
     expect(restored.editor.source).toBeNull();
     expect(restored.editor.isError).toBe(true);
@@ -663,18 +661,19 @@ describe('workspace and editor business operations', () => {
   });
   it('imports a legacy recovery file only after explicit confirmation without honoring its path', async () => {
     const f = setup();
-    f.confirmOptions.confirmLegacyImport = async (summary) => {
+    f.confirmOptions.confirmLegacyImport = (summary) => {
       expect(summary).toMatchObject({ bpm: 145, shift: 2, markers: 2, name: 'Untitled' });
-      return true;
+      return Promise.resolve(true);
     };
-    f.platform.importLegacySession = async () => ({
-      version: 1,
-      session: {
-        doc: { bpm: 145, shift: 2, fadeoutMs: 20, noisegateDb: -52, markers: [12, 36] },
-        options: { volume: 0.2, baseName: 'legacy' },
-        lastFile: { path: 'C:/private/audio.wav', name: 'audio.wav' },
-      },
-    });
+    f.platform.importLegacySession = () =>
+      Promise.resolve({
+        version: 1,
+        session: {
+          doc: { bpm: 145, shift: 2, fadeoutMs: 20, noisegateDb: -52, markers: [12, 36] },
+          options: { volume: 0.2, baseName: 'legacy' },
+          lastFile: { path: 'C:/private/audio.wav', name: 'audio.wav' },
+        },
+      });
     const reopen = vi.spyOn(f.platform, 'reopenFile');
     await f.workspace.importLegacyRecovery();
     expect(f.editor.doc).toEqual({ bpm: 145, shift: 2, fadeoutMs: 20, noisegateDb: -52 });
@@ -694,18 +693,19 @@ describe('workspace and editor business operations', () => {
   });
   it('declines a legacy import or rejects non-legacy files without touching the workspace', async () => {
     const f = setup();
-    f.platform.importLegacySession = async () => ({ hello: 'world' });
+    f.platform.importLegacySession = () => Promise.resolve({ hello: 'world' });
     await f.workspace.importLegacyRecovery();
     expect(f.editor.isError).toBe(true);
     const document = f.editor.document;
-    f.platform.importLegacySession = async () => ({
-      version: 1,
-      session: {
-        doc: { bpm: 90, shift: 0, fadeoutMs: 0, noisegateDb: -48, markers: [3] },
-        options: {},
-      },
-    });
-    f.confirmOptions.confirmLegacyImport = async () => false;
+    f.platform.importLegacySession = () =>
+      Promise.resolve({
+        version: 1,
+        session: {
+          doc: { bpm: 90, shift: 0, fadeoutMs: 0, noisegateDb: -48, markers: [3] },
+          options: {},
+        },
+      });
+    f.confirmOptions.confirmLegacyImport = () => Promise.resolve(false);
     await f.workspace.importLegacyRecovery();
     expect(f.editor.document).toBe(document);
     expect(f.editor.canUndo).toBe(false);
@@ -781,11 +781,11 @@ describe('workspace and editor business operations', () => {
     await f.workspace.openAudio();
     expect(openFile).not.toHaveBeenCalled();
     expect(f.session).toBe(raw);
-    f.confirmOptions.confirmDiscardRecovery = async () => false;
+    f.confirmOptions.confirmDiscardRecovery = () => Promise.resolve(false);
     await f.workspace.openAudio();
     expect(openFile).not.toHaveBeenCalled();
     expect(f.session).toBe(raw);
-    f.confirmOptions.confirmDiscardRecovery = async () => true;
+    f.confirmOptions.confirmDiscardRecovery = () => Promise.resolve(true);
     f.opened = audioFile();
     await f.workspace.openAudio();
     expect(f.editor.source?.name).toBe('tone');
@@ -798,7 +798,7 @@ describe('workspace and editor business operations', () => {
     const raw = { version: 2, project: { timing: { bpm: 0, shiftTicks: 0 } } };
     f.session = raw;
     await f.workspace.restoreSession();
-    const confirm = vi.fn(async () => false);
+    const confirm = vi.fn(() => Promise.resolve(false));
     f.confirmOptions.confirmDiscardRecovery = confirm;
     await f.workspace.reset();
     expect(confirm).not.toHaveBeenCalled();
@@ -931,7 +931,7 @@ describe('workspace and editor business operations', () => {
     });
     await f.workspace.loadAudio(audioFile());
     f.workspace.actions.setMarker(0);
-    f.platform.exportFiles = async () => null;
+    f.platform.exportFiles = () => Promise.resolve(null);
     await f.workspace.exportAll();
     expect(renders).toBe(0);
     expect(f.editor.exportLock).toBe(false);

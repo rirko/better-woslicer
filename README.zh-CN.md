@@ -29,7 +29,7 @@ Windows x64 为主要桌面版本；其他架构和 Linux 包在可用时提供�
 
 网页版在浏览器中直接运行：[woslicer-dx app](https://woslicer-dx.pages.dev/) ，无需安装。
 
-源码运行需要 Node.js 24、npm、Git 和 Rust stable 工具链；Tauri 打包还需各平台配套工具（Linux 的 WebKit/GTK 包、Windows 的 WebView2）：
+源码运行需要 Node.js 26.x、npm、Git 和 Rust stable 工具链；Tauri 打包还需各平台配套工具（Linux 的 WebKit/GTK 包、Windows 的 WebView2）：
 
 ```sh
 npm ci
@@ -58,13 +58,18 @@ npm run dev
 ## 开发
 
 ```sh
+npm run lint
+npm run fmt:check
 npm run typecheck
 npm test
 npm run build
 npm run test:app-ui
 npm run package
-
 ```
+
+本机构建与测试默认使用 debug。需要 release 构建时，运行 `npm run build -- --release` 或 `npm run package -- --release`。CI 仅使用 release。
+
+提交时会通过 pre-commit 钩子对暂存文件运行 lint 与格式检查。
 
 音频在内部转换为 16-bit，导出使用 16-bit PCM。与原版输出的对比测试需要额外样本，缺少样本时会跳过。
 

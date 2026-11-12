@@ -29,7 +29,7 @@ Windows x64 is the primary desktop package. Other architectures and Linux packag
 
 The web version runs directly in the browser: [woslicer-dx app](https://woslicer-dx.pages.dev/) — no installation needed.
 
-For source builds, use Node.js 24, npm, Git and the Rust stable toolchain; the Tauri bundler also needs its per-platform tooling (WebKit/GTK packages on Linux, WebView2 on Windows):
+For source builds, use Node.js 26.x, npm, Git and the Rust stable toolchain; the Tauri bundler also needs its per-platform tooling (WebKit/GTK packages on Linux, WebView2 on Windows):
 
 ```sh
 npm ci
@@ -58,13 +58,18 @@ Left-drag paints cuts, right-drag erases, Shift/Ctrl+drag selects, and dragging 
 ## Development
 
 ```sh
+npm run lint
+npm run fmt:check
 npm run typecheck
 npm test
 npm run build
 npm run test:app-ui
 npm run package
-
 ```
+
+Local builds and tests default to debug. For a release build, run `npm run build -- --release` or `npm run package -- --release`. CI uses release only.
+
+Commits run lint and format checks on staged files through a pre-commit hook.
 
 Audio is converted to 16-bit internally and exports use 16-bit PCM. Original-program comparison tests require external fixtures and are skipped when those are absent.
 

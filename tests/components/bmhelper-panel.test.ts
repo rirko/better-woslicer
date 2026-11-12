@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, disposePinia } from 'pinia';
-import { describe, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import BMHelperPanel from '../../src/bmhelper/BMHelperPanel.vue';
 import { useBmhelperStore } from '../../src/bmhelper/store';
 import { useEditorStore } from '../../src/slicing/editor-store';
@@ -13,22 +13,20 @@ import { writeSmfSequence } from '../../src/core/smf';
 it('emits current BPM with 48-per-beat cuts and uses platform clipboard and save actions', async () => {
   const pinia = createPinia();
   const translation = setupI18n(pinia, { storage: null, locales: ['en'] });
-  const platform: Platform = {
-    kind: 'browser',
-    openFile: vi.fn(async () => null),
-    reopenFile: vi.fn(async () => {
-      throw new Error('unused');
-    }),
-    saveFile: vi.fn(async () => true),
-    exportFiles: vi.fn(async () => null),
-    readClipboard: vi.fn(async () => ''),
+  const platform = {
+    kind: 'browser' as const,
+    openFile: vi.fn(() => Promise.resolve(null)),
+    reopenFile: vi.fn(() => Promise.reject(new Error('unused'))),
+    saveFile: vi.fn(() => Promise.resolve(true)),
+    exportFiles: vi.fn(() => Promise.resolve(null)),
+    readClipboard: vi.fn(() => Promise.resolve('')),
     writeClipboard: vi.fn(async () => {}),
-    readSession: vi.fn(async () => null),
+    readSession: vi.fn(() => Promise.resolve(null)),
     writeSession: vi.fn(async () => {}),
     clearSession: vi.fn(async () => {}),
-    importLegacySession: vi.fn(async () => null),
+    importLegacySession: vi.fn(() => Promise.resolve(null)),
     setTheme: vi.fn(async () => {}),
-  };
+  } satisfies Platform;
   const editor = useEditorStore(pinia);
   const workspace = createWorkspace({ platform, editor });
   const store = useBmhelperStore(pinia);

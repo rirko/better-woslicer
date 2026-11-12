@@ -19,6 +19,9 @@ on:
 permissions:
   contents: read
 
+env:
+  WOSLICER_BUILD_PROFILE: release
+
 concurrency:
   # Distinct from release.yml: a called workflow must not cancel its caller.
   group: build-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
@@ -35,11 +38,13 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version-file: .node-version
           cache: npm
       - name: Use the source commit time for all build identities
         run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
       - run: npm ci
+      - run: npm run lint
+      - run: npm run fmt:check
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

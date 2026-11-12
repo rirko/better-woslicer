@@ -276,10 +276,7 @@ onUnmounted(() => {
           </div>
           <TimelineEditor class="timeline" />
         </div>
-        <WorkspacePanels
-          :key="panelGeneration"
-          :platform="platform"
-        />
+        <WorkspacePanels :key="panelGeneration" />
       </section>
       <!-- status bar -->
       <StatusBar

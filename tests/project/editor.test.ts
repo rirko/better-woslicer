@@ -65,7 +65,8 @@ describe('atomic project transactions', () => {
     });
     project.undo();
     const result = project.transact((document) => {
-      document.name = document.name;
+      // Intentional same-value write: the transaction must recognize it as a no-op.
+      document.name = String(document.name);
     });
     expect(result.changed).toBe(false);
     expect(project.canRedo).toBe(true);
@@ -114,7 +115,7 @@ describe('atomic project transactions', () => {
     const project = editor();
     expect(() =>
       project.transact((document) => {
-        document.tracks[0]!.gainDb = Number.NaN;
+        document.tracks[0].gainDb = Number.NaN;
       }),
     ).toThrow();
     expect(project.document.tracks[0]?.gainDb).toBe(0);

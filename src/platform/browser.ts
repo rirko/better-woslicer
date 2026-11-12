@@ -31,7 +31,7 @@ function pickFile(accept: string): Promise<File | null> {
       input.click();
     } catch (error) {
       input.remove();
-      reject(error);
+      reject(error instanceof Error ? error : new Error(String(error)));
     }
   });
 }
@@ -46,6 +46,8 @@ function outputName(name: string): string {
   if (
     !name ||
     name.length > 240 ||
+    // Control characters are intentionally matched: they must never survive into an output file name.
+    // eslint-disable-next-line no-control-regex -- portable output names must exclude control characters
     /[<>:"/\\|?*\u0000-\u001f]/.test(name) ||
     /[. ]$/.test(name) ||
     /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)
@@ -55,45 +57,67 @@ function outputName(name: string): string {
   return name;
 }
 
+/** Structural view of the File System Access API handle; browsers without it never reach this path. */
+interface SaveFileHandle {
+  createWritable(): Promise<SaveFileStream>;
+}
+
+interface SaveFileStream {
+  write(bytes: Uint8Array): Promise<void>;
+  close(): Promise<void>;
+  abort(): Promise<void>;
+}
+
+interface SaveFilePickerHost {
+  showSaveFilePicker(options: { suggestedName?: string }): Promise<SaveFileHandle>;
+}
+
+function isSaveFileHandle(value: unknown): value is SaveFileHandle {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'createWritable' in value &&
+    typeof value.createWritable === 'function'
+  );
+}
+
+function isSaveFileStream(value: unknown): value is SaveFileStream {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'write' in value &&
+    typeof value.write === 'function' &&
+    'close' in value &&
+    typeof value.close === 'function' &&
+    'abort' in value &&
+    typeof value.abort === 'function'
+  );
+}
+
+function hasSaveFilePicker(target: object): target is SaveFilePickerHost {
+  return 'showSaveFilePicker' in target && typeof target.showSaveFilePicker === 'function';
+}
+
 async function fileDestination(value: unknown): Promise<Destination> {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    !('createWritable' in value) ||
-    typeof value.createWritable !== 'function'
-  ) {
-    throw new Error('Invalid save-file handle');
-  }
+  if (!isSaveFileHandle(value)) throw new Error('Invalid save-file handle');
   const stream: unknown = await value.createWritable();
-  if (
-    typeof stream !== 'object' ||
-    stream === null ||
-    !('write' in stream) ||
-    typeof stream.write !== 'function' ||
-    !('close' in stream) ||
-    typeof stream.close !== 'function' ||
-    !('abort' in stream) ||
-    typeof stream.abort !== 'function'
-  ) {
-    throw new Error('Invalid writable file stream');
-  }
-  const { write, close, abort } = stream;
+  if (!isSaveFileStream(stream)) throw new Error('Invalid writable file stream');
   return {
     async write(bytes) {
-      await write.call(stream, bytes);
+      await stream.write(bytes);
     },
     async close() {
-      await close.call(stream);
+      await stream.close();
     },
     async abort() {
-      await abort.call(stream);
+      await stream.abort();
     },
   };
 }
 
 async function chooseDestination(name: string, mime: string): Promise<Destination | null> {
   outputName(name);
-  if ('showSaveFilePicker' in window && typeof window.showSaveFilePicker === 'function') {
+  if (hasSaveFilePicker(window)) {
     try {
       const handle: unknown = await window.showSaveFilePicker({ suggestedName: name });
       return await fileDestination(handle);
@@ -108,15 +132,18 @@ async function chooseDestination(name: string, mime: string): Promise<Destinatio
   const parts: BlobPart[] = [];
   let size = 0;
   return {
-    async write(bytes) {
+    write(bytes) {
       size += bytes.byteLength;
       if (size > DOWNLOAD_LIMIT)
-        throw new Error(
-          'This browser limits downloads to 256 MiB; use the desktop app for larger exports',
+        return Promise.reject(
+          new Error(
+            'This browser limits downloads to 256 MiB; use the desktop app for larger exports',
+          ),
         );
       parts.push(new Uint8Array(bytes));
+      return Promise.resolve();
     },
-    async close() {
+    close() {
       const url = URL.createObjectURL(new Blob(parts, { type: mime }));
       parts.length = 0;
       const link = document.createElement('a');
@@ -130,9 +157,11 @@ async function chooseDestination(name: string, mime: string): Promise<Destinatio
         // The browser must have time to acquire the Blob before revocation.
         window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
       }
+      return Promise.resolve();
     },
-    async abort() {
+    abort() {
       parts.length = 0;
+      return Promise.resolve();
     },
   };
 }
@@ -199,8 +228,10 @@ export function createBrowserPlatform(): Platform {
         throw new Error('Project exceeds 16 MiB');
       return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), reference: null };
     },
-    async reopenFile() {
-      throw new Error('Browser files must be selected again after reopening the app');
+    reopenFile() {
+      return Promise.reject(
+        new Error('Browser files must be selected again after reopening the app'),
+      );
     },
     async saveFile(kind, name, bytes) {
       if (kind === 'wosdx' && bytes.byteLength > PROJECT_FILE_MAX_BYTES)
@@ -228,23 +259,32 @@ export function createBrowserPlatform(): Platform {
     async writeClipboard(text) {
       await navigator.clipboard.writeText(text);
     },
-    async readSession(): Promise<unknown> {
-      const value = localStorage.getItem(SESSION_KEY);
-      return value === null ? null : JSON.parse(value);
+    readSession(): Promise<unknown> {
+      // Sync body work must surface as a rejected promise, so run it inside the executor.
+      return new Promise((resolve) => {
+        const value = localStorage.getItem(SESSION_KEY);
+        const parsed: unknown = value === null ? null : JSON.parse(value);
+        resolve(parsed);
+      });
     },
-    async writeSession(snapshot) {
-      const value = JSON.stringify(snapshot);
-      if (value === undefined) throw new Error('Session must be JSON data');
-      localStorage.setItem(SESSION_KEY, value);
+    writeSession(snapshot) {
+      return new Promise<void>((resolve) => {
+        const value = JSON.stringify(snapshot);
+        if (value === undefined) throw new Error('Session must be JSON data');
+        localStorage.setItem(SESSION_KEY, value);
+        resolve();
+      });
     },
-    async clearSession() {
+    clearSession() {
       localStorage.removeItem(SESSION_KEY);
+      return Promise.resolve();
     },
     async importLegacySession() {
       return importBrowserLegacySession();
     },
-    async setTheme(mode) {
+    setTheme(mode) {
       document.documentElement.style.colorScheme = mode;
+      return Promise.resolve();
     },
   };
 }
@@ -258,7 +298,7 @@ export async function getBrowserBuildIdentity(): Promise<unknown> {
   return response.json();
 }
 
-export async function importBrowserLegacySession(): Promise<unknown | null> {
+export async function importBrowserLegacySession(): Promise<unknown> {
   const file = await pickFile('.json');
   if (file === null) return null;
   if (file.size > 16 * 1024 * 1024) throw new Error('Session exceeds 16 MiB');

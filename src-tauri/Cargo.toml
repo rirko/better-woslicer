@@ -37,3 +37,11 @@ unwrap_used = "deny"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+
+# Keep local dev/test incremental and unoptimized (Cargo defaults).
+# CI tests, Clippy and bundles share this size-oriented release profile.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"

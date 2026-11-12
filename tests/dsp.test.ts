@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyCut, renderSlice, safeGet, SourceAudio } from '../src/core/slicer.js';
 import { encodeWav16, parseWav } from '../src/core/wav.js';
-import { makeTestSource, wavBytes16, makeRng } from './fixtures.js';
+import { makeTestSource, makeRng } from './fixtures.js';
 import { tickToSampleExport } from '../src/core/timebase.js';
 
 const BASE_185 = { bpm: 185, shift: -1, sampleRate: 48000 };

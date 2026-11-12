@@ -83,7 +83,7 @@ describe('portable project workflow', () => {
   it('adopts different audio after explicit confirmation as one undoable metadata edit', async () => {
     const f = setup();
     await f.workspace.loadAudio(audioFile());
-    f.confirmOptions.confirmRelinkDifference = async () => true;
+    f.confirmOptions.confirmRelinkDifference = () => Promise.resolve(true);
     const media = f.editor.document.media[0],
       clip = f.editor.document.tracks[0]?.clips[0];
     if (!media || !clip) throw new Error('Expected media and clip');
@@ -106,7 +106,7 @@ describe('portable project workflow', () => {
   it('keeps the current audio when a relink difference is declined', async () => {
     const f = setup();
     await f.workspace.loadAudio(audioFile());
-    f.confirmOptions.confirmRelinkDifference = async () => false;
+    f.confirmOptions.confirmRelinkDifference = () => Promise.resolve(false);
     const source = f.editor.source,
       document = f.editor.document;
     const wrong = audioFile('other.wav');
@@ -282,7 +282,7 @@ describe('portable project workflow', () => {
     finish(true);
     await saving;
     expect(f.editor.isDirty).toBe(true);
-    f.platform.saveFile = async () => false;
+    f.platform.saveFile = () => Promise.resolve(false);
     await f.workspace.saveProject();
     expect(f.editor.isDirty).toBe(true);
     f.platform.saveFile = () =>
@@ -295,9 +295,7 @@ describe('portable project workflow', () => {
     finish(true);
     await stale;
     expect(f.editor.isDirty).toBe(true);
-    f.platform.saveFile = async () => {
-      throw new Error('Disk full');
-    };
+    f.platform.saveFile = () => Promise.reject(new Error('Disk full'));
     await f.workspace.saveProject();
     expect(f.editor.isDirty).toBe(true);
     expect(f.editor.isError).toBe(true);

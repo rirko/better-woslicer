@@ -64,16 +64,16 @@ export function fixture(createEngine = processorEngine) {
   let clipboard = '';
   const platform: Platform = {
     kind: 'browser',
-    async openFile() {
-      return opened;
+    openFile() {
+      return Promise.resolve(opened);
     },
-    async reopenFile(reference) {
-      if (opened?.reference === reference) return opened;
-      throw new Error('Missing source');
+    reopenFile(reference) {
+      if (opened?.reference === reference) return Promise.resolve(opened);
+      return Promise.reject(new Error('Missing source'));
     },
-    async saveFile(_kind, name, bytes) {
+    saveFile(_kind, name, bytes) {
       saved.push({ name, bytes });
-      return true;
+      return Promise.resolve(true);
     },
     async exportFiles(files) {
       let count = 0;
@@ -83,23 +83,26 @@ export function fixture(createEngine = processorEngine) {
       }
       return count;
     },
-    async readClipboard() {
-      return clipboard;
+    readClipboard() {
+      return Promise.resolve(clipboard);
     },
-    async writeClipboard(value) {
+    writeClipboard(value) {
       clipboard = value;
+      return Promise.resolve();
     },
-    async readSession() {
-      return session;
+    readSession() {
+      return Promise.resolve(session);
     },
-    async writeSession(value) {
+    writeSession(value) {
       session = value;
+      return Promise.resolve();
     },
-    async clearSession() {
+    clearSession() {
       session = null;
+      return Promise.resolve();
     },
-    async importLegacySession() {
-      return null;
+    importLegacySession() {
+      return Promise.resolve(null);
     },
     async setTheme() {},
   };

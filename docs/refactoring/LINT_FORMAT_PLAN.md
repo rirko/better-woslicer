@@ -20,7 +20,7 @@
 - typescript-eslint 的 typed rules 需要项目类型信息，成本高于纯语法 lint；本地可按文件增量运行，CI 跑全量。[类型感知 lint](https://typescript-eslint.io/getting-started/typed-linting/)
 - Husky 管理 pre-commit 与 prepare；lint-staged 处理暂存文件、部分暂存内容的隐藏与恢复以及长命令分块，不自行拼接 Git 文件名列表。[Husky](https://typicode.github.io/husky/get-started.html)、[lint-staged](https://github.com/lint-staged/lint-staged)
 
-所有新增包只进入 devDependencies。T0 在 Node 24 下选择**相互兼容的正式版本**，记录 engines/peerDependencies 并提交 package-lock；不在方案里猜版本号，不用 `--force` / `--legacy-peer-deps` 消除冲突。工具读取的 schema 使用本地 node_modules 路径，不引入产品运行时外网依赖。
+所有新增包只进入 devDependencies。当前工具链统一使用 Node 26.x，选择**相互兼容的正式版本**，记录 engines/peerDependencies 并提交 package-lock；不在方案里猜版本号，不用 `--force` / `--legacy-peer-deps` 消除冲突。工具读取的 schema 使用本地 node_modules 路径，不引入产品运行时外网依赖。T0 当时的 Node 24 验证记录保留在进度文档中，不再作为后续执行要求。
 
 ## 2. 检查范围与固定命令合同
 
@@ -65,7 +65,7 @@
 
 | 卡 | 可写范围 | 验收与边界 |
 |---|---|---|
-| T0 工具配置与试跑 | `package.json`、`package-lock.json`、`eslint.config.mjs`、`.oxfmtrc.json`、`tsconfig.lint.json`、必要的 `.gitignore` 缓存条目；进度文档 | Node24 下兼容安装；专用配置无 parser 错误；TS 类型规则与 Vue template 规则均有正反例；格式器覆盖 17 SFC、幂等；输出原有违规清单。此步尚不装 pre-commit、不启用阻断 CI |
+| T0 工具配置与试跑 | `package.json`、`package-lock.json`、`eslint.config.mjs`、`.oxfmtrc.json`、`tsconfig.lint.json`、必要的 `.gitignore` 缓存条目；进度文档 | Node 26.x 下兼容安装；专用配置无 parser 错误；TS 类型规则与 Vue template 规则均有正反例；格式器覆盖 17 SFC、幂等；输出原有违规清单。此步尚不装 pre-commit、不启用阻断 CI |
 | T1 纯格式基线 | 协调者按上述受管范围生成精确文件清单；每子卡仅能写清单中文件，不改配置 | 先 R0 行为/视觉基线，再分批 Oxfmt；连续两次 fmt 无新 diff，fmt:check 全量绿；测试/视觉与 R0 对照，保留格式专用提交，不夹语义修改 |
 | T2 lint 违规清理 | 根据 T0 清单派有界卡，原则上每卡不超过 3 个生产文件及相关测试；配置只由协调者维护 | 分类解决真实问题和有据例外；全量 lint 零 error/零 warning，typecheck/受影响测试通过；记录涉及既有 R 卡的重叠，避免重复修改 |
 | T3 hook 与 CI 上线 | `package.json`、`.husky/pre-commit`、`lint-staged.config.mjs`、必要的 `scripts/check-staged-quality.mjs`（仅触发全量检查判断）、`.github/workflows/build.yml`、`docs/CI.md`、`docs/refactoring/UI_READABILITY_PROGRESS.md` | 仅 T1/T2 全绿后接 prepare/hook/CI；隔离临时 Git repo 验证实际 commit 成功/失败和部分暂存恢复；正常工作树/index 不受测试污染 |

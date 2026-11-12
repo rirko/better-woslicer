@@ -29,6 +29,8 @@ export function createExporter(
     const base = { bpm: s.doc.bpm, shift: s.doc.shift, sampleRate: source.sampleRate };
     const fadeoutMs = s.doc.fadeoutMs;
     const noisegateDb = s.noisegateEnabled ? s.doc.noisegateDb : 0;
+    // The sanitizer intentionally targets control characters to keep exported names portable.
+    // eslint-disable-next-line no-control-regex
     const baseName = s.baseName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'slice';
     let skipped = 0;
     function assertCurrent(): void {

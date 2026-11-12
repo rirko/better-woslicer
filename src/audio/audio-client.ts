@@ -38,7 +38,7 @@ export function createAudioEngine(): AudioEngine {
         worker.postMessage(message);
       } catch (error) {
         pending.delete(message.id);
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error), { cause: error }));
       }
     });
   }

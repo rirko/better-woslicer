@@ -1,6 +1,6 @@
 /** Deterministic audio/fixture builders shared by the test suites. */
 
-import { parseWav, DecodedWav } from '../src/core/wav.js';
+import { DecodedWav } from '../src/core/wav.js';
 import { MAX_TICKS } from '../src/core/timebase.js';
 
 /** Deterministic linear congruential generator (reproducible "noise"). */

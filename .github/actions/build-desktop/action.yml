@@ -15,11 +15,13 @@ runs:
   steps:
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
-        node-version: '24'
+        node-version-file: .node-version
         cache: npm
-    - name: Set reproducible build time
+    - name: Set release profile and reproducible build time
       shell: bash
-      run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+      run: |
+        echo "WOSLICER_BUILD_PROFILE=release" >> "$GITHUB_ENV"
+        echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
     - name: Install locked frontend dependencies
       shell: bash
       run: npm ci
@@ -41,9 +43,9 @@ runs:
       uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       with:
         workspaces: src-tauri -> target
-        shared-key: tauri-${{ runner.os }}-${{ inputs.target }}
+        shared-key: tauri-release-${{ runner.os }}-${{ inputs.target }}
         save-if: ${{ github.event_name != 'pull_request' }}
-    - name: Build desktop frontend and generate identity before Cargo
+    - name: Build frontend and generate identity before Cargo
       shell: bash
       run: |
         npm run check:version
@@ -54,14 +56,16 @@ runs:
         RUST_TARGET: ${{ inputs.target }}
       run: |
         cargo fmt --manifest-path src-tauri/Cargo.toml --check
-        cargo test --manifest-path src-tauri/Cargo.toml --locked --target "$RUST_TARGET"
-        cargo clippy --manifest-path src-tauri/Cargo.toml --locked --target "$RUST_TARGET" --all-targets --all-features -- -D warnings
+        cargo test --manifest-path src-tauri/Cargo.toml --locked --release --target "$RUST_TARGET" --all-features
+        cargo clippy --manifest-path src-tauri/Cargo.toml --locked --release --target "$RUST_TARGET" --all-targets --all-features -- -D warnings
     - name: Build default Tauri installers
       shell: bash
       env:
         RUST_TARGET: ${{ inputs.target }}
         TAURI_BUNDLES: ${{ inputs.bundles }}
-      run: npm run tauri -- build --ci --target "$RUST_TARGET" --bundles "$TAURI_BUNDLES" -- --locked
+      # The all-features Cargo checks above need the embedded frontend already built.
+      # Reuse those exact assets instead of running the frontend hook twice.
+      run: npm run tauri -- build --ci --config '{"build":{"beforeBuildCommand":""}}' --target "$RUST_TARGET" --bundles "$TAURI_BUNDLES" -- --locked
     - name: Check Windows installer metadata
       if: runner.os == 'Windows'
       shell: pwsh

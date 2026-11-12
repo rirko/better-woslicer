@@ -1,7 +1,7 @@
 // Desktop IPC transport health check against the built Tauri executable.
 // Verifies the fetch-based ipc custom protocol is actually in use: a healthy
 // transport delivers raw command responses as ArrayBuffer and never emits the
-// "custom protocol failed" fallback warning. Requires the release build
+// "custom protocol failed" fallback warning. Requires the selected build
 // (npm run package or cargo build) and, for the raw-chunk stage, at least one
 // persisted file grant (open a file once in the app). Run: node scripts/tauri-ipc-probe.mjs
 import { createConnection } from 'node:net';
@@ -10,15 +10,18 @@ import { spawn } from 'node:child_process';
 import { homedir, platform } from 'node:os';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { resolveBuildProfile } from './build-profile.mjs';
 
 // Resolve the built executable without any machine-specific absolute path:
 // CARGO_TARGET_DIR (as used by the local cargo config) or the repo default.
 const targetDir = process.env.CARGO_TARGET_DIR ?? resolve('src-tauri/target');
 const exeName = platform() === 'win32' ? 'woslicer-dx.exe' : 'woslicer-dx';
-const exe = resolve(targetDir, 'release', exeName);
+const selected = resolveBuildProfile(process.argv.slice(2));
+if (selected.args.length) throw new Error(`Unknown probe options: ${selected.args.join(' ')}`);
+const exe = resolve(targetDir, selected.profile, exeName);
 if (!existsSync(exe)) {
   console.error(
-    `built executable not found: ${exe} — run npm run package (or cargo build --release) first`,
+    `built executable not found: ${exe} — run npm run package${selected.profile === 'release' ? ' -- --release' : ''} first`,
   );
   process.exit(1);
 }

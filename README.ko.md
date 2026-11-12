@@ -29,7 +29,7 @@ Windows x64가 기본 데스크톱 버전입니다. 다른 아키텍처와 Linux
 
 웹 버전은 브라우저에서 직접 실행됩니다: [woslicer-dx app](https://woslicer-dx.pages.dev/) (설치 불필요).
 
-소스에서 실행하려면 Node.js 24, npm, Git, Rust stable 툴체인이 필요합니다. Tauri 패키징에는 플랫폼별 도구(Linux는 WebKit/GTK, Windows는 WebView2)도 필요합니다.
+소스에서 실행하려면 Node.js 26.x, npm, Git, Rust stable 툴체인이 필요합니다. Tauri 패키징에는 플랫폼별 도구(Linux는 WebKit/GTK, Windows는 WebView2)도 필요합니다.
 
 ```sh
 npm ci
@@ -58,13 +58,18 @@ npm run dev
 ## 개발
 
 ```sh
+npm run lint
+npm run fmt:check
 npm run typecheck
 npm test
 npm run build
 npm run test:app-ui
 npm run package
-
 ```
+
+로컬 빌드와 테스트는 기본적으로 debug를 사용합니다. release 빌드는 `npm run build -- --release` 또는 `npm run package -- --release`로 실행합니다. CI는 release만 사용합니다.
+
+커밋 시 pre-commit 훅이 스테이지된 파일의 lint와 포맷 검사를 실행합니다.
 
 오디오는 내부적으로 16-bit로 변환되며 내보내기는 16-bit PCM을 사용합니다. 원본 프로그램과의 비교 테스트에는 외부 픽스처가 필요하며, 없으면 건너뜁니다.
 

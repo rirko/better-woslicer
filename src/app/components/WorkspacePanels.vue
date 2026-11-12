@@ -2,14 +2,12 @@
 import { computed, ref } from 'vue';
 import { ElTabPane, ElTabs } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import type { Platform } from '../../platform/contracts';
 import { useEditorStore } from '../../slicing/editor-store';
 import MarkerList from '../../slicing/MarkerList.vue';
 import DetectionPanel from '../../detection/DetectionPanel.vue';
 import OutputPanel from '../../export/OutputPanel.vue';
 import BMHelperPanel from '../../bmhelper/BMHelperPanel.vue';
 import SourceInfo from './SourceInfo.vue';
-defineProps<{ platform: Platform }>();
 const editor = useEditorStore();
 const { t } = useI18n();
 // Local tab state; inactive panes are unmounted through their v-if guards.

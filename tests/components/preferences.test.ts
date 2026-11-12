@@ -82,9 +82,7 @@ describe('UI preferences', () => {
     const instance = createPinia();
     const setup = setupI18n(instance, { storage: null, locales: ['en'] });
     const failure = new Error('host unavailable');
-    const setTheme = vi.fn(async () => {
-      throw failure;
-    });
+    const setTheme = vi.fn(() => Promise.reject(failure));
     const onError = vi.fn();
     setup.syncAppearance({ setTheme }, onError);
     useUiPreferencesStore(instance).language = 'ko';

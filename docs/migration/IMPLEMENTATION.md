@@ -1,5 +1,9 @@
 # Vue / Tauri 实施计划与差异台账
 
+2026-11-11 工具链决定（覆盖下文旧 Node/构建模式要求）：统一 Node **26.x**，`.node-version` 供本机版本管理器与 CI 共用，npm engines 与 `@types/node` 同步。本机 build/package 与 IPC 探针默认 **debug**；显式 `--release` 或 `WOSLICER_BUILD_PROFILE=release` 才切 release。CI 的 frontend、Cargo test/clippy、Tauri bundle 全部使用 release；Rust release 按体积优化并保留 unwind 以复用测试/构建依赖。命令与细节见 [CI.md](../CI.md)。这不改变 W6 未验证平台与原生 UI 验收状态。
+
+本批状态：已实现并在 Windows x64 验证 Node26 干净安装、类型/质量/单测检查、debug/release Web 构建与双 profile UI/ZIP、Rust 两种模式测试与 release Clippy、两种模式 MSI/NSIS 构建及版本元数据；CI 配置通过静态检查，跳过重复 frontend hook 的 release 路径通过本机实际构建。证据与未测范围见 [RESUME.md](RESUME.md) 顶部记录。
+
 2026-11-11 恢复批次（覆盖下文旧 CI/离线安装要求）：设计书先独立提交为 `a6728d4`。迁移后 CI 恢复 Web 与 Windows x64 必过、Windows ARM64/Linux x64/ARM64 可选；Rust cache 固定官方 v2.9.3 SHA；tag 直接公开 prerelease，按配置恢复 Pages。详见 [CI.md](../CI.md)。托管首跑与 native UI 双 profile 仍待验证，未执行 push/tag/发布。
 
 用户明确：只有应用内部要离线；外部、安装器、依赖和系统运行时独立联网不属于应用责任。保持 Tauri 默认 WebView 安装行为，不捆绑运行时、不禁止下载、不支持缺少 WebView 引擎的系统。离线 WebView 分发不再是验收项。
@@ -127,7 +131,7 @@ W2 的具体起手用例及命令见 [恢复指南](RESUME.md)。每包可以拆
 - 最终 `dev/build/test/package` 面向 Vue/Tauri。当前 `*:app` 附属脚本只是过渡，不算成为正式产品。
 - Web 使用 Vite 生产目录在 Chromium + Firefox 验证。旧 `test:web` 面向旧 renderer，不能当 Vue Firefox 的证据。
 - Tauri 用 CLI/bundler 标准目标产物；不保留手工 archive 重写、locale 裁剪、符号包、三文件 Web 等旧合同。minify/source map 不是本轮优先事项。
-- 按实际支持的 OS/arch 建 CI：Node24 + npm ci + Rust locked toolchain/deps + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action。缓存不替代 fmt/clippy/test。
+- 按实际支持的 OS/arch 建 CI：Node26 + npm ci + Rust locked toolchain/deps + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action。测试、Clippy 与打包均用 release；缓存不替代 fmt/clippy/test。
 - Windows WebView 安装按 Tauri 默认行为，外部依赖联网允许，不捆绑运行时。
 - root package.json version 是唯一可编辑版本；构建期 commit/dirty/固定 UTC 时间；按现有 VERSIONING 规则检查。
 - 按用户要求恢复 tag 发布与可配置 Pages，详见 docs/CI.md；本地不执行 push/tag/发布。

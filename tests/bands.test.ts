@@ -36,7 +36,7 @@ test('band split routes 100 Hz to Low, 1 kHz to Mid and 8 kHz to High', () => {
       mid: rms(filterBand(floats, SR, 'mid')),
       high: rms(filterBand(floats, SR, 'high')),
     };
-    const best = (Object.entries(energies) as [string, number][]).sort((a, b) => b[1] - a[1])[0][0];
+    const best = Object.entries<number>(energies).sort((a, b) => b[1] - a[1])[0][0];
     assert.equal(best, expected, `${freq} Hz energies=${JSON.stringify(energies)}`);
   }
 });

@@ -5,7 +5,6 @@ import { useEditorStore } from '../../src/slicing/editor-store';
 import { createEmptyProject } from '../../src/project/codec';
 import { defaultDivisionSetting } from '../../src/core/bmhelper';
 import { readSmfSequence, writeSmfSequence } from '../../src/core/smf';
-import { vi } from 'vitest';
 import { nextTick } from 'vue';
 const midi = writeSmfSequence({
   quantize: 480,

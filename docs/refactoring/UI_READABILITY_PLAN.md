@@ -94,7 +94,7 @@ R1a/b/c/d 的文件不重叠，可以委派；默认不并行跑测试。R2/R4/R
 ### R0 — 建立可比较的基线
 
 - 可写：`docs/refactoring/UI_READABILITY_PROGRESS.md`（新建），必要的 `tests/app/ui-readability.spec.ts`、`scripts/verify-ui-readability.mjs`（新建）；测试产物放 gitignored `test-artifacts/`，不改已有产品源码。runner 由协调者负责，不分给界面格式化执行者。
-- 先核对 Git/Node/npm。规划现场为 Node **v26.12.1** / npm **11.20.0**；执行测试前切到 **Node 24**，记录实际版本。需要清洁安装用 `npm ci`；不把审计时 Node 26 的结果作为本轮基线。
+- 先核对 Git/Node/npm。规划现场为 Node **v26.12.1** / npm **11.20.0**；按 2026-11-11 用户新要求，后续统一使用 **Node 26.x**，记录实际版本，不再切回 Node 24。需要清洁安装用 `npm ci`；本机默认 debug，CI 仅使用 release，具体命令见 [CI.md](../CI.md)。既有基线的实际 Node 版本保留在进度文档中。
 - 运行 typecheck、现有 tests、生产 web build、现有 UI 双 profile，记录命令/结果/跳过项。失败先诊断，不开始依赖该失败检查的重构。
 - 为视觉对照保存相同 fixture、locale、主题、窗口/DPR、页签、弹窗状态的前图。至少覆盖主界面、五个侧栏 tab、BMH 两个 dialog、About、校准。动布局的卡还覆盖 900/680px 两侧和长文案。
 - 可新增 UI 用例只用于这些已有行为和视觉证据，复用当前配置；不在同一个 30 秒用例里塞所有状态，不用固定 sleep。每个“视觉场景 × profile”独立运行：runner 启动 `npm run test:app-ui -- --project=<low或high> --grep <唯一场景名>`，从启动起设置外层 30 秒 watchdog，结束/失败/超时均清理本次进程树和临时用户数据，再启动下一项。构建在计时前完成。

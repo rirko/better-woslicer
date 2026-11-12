@@ -50,6 +50,6 @@ export async function getBuildIdentity(): Promise<BuildIdentity> {
 }
 
 /** Explicitly selected legacy JSON remains untrusted until the workspace validates it. */
-export async function importLegacySession(): Promise<unknown | null> {
+export async function importLegacySession(): Promise<unknown> {
   return platform.kind === 'tauri' ? importTauriLegacySession() : importBrowserLegacySession();
 }

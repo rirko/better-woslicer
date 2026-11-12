@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia, disposePinia } from 'pinia';
 import { nextTick } from 'vue';
 import { ElInputNumber, ElSelect, ElOption, ElTabs } from 'element-plus';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import DocumentOptions from '../../src/app/components/DocumentOptions.vue';
 import EditorToolbar from '../../src/app/components/EditorToolbar.vue';
 import WorkspacePanels from '../../src/app/components/WorkspacePanels.vue';
@@ -15,7 +15,6 @@ import { useBmhelperStore } from '../../src/bmhelper/store';
 import { useUiPreferencesStore } from '../../src/ui/preferences';
 import { GRID_DENSITIES } from '../../src/core/gridlines';
 import { MAX_TICKS } from '../../src/core/timebase';
-import { type Platform } from '../../src/platform/contracts';
 import { APP_COMMANDS, isMenuCommand } from '../../src/app/command-types';
 import BMHelperPanel from '../../src/bmhelper/BMHelperPanel.vue';
 
@@ -160,9 +159,7 @@ describe('application controls', () => {
   });
   it('filters BMHelper cuts with one undo entry and preserves BPM and project across tabs', async () => {
     const instance = setup();
-    const platform = { kind: 'browser' } as Platform;
     const wrapper = mount(WorkspacePanels, {
-      props: { platform },
       global: {
         ...instance.global,
         stubs: {

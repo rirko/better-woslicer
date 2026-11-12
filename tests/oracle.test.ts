@@ -32,10 +32,7 @@ const hasOracle = fs.existsSync(sourceWav) && fs.existsSync(oracleWos);
 
 function loadSource() {
   const bytes = fs.readFileSync(sourceWav);
-  const buffer = bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer;
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   return parseWav(buffer);
 }
 

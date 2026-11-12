@@ -50,12 +50,14 @@ const channels = ref<number[]>(Array.from({ length: 16 }, (_, index) => index));
 const filename = ref('');
 const startNumber = ref('01');
 // Draft values for the settings dialog; beat-level numbers are converted to ticks on create.
+// Typed reference keeps the reactive draft's sortType from widening to string.
+const defaultSort: SortType = 'nn_gate_vel';
 const settings = reactive({
   name: '',
   srcCopy: false,
   headMargin: 0,
   minInterval: 1,
-  sortType: 'nn_gate_vel' as SortType,
+  sortType: defaultSort,
   gateThreshold: 0.125,
   velocityThreshold: 5,
   zzDefinition: true,
