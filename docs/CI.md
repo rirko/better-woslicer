@@ -55,8 +55,19 @@ npm exec --no -- playwright install chromium.
 
 `npm run test:tauri-ipc` is a Windows-local desktop IPC health check against
 the debug executable by default. Use `npm run test:tauri-ipc -- --release`
-to check an explicitly built release executable. Browser profiles do not
-establish native Tauri window coverage; that remains pending.
+to check an explicitly built release executable.
+
+`npm run test:tauri-ui` drives the real Tauri window through the WebView2 CDP
+transport on a dynamic loopback port, one low profile (1280×720 css viewport
+at the host's natural device scale) and one high profile (1920×1080 physical
+window at device scale 2), each with an isolated per-run app-data root, a
+30-second hard deadline and full process-tree cleanup. It verifies the
+application menu bar visibility, devicePixelRatio, canvas-to-DPR size
+relationships and captures per-profile screenshots under
+`test-artifacts/tauri-ui/`. It requires the release executable
+(`npm run build:app:tauri && cargo build --release --manifest-path
+src-tauri/Cargo.toml`); a plain debug build bakes in the dev server URL and
+cannot render standalone. On non-Windows hosts the profiles report skipped.
 
 ## Build workflow
 

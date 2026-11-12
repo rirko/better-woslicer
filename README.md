@@ -64,12 +64,15 @@ npm run typecheck
 npm test
 npm run build
 npm run test:app-ui
+npm run test:tauri-ui
 npm run package
 ```
 
 Local builds and tests default to debug. For a release build, run `npm run build -- --release` or `npm run package -- --release`. CI uses release only.
 
 Commits run lint and format checks on staged files through a pre-commit hook.
+
+The native Tauri window profiles (`npm run test:tauri-ui`) are Windows-only and run against the release build.
 
 Audio is converted to 16-bit internally and exports use 16-bit PCM. Original-program comparison tests require external fixtures and are skipped when those are absent.
 

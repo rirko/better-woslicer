@@ -64,12 +64,15 @@ npm run typecheck
 npm test
 npm run build
 npm run test:app-ui
+npm run test:tauri-ui
 npm run package
 ```
 
 本机构建与测试默认使用 debug。需要 release 构建时，运行 `npm run build -- --release` 或 `npm run package -- --release`。CI 仅使用 release。
 
 提交时会通过 pre-commit 钩子对暂存文件运行 lint 与格式检查。
+
+原生 Tauri 窗口测试（`npm run test:tauri-ui`）仅在 Windows 上运行，并针对 release 构建。
 
 音频在内部转换为 16-bit，导出使用 16-bit PCM。与原版输出的对比测试需要额外样本，缺少样本时会跳过。
 

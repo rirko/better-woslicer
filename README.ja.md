@@ -64,12 +64,15 @@ npm run typecheck
 npm test
 npm run build
 npm run test:app-ui
+npm run test:tauri-ui
 npm run package
 ```
 
 ローカルのビルドとテストは既定で debug を使用します。release ビルドには `npm run build -- --release` または `npm run package -- --release` を実行してください。CI は release のみを使用します。
 
 コミット時は pre-commit フックがステージ済みファイルの lint とフォーマット検査を行います。
+
+ネイティブ Tauri ウィンドウテスト（`npm run test:tauri-ui`）は Windows 限定で、release ビルドに対して実行します。
 
 音声は内部的に 16-bit に変換され、書き出しは 16-bit PCM です。原版との比較テストには外部のフィクスチャが必要で、無い場合はスキップされます。
 

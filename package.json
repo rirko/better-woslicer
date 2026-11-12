@@ -27,6 +27,7 @@
     "build:app": "node scripts/build-app-frontend.mjs web",
     "test:components": "vitest run --config vitest.config.mts",
     "test:app-ui": "node scripts/test-app-ui.mjs",
+    "test:tauri-ui": "node scripts/test-tauri-ui.mjs",
     "tauri": "node scripts/tauri.mjs",
     "dev": "vite --config vite.config.mts",
     "build:app:tauri": "node scripts/build-app-frontend.mjs tauri",

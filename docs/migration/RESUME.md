@@ -26,13 +26,15 @@
 
 2026-11-12 批次 11（R10 完成，界面等价重构 R0–R10 与 lint 方案 T0–T3 全部收官）：协调者集成收尾。集成链全绿：lint 0、fmt:check 0、typecheck 0、npm test（tooling + 组件 **218** + core **180**/4 oracle skipped）、`npm run build`、`test:app-ui` 双 profile 各 1 passed（ui-readability 门控 skip 属设计）、`verify-ui-readability.mjs` 全场景 **14/14**（7 场景 × low/high）。导航抽查：fade→`slicing/control-limits.ts`、cue→`playback/cue.ts`、BMH apply→BMHelperPanel emit→WorkspacePanels 3 行接线→`editor-actions.applyBmhelperCuts`、波形色彩→`timeline/waveform.ts` 显式 colors 参数——均无须跨无关包装层；无更少行更多跳转/重复状态/无意义 forwarding/万能 props。finding 回填终态：F-9/F-10/F-11/F-39/F-44、H-1/H-2/H-3 resolved；F-7/F-8 partial（理由在 PROGRESS R4/R6 节）；其余按方案 §6 deferred 队列保留，.smell-check 原报告为历史快照。纯 refactor：version/README×4/changelog×2 未动。日志 `test-artifacts/r10-*.log`。
 
+2026-11-12 批次 12（W6 native UI 双 profile 落地，`test:tauri-ui`）：**`scripts/test-tauri-ui.mjs`**（CDP 直连真实 WebView2 窗口，动态 loopback 端口、逐 profile 隔离应用数据、30s 硬超时、进程树验证清理、逐 profile 截图+metrics 产物）。**profile 语义（宿主实况记录）**：low=1280×720 css 视口@宿主自然缩放（本机 150%→DPR1.5）；high=1920×1080 物理@强制 DPR2（css 960×540）。断言：菜单栏 `[role="menubar"]` 可见、DPR、canvas≥4 且 |canvas.width−css×DPR|≤2（与 web 同容差）、无未捕获异常。**工具路线**：初拟 tauri-driver（Windows 需 msedgedriver 版本匹配 + wry automation 对 additional args 合并不可控），改沿 tauri-ipc-probe 的 CDP 直连（同样满足真实窗口/动态端口验收点，零新依赖；tauri-driver 0.x 已装本机备用）。**关键技术教训**：①直接 `cargo build` 的 debug exe 烘 devUrl（127.0.0.1:1420 错误页），native UI 必须 release exe（`npm run build:app:tauri && cargo build --release`，脚本默认 release）；②WebView2 数据目录实际用 Known Folders（env 重定向对 tauri dirs 无效），上一 profile 强杀后目录锁未释放 → 下一 profile `0x8007139F ERROR_INVALID_STATE` panic（exit 101）——**修复：先 `Browser.close` 优雅关闭等 1.5s 再 taskkill 兜底**；③stopTree 加 tasklist 验证+重试，脚本末尾显式 process.exit（child stream 挂住 node 不退）。**本机验证**：双 profile 全过（low 1280×720@DPR1.5 / high 960×540@DPR2、菜单可见、4 canvas 一致、无异常、截图落 test-artifacts/tauri-ui/）、**0 残留进程**。150% 缩放下 DPR1+<1440×900 物理窗口被 app 最小尺寸钳制不可达，DPR1 组合留待 100% 缩放真实平台验收。接线：package.json `test:tauri-ui`、CI.md 命令区、IMPLEMENTATION §6。CI 不跑此测试（Windows-local）。
+
 2026-11-11 恢复批次（覆盖下文旧 CI/离线安装要求）：设计书先独立提交为 `a6728d4`。迁移后 CI 恢复 Web 与 Windows x64 必过、Windows ARM64/Linux x64/ARM64 可选；Rust cache 固定官方 v2.9.3 SHA；tag 直接公开 prerelease，按配置恢复 Pages。详见 [CI.md](../CI.md)。托管首跑与 native UI 双 profile 仍待验证，未执行 push/tag/发布。
 
 用户明确：只有应用内部要离线；外部、安装器、依赖和系统运行时独立联网不属于应用责任。保持 Tauri 默认 WebView 安装行为，不捆绑运行时、不禁止下载、不支持缺少 WebView 引擎的系统。离线 WebView 分发不再是验收项。
 
 恢复批次本地验证：Node 24 typecheck、组件 202/core 180（4 oracle 因缺 fixture 跳过）、Web build、独立 low/high UI 各 1/1、Web ZIP 内容往返校验均通过；actionlint 与 22 段 Bash 语法检查通过。Windows MSI 版本查询逻辑用现存 1.0.0 产物只读验证，未重新构建桌面包。UI 首次在沙箱内启动/清理受阻，清理本次进程树后在沙箱外通过；超时包装器已修正为清理失败也会报告超时。紧急备份标签 `backup/truncated-ci-batch-20261111` 保留；未恢复其复杂自写产物/发布脚本。
 
-最后核对：2026-11-12 JST（R10 收官批次后更新）。本文是跨聊天、工具、机器和额度恢复入口，不依赖任何会话服务。
+最后核对：2026-11-12 JST（批次 12 native UI 双 profile 后更新）。本文是跨聊天、工具、机器和额度恢复入口，不依赖任何会话服务。
 仓库相对路径可直接使用；下方 Windows 绝对路径仅是这次环境记录。
 
 ## 1. 当前任务与检查点
