@@ -13,6 +13,7 @@
   "sortTailwindcss": false,
   "ignorePatterns": [
     "node_modules/",
+    ".agents/upstream/",
     "dist/",
     "release/",
     "src-tauri/target/",

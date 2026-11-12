@@ -4,7 +4,7 @@
 
 基于 wosderge 的 woslicerIII 开发的离线 BMS 音频切片工具。
 
-![时间轴](docs/screenshots/timeline.png)
+![主界面](docs/screenshots/main-ui.png)
 
 ## 功能
 
@@ -49,7 +49,13 @@ Windows x64 为主要桌面版本。其他 Windows 架构、Linux 和 macOS 软�
 | T / Y | 导入 / 导出 `.wos` 设置 |
 | V / B | 写入 / 读取 BMSE 剪贴板 |
 
-左键拖动画点，右键拖动擦除，Shift/Ctrl+拖动框选，拖动切点移动选区。Ctrl+滚轮缩放，中键拖动平移，Alt 临时关闭吸附。
+- 左键拖动添加切点。
+- 右键拖动擦除切点。
+- 按住 Shift 或 Ctrl 拖动框选。
+- 拖动切点移动选区。
+- Ctrl+滚轮缩放。
+- 中键拖动平移。
+- 按住 Alt 临时关闭吸附。
 
 ## 项目链接
 

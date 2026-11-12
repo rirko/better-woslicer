@@ -1,0 +1,18 @@
+[submodule ".agents/upstream/asd-ste100"]
+	path = .agents/upstream/asd-ste100
+	url = https://github.com/danyuchn/asd-ste100-skill.git
+[submodule ".agents/upstream/zh-tech-writing"]
+	path = .agents/upstream/zh-tech-writing
+	url = https://github.com/leter/zh-tech-writing.git
+[submodule ".agents/upstream/cursor-plugins"]
+	path = .agents/upstream/cursor-plugins
+	url = https://github.com/cursor/plugins.git
+[submodule ".agents/upstream/vue-skills"]
+	path = .agents/upstream/vue-skills
+	url = https://github.com/vuejs-ai/skills.git
+[submodule ".agents/upstream/beautiful-rust"]
+	path = .agents/upstream/beautiful-rust
+	url = https://github.com/morganlinton/BeautifulRust.git
+[submodule ".agents/upstream/smell-check"]
+	path = .agents/upstream/smell-check
+	url = https://github.com/Zhen-Bo/smell-check.git

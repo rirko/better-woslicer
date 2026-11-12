@@ -1,129 +1,179 @@
-# `.wosdx` 项目格式与能力边界
+# `.wosdx` project format
 
-本文说明 `.wosdx` v1 的字段、读写限制和本机媒体绑定。编解码规则以 [codec.ts](../src/project/codec.ts) 和 [schema.ts](../src/project/schema.ts) 为准。
+This document describes the v1 fields, compatibility rules and local media bindings.
+[codec.ts](../src/project/codec.ts) and [schema.ts](../src/project/schema.ts) define the implementation.
 
-## 格式与版本
+## Format and validation
 
-- `.wos` 是固定 6,168 字节的外部设置交换格式，见 `src/core/wos.ts`；不加字段、不改变既有互通格式。
-- `.wosdx` 是有界 UTF-8 JSON，`format: "wosdx"`、`schemaVersion: 1`。
-- schemaVersion 与应用 package version、session version、Rust crate version 独立。
-- 文件不包含音频。BMHelper 数据可以内嵌；音频只保存媒体事实和来源提示。
-- 编解码入口是 `src/project/codec.ts` 的 `decodeProject` / `parseProject` / `encodeProject`。`schema.ts` 用 Zod 定义字段结构、范围和枚举，并推导项目类型。
-- 不合法 UTF-8/JSON、错误 format、越界字段/重复 ID/悬空引用等拒绝；未来版本单独分流，不尝试降级解释。
+- `.wos` is the locked, 6,168-byte settings exchange format implemented in `src/core/wos.ts`. Do not add fields or change its encoding.
+- `.wosdx` is bounded UTF-8 JSON with `format: "wosdx"` and `schemaVersion: 1`.
+- The schema version is independent of the application, session and Rust crate versions.
+- Audio is not embedded. Projects store media metadata and origin hints. Projects may embed BMHelper data.
 
-解析先校验格式和版本，再对 v1 执行结构校验。Zod 不做字符串、数字或布尔值的隐式转换；字符串长度沿用 UTF-16 单元计数。重复 ID、媒体引用、片段范围、片段总数和重复打点仍由 `codec.ts` 校验。新增字段时修改 schema；新增跨字段业务规则时修改 codec。
+`decodeProject`, `parseProject` and `encodeProject` are the codec entry points.
+Parsing checks the format and version before applying v1 validation. Future
+versions take a separate path and are never interpreted as v1.
 
-## 当前 v1 字段
+`schema.ts` defines field shapes, ranges and enums with Zod and derives document
+types from them. It does not coerce strings, numbers or booleans. String limits
+count UTF-16 code units. `codec.ts` validates duplicate IDs, media references,
+clip ranges, the total clip count and duplicate marker ticks. Add field rules
+to the schema and cross-field business rules to the codec. The parser rejects invalid UTF-8, JSON, format identifiers or v1 data.
 
-| 路径 | 类型 / 单位 / 语义 |
-|---|---|
-| `projectId`, `name` | 稳定项目 ID、显示名；不得因媒体恢复或重新 decode 自动换 ID |
-| `timing.bpm`, `timing.shiftTicks` | BPM 与 tick 偏移；不是秒或源帧 |
-| `slicing.fadeoutMs` | 整数毫秒 |
-| `slicing.noisegateDb`, `noisegateEnabled` | dB 阈值与开关，互不替代 |
-| `slicing.markers` | tick 数组；192 ticks/measure，范围 0..49,151；编解码规范化排序，重复 tick 拒绝 |
-| `slicing.bandDetection` | `bands {low,mid,high}`、`thresholdDb`、`minGapUnits`、`snap`；检测配置不是波形可见性 |
-| `output` | `baseName`、`clipStartNumber`、`useFfNumbering` |
-| `global` | `masterGainDb`、`masterMuted`、`cueGainDb`、`cueMode`、`playbackRate`、`views` |
-| `global.views` | `rms` / `bands` 布尔默认；`spectrum: "reserved"` |
-| `media[]` | 下表的媒体事实和 hint；按 mediaId 引用 |
-| `tracks[]` | `trackId`、`name`、`gainDb`、`muted`、`solo`、`views`、`clips[]` |
-| `track.views` | `rms` / `bands` 为 `null`（inherit）、`true`、`false`；`spectrum: "reserved"` |
-| `clip` | `clipId`、`mediaId`、`timelineStartSeconds`、`sourceOffsetFrames`、`frameCount` |
-| `bmhelper` | `null` 或 `{format: "bmh", bytesBase64: string}`。工程可保存 BMHelper 编辑内容 |
+## v1 fields
 
-| MediaAsset 字段 | 语义 |
-|---|---|
-| `mediaId`, `name`, `format` | 稳定身份、原文件名、`wav` 或 `ogg` |
-| `byteLength` | 原文件字节数或 null，不是 PCM buffer 大小 |
-| `sampleRateHz`, `channels`, `framesPerChannel` | 已知事实或 null；frames 是每声道源帧，不乘声道数；时长由 frames/rate 推导 |
-| `integrity` | null 或 `{algorithm: "sha256", digest: <64 hex chars>}`；解析会统一小写 |
-| `originHint` | null、`{kind: "desktop", pathHint}` 或 `{kind: "browser", name, relativePathHint?, lastModified?}` |
+| Path | Meaning |
+| --- | --- |
+| `projectId`, `name` | Stable project ID and display name. Decoding or recovering media must not replace the ID. |
+| `timing.bpm`, `timing.shiftTicks` | BPM and offset in ticks, not seconds or source frames. |
+| `slicing.fadeoutMs` | Integer milliseconds. |
+| `slicing.noisegateDb`, `slicing.noisegateEnabled` | Threshold in dB and a separate enable flag. |
+| `slicing.markers` | Ticks at 192 ticks per measure, from 0 through 49,151. The codec sorts ticks and rejects duplicates. |
+| `slicing.bandDetection` | `bands {low,mid,high}`, `thresholdDb`, `minGapUnits`, `snap`. Detection settings are separate from waveform visibility. |
+| `output` | `baseName`, `clipStartNumber`, `useFfNumbering`. |
+| `global` | `masterGainDb`, `masterMuted`, `cueGainDb`, `cueMode`, `playbackRate`, `views`. |
+| `global.views` | Boolean `rms` and `bands` defaults. Spectrum is `"reserved"`. |
+| `media[]` | Media metadata and origin hints, referenced by `mediaId`. |
+| `tracks[]` | `trackId`, `name`, `gainDb`, `muted`, `solo`, `views`, `clips[]`. |
+| `track.views` | `rms` and `bands` accept `null` (inherit), `true` or `false`. Spectrum is `"reserved"`. |
+| `clip` | `clipId`, `mediaId`, `timelineStartSeconds`, `sourceOffsetFrames`, `frameCount`. |
+| `bmhelper` | `null` or `{format: "bmh", bytesBase64: string}` containing BMHelper work. |
 
-## 坐标、播放和视图语义
+### Media metadata
 
-Clip 的 timelineStartSeconds 独立于 BPM；sourceOffsetFrames/frameCount 使用该媒体 sampleRateHz 的源坐标。
-改变 BPM 不应改变音频片段的秒位置或媒体帧数。source offset + frameCount 在已知媒体长度内；ID 引用必须完整。
-`timelineStartSeconds > 0` 表示开头留白；数组顺序不隐含位置；重叠 clip 先作为可保存数据，不承诺混音/crossfade。
+| `MediaAsset` field | Meaning |
+| --- | --- |
+| `mediaId`, `name`, `format` | Stable identity, original filename, and `wav` or `ogg`. |
+| `byteLength` | Original file size or `null`, not decoded PCM buffer size. |
+| `sampleRateHz`, `channels`, `framesPerChannel` | Known values or `null`. Frames are per channel. Duration is frames divided by sample rate. |
+| `integrity` | `null` or `{algorithm: "sha256", digest: <64 hex chars>}`. The parser converts digests to lowercase. |
+| `originHint` | `null`, `{kind: "desktop", pathHint}` or `{kind: "browser", name, relativePathHint?, lastModified?}`. |
 
-gain 用 dB，0 dB 为 unity；mute 独立于 gain。任一轨 solo 时只听未 mute 且 solo 的轨道，mute 优先，多个 solo 可同时有效。
-masterMuted 控制素材总线，cue 独立路由；不能让 master/track 的音量语义无意控制 cue。
-本期只接当前单轨有效值，不实现多轨求和/headroom/响度策略。
+## Timing, playback and views
 
-有效 RMS/bands 视图为 track override 非 null 时取其值，否则取 global default。
-频谱仅保留 `reserved`，不暴露已启用开关或发送分析任务。
-播放和编辑支持范围见下方的布局表。
+`timelineStartSeconds` is independent of BPM. `sourceOffsetFrames` and
+`frameCount` use the source media's sample rate. Changing BPM must not move clips
+in seconds or change their frame counts. Source offset plus frame count must
+fit within the known media length, and all ID references must resolve.
+A positive timeline start leaves leading silence. Array order does not imply
+position. Overlapping clips can be stored but do not imply mixing or crossfades.
 
-## 当前边界与资源预算
+Gains use dB, with 0 dB as unity. Mute is independent of gain and takes precedence
+over solo. If any track is soloed, only unmuted solo tracks are audible.
+`masterMuted` controls the media bus. Cue audio uses a separate route.
+The current editor applies only the supported single-track values. It does not implement multi-track summing, headroom or loudness policies.
 
-数值须有限，整数字段须为安全整数；完整限制以 codec/schema 为准。
+Track `rms` and `bands` values override global defaults unless they are `null`.
+Spectrum is reserved: there is no enabled control or analysis task.
+The following table lists supported editing layouts.
 
-| 项目 | 当前限制 |
-|---|---|
-| 编码后的完整 JSON | 16 MiB；包含 base64 和所有 metadata |
-| media / tracks | 各最多 256 |
-| clips | 所有轨道合计最多 100,000 |
-| markers | 最多 49,152，tick 0..49,151 |
-| source frame / offset / count | 单字段 0..2,000,000,000；还须满足片段范围约束 |
-| timelineStartSeconds | 0..1,000,000,000 秒 |
-| track/master/cue gain | −96..+12 dB |
-| BPM / shiftTicks | 0 < BPM ≤ 10,000；shift −1e9..1e9 |
-| fadeout / gate | 0..60,000 整数毫秒；gate −200..0 dB |
-| sample rate / channels | 已知值 1..768,000 Hz；1..64 声道 |
-| 媒体 byteLength 元数据 | null 或 0..16 GiB；不代表 host 支持加载这么大的文件 |
-| 实际音频输入 | 当前平台上限 2 GiB；decode 还受实际内存与格式限制 |
-| playbackRate | 0.25..1.5 |
-| BMHelper base64 字段 | 字段自身最多 32 Mi 字符，但完整文件 16 MiB 上限更严格；目前只验证 envelope/base64，不证明 BMH 内容可用 |
+## Limits and defaults
 
-`createEmptyProject` 默认一条空轨、无 media/clip。`createSingleTrackProject` 默认一条轨、一段完整源、时间位置和 offset 为零。
-当前空项目默认 master −10 dB、cue −6 dB、rate 1、cue off、RMS/bands false；track 0 dB、未 mute/solo、视图继承。
-这些是目前构造器值，不代表未来 Config 已能配置它们。
+Numbers must be finite. Integer fields must be safe integers. The codec and
+schema contain the complete validation rules.
 
-## 打开与保存
+| Resource or field | Limit |
+| --- | --- |
+| Entire encoded JSON | 16 MiB, including base64 and metadata. |
+| Media / tracks | 256 each. |
+| Clips | 100,000 across all tracks. |
+| Markers | At most 49,152 markers. Ticks range from 0 through 49,151. |
+| Source frames / offset / count | 0 through 2,000,000,000 per field, subject to clip range validation. |
+| `timelineStartSeconds` | 0 through 1,000,000,000 seconds. |
+| Track / master / cue gain | −96 through +12 dB. |
+| BPM / `shiftTicks` | 0 < BPM ≤ 10,000. Shift from −1e9 through 1e9. |
+| Fadeout / noise gate | Fadeout: 0 through 60,000 integer milliseconds. Noise gate: −200 through 0 dB. |
+| Sample rate / channels | Known sample rates: 1 through 768,000 Hz. Known channel counts: 1 through 64. |
+| Media `byteLength` metadata | `null` or 0 through 16 GiB. This does not guarantee the host can load that size. |
+| Actual audio input | Platform limit of 2 GiB. Decoding also depends on memory and format limits. |
+| `playbackRate` | 0.25 through 1.5. |
+| BMHelper base64 | At most 32 Mi characters, further constrained by the 16 MiB file limit. Validation checks the envelope and base64, not whether the embedded BMH content is usable. |
 
-| 输入 | 行为 |
-|---|---|
-| 空项目 | 可编辑设置并保存 |
-| 完整单轨布局 | 可编辑和保存。找不到媒体时，可手动重新关联 |
-| 多轨、多片段、裁切、开头留白或非中性轨道播放属性 | 只读打开。从文件打开时按原始字节保存 |
-| 未来版本或无效文件 | 拒绝打开，保留当前工作区和源文件 |
+`createEmptyProject` creates one empty track without media or clips.
+`createSingleTrackProject` creates one track with a full-source clip at timeline
+position and source offset zero.
 
-可编辑的单轨布局要求一条轨道和一个完整片段。片段长度等于已知源长度，时间轴位置和源偏移均为零。轨道增益为 0 dB，且未静音或独奏。
+Empty projects default to master −10 dB, cue −6 dB, playback rate 1, cue off,
+and RMS/bands off. Tracks default to 0 dB, unmuted, not soloed, and inherited
+views. These are constructor defaults, not user-configurable defaults.
 
-## 无损、未知字段与版本注意事项
+## Opening and saving
 
-“复杂工程无损”至少要求保留所有合法已知媒体、轨道、片段、时间位置、属性和 BMH 内容，不发生压平或暗中裁切。
-canonical JSON 的空白、字段顺序不承诺字节一致；与 `.wos` 字节兼容要求不同。
+| Input | Behavior |
+| --- | --- |
+| Empty project | Settings can be edited and saved. |
+| Full-source single-track layout | Editable and saveable. Missing media can be relinked manually. |
+| Multiple tracks or clips, trimmed clips, leading silence, or non-neutral track playback properties | Opens read-only. Files opened from disk can be saved with their original bytes. |
+| Future version or invalid file | The app rejects the file and preserves the current workspace and source file. |
 
-当前 parser 构造已知字段的新对象：markers 会排序（重复 tick 拒绝），digest 会小写，track spectrum 的 null 会转 reserved。
-`parseProject` 逐节点收集未知键路径到 `unknownFields`（上限 16 条），
-可编辑工程打开时以 `projectUnknownFields` 明确披露“保存仅保留可识别数据”；受限工程的保存走原字节，不受此规范化影响。
-对不能安全理解的输入，规范化范围的边界为：复杂布局原字节保全（受限只读），未知字段明确披露后规范化保存，future 版本拒绝打开且不落盘。
+An editable single-track layout has one track and one full-source clip. Its
+length equals the known source length. Timeline position and source offset are
+zero. Track gain is 0 dB, with mute and solo off.
 
-文件解码返回 `ProjectDecodeResult`。`decodeProject` 在校验通过后额外返回 `sourceBytes`，
-复制输入 view 而不共享底层存储（包括 Node Buffer 子视图）。这个副本保留未知字段、规范化前的值、BOM、空白和数字拼写，
-对 supported 和 unsupported-version 两个分支都有效。它由调用者持有且可变，只用于未编辑文件的保全；不能代替编辑后文档的编码。
-`parseProject` 不附带文件字节，`encodeProject` 仍是规范化 v1 writer；原始字节不属于 ProjectDocument 或 undo 历史。
-复杂布局以只读打开并显示 `projectLimitedOpen`，
-文档修改在 editor 层单点拦截，保存原样写出 `sourceBytes`（逐字节测试覆盖）；从恢复存档还原的复杂工程保持只读，
-因存档不含原始字节而明确不可保存（`limitedSaveUnavailable`）。
+### Normalization and unknown fields
 
-## 本机绑定、恢复与重关联
+Preserving a complex project means retaining all valid known media, tracks,
+clips, positions, properties and BMH content, without flattening or trimming.
+Normalized JSON does not preserve whitespace or field order. The locked `.wos`
+byte format is a separate compatibility requirement.
 
-Portable project 不能含 Tauri UUID、picked token、Blob URL、FileSystemHandle、PCM 或机器窗口状态。
-`projectId/mediaId → host-local binding` 独立持久化；decode 失败不应删除绑定，更不能将桌面路径当浏览器引用转换。
-读取项目中的 pathHint 不能触发任意磁盘读取；用户 picker 授权或已验证的本机授权才可读取。
+The parser constructs new objects containing known fields. It sorts markers,
+rejects duplicate ticks, lowercases digests and converts track spectrum `null`
+to `"reserved"`. `parseProject` collects up to 16 unknown field paths in
+`unknownFields`. Editable projects show `projectUnknownFields` to warn that
+saving retains only recognized data. For read-only files, the app saves the original bytes without normalization.
+The workspace rejects future versions and does not write them to disk.
 
-重关联先 stage/decode，再比较 name/size/format/rate/channels/frames/hash。名字相同不能证明内容相同；未知事实不伪造。
-媒体不匹配时，用户可以确认替换。替换更新媒体事实和片段长度，并作为一次可撤销的事务记录。
-取消/失败不改文档、绑定和历史；确认引起媒体事实变更时，要按项目事务并说明是否影响 clip 范围，不能偷偷截断。
+### Original file bytes
 
-`.wos` 导入只映射其能表达的字段，不从文件虚构媒体。当前“向已加载音频导入设置”会保留真实媒体，
-“从 WOS 新建工程”则创建空工程。
-`.wos` 导出是有损投影，不把整个项目标为已保存；拒绝 fractional gate 等不能编码的值，不 flatten 多轨。
+`decodeProject` returns a `ProjectDecodeResult` with `sourceBytes` for supported
+and unsupported-version results. The byte copy owns its storage, including when
+the input is a Node Buffer subview. It preserves unknown fields, original values,
+BOM, whitespace and number spelling. The caller owns this mutable copy. It is
+only for preserving an unedited file and cannot replace encoding after edits.
 
-## 验收用例入口
+`parseProject` does not attach source bytes. `encodeProject` writes normalized
+v1 JSON. Original bytes are not part of `ProjectDocument` or undo history.
 
-已有 `tests/project/project.test.ts`、`tests/project/editor.test.ts`、`tests/app/project-files.test.ts` 和
-`tests/app/project-workflow.spec.ts`。补齐能力/版本无损、host 隔离、恢复身份和错配确认时，写可观察行为测试。
-`.wos` 外部格式继续跑纯业务回归；缺失 original oracle fixtures 必须标 skipped，不能声称验证了原版兼容性。
+Complex layouts display `projectLimitedOpen`. The editor blocks document
+mutations centrally, and saving writes `sourceBytes` unchanged, covered by
+byte-for-byte tests. Complex projects restored from recovery remain read-only.
+The app cannot save these projects because recovery lacks the original bytes.
+`limitedSaveUnavailable` explains this restriction.
+
+## Local bindings, recovery and relinking
+
+Portable projects must not contain Tauri UUIDs, picker tokens, Blob URLs,
+`FileSystemHandle` objects, PCM buffers or machine-specific window state.
+The app stores the `projectId/mediaId → host-local binding` mapping separately.
+Decode failures must not delete bindings, and desktop paths must not be
+converted into browser references. A `pathHint` never authorizes arbitrary disk
+reads: access requires a user picker grant or verified local authorization.
+
+Relinking stages and decodes the candidate, then compares name, size, format,
+sample rate, channels, frames and hash. Matching names do not prove matching
+content. Unknown metadata stays unknown. Users can confirm replacement when
+media differs. Replacement updates media metadata and clip length as one
+undoable transaction. Cancellation or failure leaves the document, bindings
+and history unchanged. Clip range changes must be disclosed, never silently
+truncated.
+
+`.wos` import maps only the fields it can represent. Importing settings into
+loaded audio preserves the actual media. Starting a project from WOS creates
+an empty project. `.wos` export is a partial projection and does not mark the
+whole project as saved. It rejects unrepresentable values such as fractional
+noise-gate thresholds and does not flatten multiple tracks.
+
+## Validation coverage
+
+Behavior tests live in:
+
+- `tests/project/project.test.ts`: codec and project data.
+- `tests/project/editor.test.ts`: document editing.
+- `tests/app/project-files.test.ts`: project file operations.
+- `tests/app/project-workflow.spec.ts`: browser workflows.
+
+Cover preservation across capability/version boundaries, host isolation,
+recovery identity and media mismatch confirmation through observable behavior.
+Keep `.wos` format regressions covered separately. Missing original-program
+oracle fixtures must be reported as skipped, not as verified compatibility.

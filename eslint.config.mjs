@@ -14,6 +14,7 @@ export default tseslint.config(
     name: 'woslicer/excludes',
     ignores: [
       '.git/**',
+      '.agents/upstream/**',
       'node_modules/**',
       'dist/**',
       'release/**',
