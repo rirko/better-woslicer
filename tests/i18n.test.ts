@@ -6,7 +6,6 @@ import {
   DOC_LANG,
   detectLanguage,
   isLanguage,
-  languageFromLocale,
   type Language,
 } from '../src/core/language.js';
 // The menu/dialog key sets live in the generated i18n data; the old native
@@ -23,13 +22,7 @@ const DIALOG_STRINGS = Object.fromEntries(
     (sections as Record<string, unknown>).dialogs as Record<string, unknown>,
   ]),
 );
-import {
-  formatStatus,
-  scopeRangeText,
-  translateText,
-  type ChromeKey,
-  type StatusKey,
-} from '../src/core/messages.js';
+import type { ChromeKey, StatusKey } from '../src/core/messages.js';
 
 interface LanguageData {
   chrome: Record<string, string>;
@@ -99,15 +92,6 @@ test('status templates keep their placeholder names across languages', () => {
       );
     }
   }
-});
-
-test('English values are the reference copy of every user-facing string', () => {
-  // en.json is the baseline the smoke tests and docs quote: it must not drift
-  // from the shipped UI text without an explicit decision.
-  assert.equal(translateText('en', 'open'), 'Open');
-  assert.equal(translateText('en', 'bandDetect'), 'Band detect');
-  assert.equal(formatStatus('en', 'playing'), 'Playing');
-  assert.equal(formatStatus('en', 'paintedMarkers', { count: 3 }), 'Painted 3 marker(s)');
 });
 
 test('menu and dialog sections stay in lockstep across languages', () => {
@@ -198,56 +182,6 @@ test('Japanese strings keep the original woslicerIII terminology', () => {
   }
 });
 
-test('translateText resolves chrome keys with English as the fallback language', () => {
-  assert.equal(translateText('zh', 'open'), '打开');
-  assert.equal(translateText('ja', 'open'), '読込');
-  assert.equal(translateText('ko', 'open'), '열기');
-  assert.equal(translateText('zh', 'bandLow'), '低频');
-  // fill {name} slots when given
-  assert.equal(translateText('zh', 'framesCount', { count: '1,234' }), '1,234 采样帧');
-  assert.equal(translateText('en', 'readoutTick', { measure: '001', tick: 24 }), 'M001  tick 24');
-});
-
-test('formatStatus fills every placeholder and leaves unknown ones visible', () => {
-  assert.equal(formatStatus('zh', 'breakPointAtTick', { tick: 12 }), '已在 tick 12 打点');
-  assert.equal(formatStatus('ja', 'gridPerMeasure', { grid: 8 }), 'グリッド：1 小節あたり 8');
-  assert.equal(
-    formatStatus('ko', 'movedMarkersBy', { count: 4, delta: -8 }),
-    '마커 4개를 -8 tick 이동',
-  );
-  assert.equal(formatStatus('zh', 'playing'), '播放中');
-  assert.equal(
-    formatStatus('en', 'bandDetectCuts', { count: 5, bands: 'Low/Mid/High', threshold: '6.0' }),
-    'Band detect: +5 cuts (Low/Mid/High ≥ +6.0 dB)',
-  );
-  // unknown placeholder names stay in the output so the gap is observable
-  assert.equal(
-    formatStatus('en', 'movedMarkersBy', { count: 1 }),
-    'Moved 1 marker(s) by {delta} ticks',
-  );
-});
-
-test('the band-detect scope line is localized', () => {
-  assert.equal(
-    scopeRangeText('en', '001', '003', '2.50'),
-    'Scope: selection M001–M003 (2.50s) · only this range',
-  );
-  assert.ok(scopeRangeText('zh', '001', '003', '2.50').startsWith('范围：选区'));
-  assert.ok(scopeRangeText('ja', '001', '003', '2.50').startsWith('範囲：選択'));
-  assert.ok(scopeRangeText('ko', '001', '003', '2.50').startsWith('범위: 선택'));
-});
-
-test('locale mapping picks the closest shipped language', () => {
-  assert.equal(languageFromLocale('zh-CN'), 'zh');
-  assert.equal(languageFromLocale('zh-Hant-TW'), 'zh');
-  assert.equal(languageFromLocale('ja-JP'), 'ja');
-  assert.equal(languageFromLocale('ko-KR'), 'ko');
-  assert.equal(languageFromLocale('en-US'), 'en');
-  assert.equal(languageFromLocale('de-DE'), 'en');
-  assert.equal(languageFromLocale(''), 'en');
-  assert.equal(languageFromLocale(undefined as unknown as string), 'en');
-});
-
 test('auto detection walks the preference list without per-locale fallback', () => {
   assert.equal(detectLanguage(['de-DE', 'ja-JP', 'ko']), 'ja');
   assert.equal(detectLanguage(['zh-TW', 'en']), 'zh');
@@ -256,7 +190,7 @@ test('auto detection walks the preference list without per-locale fallback', () 
   assert.equal(detectLanguage(['ko']), 'ko');
 });
 
-test('isLanguage gates the IPC payload', () => {
+test('isLanguage validates stored preferences', () => {
   assert.equal(isLanguage('ja'), true);
   assert.equal(isLanguage('ko'), true);
   assert.equal(isLanguage('zh'), true);

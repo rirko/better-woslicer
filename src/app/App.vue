@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
+import { onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import { ElConfigProvider, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { pinia, localization } from './runtime';
@@ -44,10 +44,6 @@ const closing = ref(false);
 const dragActive = ref(false);
 const panelGeneration = ref(0);
 const identity = shallowRef<BuildIdentity | null>(null);
-const bpm = computed(() => {
-  void editor.docRevision;
-  return editor.doc.bpm;
-});
 // Command dispatch for menu and toolbar events.
 const commands = createCommands({
   editor,
@@ -268,7 +264,7 @@ onUnmounted(() => {
         v-model="calibrating"
         :audio-context="playback.getAudioContext()"
         :offset-ms="editor.tapOffsetMs"
-        :bpm="bpm"
+        :bpm="editor.doc.bpm"
         @apply="applyOffset"
       />
       <AboutDialog

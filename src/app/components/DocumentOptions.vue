@@ -7,14 +7,11 @@ import { useEditorStore } from '../../slicing/editor-store';
 import { FADE_INPUT_LIMITS, GATE_INPUT_LIMITS } from '../../slicing/control-limits';
 const editor = useEditorStore();
 const { t } = useI18n();
-// Document fields are read through docRevision and written via editor transactions.
+// Form edits go through document transactions so they participate in undo.
 type Option = 'bpm' | 'shift' | 'fadeoutMs' | 'noisegateDb';
 function option(key: Option) {
   return computed({
-    get() {
-      void editor.docRevision;
-      return editor.doc[key];
-    },
+    get: () => editor.doc[key],
     set(value: number | undefined) {
       if (typeof value === 'number') editor.setDocumentOptions({ [key]: value });
     },
@@ -26,7 +23,7 @@ const shift = option('shift');
 const fade = option('fadeoutMs');
 const gate = option('noisegateDb');
 
-// Session toggle: enables or disables the noisegate without touching its level.
+// Enables or disables the noisegate without touching its level.
 const gateEnabled = computed({
   get: () => editor.noisegateEnabled,
   set: (value: boolean) => editor.setNoisegateEnabled(value),

@@ -1,23 +1,63 @@
 import type { EditorStore } from '../slicing/editor-store';
-import type { MenuCommand } from './command-types';
 
 export type MenuEditorState = Pick<
   EditorStore,
   'document' | 'source' | 'ticks' | 'selectedTicks' | 'canUndo' | 'canRedo' | 'limited'
 >;
-export interface ApplicationMenuItem {
-  id: MenuCommand;
-  key: string;
-  enabled: () => boolean;
-}
-export interface ApplicationMenuGroup {
-  label: 'menu.project' | 'menu.edit' | 'menu.view';
-  commands: readonly ApplicationMenuItem[];
+
+// The visible menu is also the source of its command type and input validation.
+export const APPLICATION_MENU = [
+  {
+    label: 'menu.project',
+    commands: [
+      { id: 'open-project', key: 'menu.openProject' },
+      // Limited projects still save: the opened file's bytes are written unchanged.
+      { id: 'save-project', key: 'menu.saveProject' },
+      { id: 'relink-audio', key: 'menu.relinkAudio' },
+      { id: 'open-audio', key: 'menu.openAudio' },
+      { id: 'new-project-wos', key: 'menu.newProjectWos' },
+      { id: 'import-wos', key: 'menu.importWos' },
+      { id: 'import-legacy', key: 'menu.importLegacy' },
+      { id: 'export-wos', key: 'menu.exportWos' },
+      { id: 'close-project', key: 'chrome.close' },
+      { id: 'export-slice', key: 'menu.exportSlice' },
+      { id: 'export-all', key: 'menu.exportAll' },
+    ],
+  },
+  {
+    label: 'menu.edit',
+    commands: [
+      { id: 'undo', key: 'menu.undo' },
+      { id: 'redo', key: 'menu.redo' },
+      { id: 'select-all', key: 'menu.selectAll' },
+      { id: 'clear-markers', key: 'menu.clearMarkers' },
+      { id: 'select-copy', key: 'menu.copySelection' },
+      { id: 'select-cut', key: 'menu.cutSelection' },
+      { id: 'select-paste', key: 'menu.pasteSelection' },
+    ],
+  },
+  {
+    label: 'menu.view',
+    commands: [
+      { id: 'zoom-in', key: 'menu.zoomIn' },
+      { id: 'zoom-out', key: 'menu.zoomOut' },
+      { id: 'about', key: 'menu.about' },
+    ],
+  },
+] as const;
+
+export type MenuCommand = (typeof APPLICATION_MENU)[number]['commands'][number]['id'];
+export const MENU_COMMANDS = APPLICATION_MENU.flatMap((group) =>
+  group.commands.map((item) => item.id),
+);
+
+export function isMenuCommand(value: unknown): value is MenuCommand {
+  return typeof value === 'string' && MENU_COMMANDS.some((command) => command === value);
 }
 
 /**
- * One availability rule shared by the menu's disabled state and command
- * execution, so no entry can drift from the actual workspace gates.
+ * Menu availability reflects the workspace guards; commands also validate at
+ * their mutation boundary because shortcuts and toolbars bypass this menu.
  */
 export function menuCommandEnabled(id: MenuCommand, editor: MenuEditorState): boolean {
   switch (id) {
@@ -57,114 +97,4 @@ export function menuCommandEnabled(id: MenuCommand, editor: MenuEditorState): bo
       return exhaustive;
     }
   }
-}
-
-export function createApplicationMenu(editor: MenuEditorState): readonly ApplicationMenuGroup[] {
-  return [
-    {
-      label: 'menu.project',
-      commands: [
-        {
-          id: 'open-project',
-          key: 'menu.openProject',
-          enabled: () => menuCommandEnabled('open-project', editor),
-        },
-        // Limited projects still save: the opened file's bytes are written unchanged.
-        {
-          id: 'save-project',
-          key: 'menu.saveProject',
-          enabled: () => menuCommandEnabled('save-project', editor),
-        },
-        {
-          id: 'relink-audio',
-          key: 'menu.relinkAudio',
-          enabled: () => menuCommandEnabled('relink-audio', editor),
-        },
-        {
-          id: 'open-audio',
-          key: 'menu.openAudio',
-          enabled: () => menuCommandEnabled('open-audio', editor),
-        },
-        {
-          id: 'new-project-wos',
-          key: 'menu.newProjectWos',
-          enabled: () => menuCommandEnabled('new-project-wos', editor),
-        },
-        {
-          id: 'import-wos',
-          key: 'menu.importWos',
-          enabled: () => menuCommandEnabled('import-wos', editor),
-        },
-        {
-          id: 'import-legacy',
-          key: 'menu.importLegacy',
-          enabled: () => menuCommandEnabled('import-legacy', editor),
-        },
-        {
-          id: 'export-wos',
-          key: 'menu.exportWos',
-          enabled: () => menuCommandEnabled('export-wos', editor),
-        },
-        {
-          id: 'close-project',
-          key: 'chrome.close',
-          enabled: () => menuCommandEnabled('close-project', editor),
-        },
-        {
-          id: 'export-slice',
-          key: 'menu.exportSlice',
-          enabled: () => menuCommandEnabled('export-slice', editor),
-        },
-        {
-          id: 'export-all',
-          key: 'menu.exportAll',
-          enabled: () => menuCommandEnabled('export-all', editor),
-        },
-      ],
-    },
-    {
-      label: 'menu.edit',
-      commands: [
-        { id: 'undo', key: 'menu.undo', enabled: () => menuCommandEnabled('undo', editor) },
-        { id: 'redo', key: 'menu.redo', enabled: () => menuCommandEnabled('redo', editor) },
-        {
-          id: 'select-all',
-          key: 'menu.selectAll',
-          enabled: () => menuCommandEnabled('select-all', editor),
-        },
-        {
-          id: 'clear-markers',
-          key: 'menu.clearMarkers',
-          enabled: () => menuCommandEnabled('clear-markers', editor),
-        },
-        {
-          id: 'select-copy',
-          key: 'menu.copySelection',
-          enabled: () => menuCommandEnabled('select-copy', editor),
-        },
-        {
-          id: 'select-cut',
-          key: 'menu.cutSelection',
-          enabled: () => menuCommandEnabled('select-cut', editor),
-        },
-        {
-          id: 'select-paste',
-          key: 'menu.pasteSelection',
-          enabled: () => menuCommandEnabled('select-paste', editor),
-        },
-      ],
-    },
-    {
-      label: 'menu.view',
-      commands: [
-        { id: 'zoom-in', key: 'menu.zoomIn', enabled: () => menuCommandEnabled('zoom-in', editor) },
-        {
-          id: 'zoom-out',
-          key: 'menu.zoomOut',
-          enabled: () => menuCommandEnabled('zoom-out', editor),
-        },
-        { id: 'about', key: 'menu.about', enabled: () => menuCommandEnabled('about', editor) },
-      ],
-    },
-  ];
 }

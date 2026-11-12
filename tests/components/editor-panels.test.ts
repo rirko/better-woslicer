@@ -6,6 +6,8 @@ import en from '../../src/i18n/en.json';
 import MarkerList from '../../src/slicing/MarkerList.vue';
 import OutputPanel from '../../src/export/OutputPanel.vue';
 import DetectionPanel from '../../src/detection/DetectionPanel.vue';
+import DocumentOptions from '../../src/app/components/DocumentOptions.vue';
+import { createEmptyProject } from '../../src/project/codec';
 import { workspaceKey } from '../../src/workspace/workspace';
 import { fixture, audioFile } from '../app/workspace-fixture';
 
@@ -32,6 +34,51 @@ afterEach(async () => {
 });
 
 describe('editor panels with real Element Plus controls', () => {
+  it('keeps document controls in sync across edits, undo, redo and document replacement', async () => {
+    const { f, options } = setup();
+    const toolbar = mount(DocumentOptions, options);
+    const output = mount(OutputPanel, options);
+    wrappers.push(toolbar, output);
+    const toolbarFields = toolbar.findAllComponents(ElInputNumber);
+    const outputFields = output.findAllComponents(ElInputNumber);
+    const toolbarValues = () => toolbarFields.map((field) => field.props('modelValue'));
+    const outputValues = () => outputFields.map((field) => field.props('modelValue'));
+    const initialToolbar = toolbarValues();
+    const initialOutput = outputValues();
+
+    f.editor.setDocumentOptions({ bpm: 175, shift: 12, fadeoutMs: 25, noisegateDb: -18 });
+    await flushPromises();
+    expect(toolbarValues()).toEqual([175, 12, 25, -18]);
+    expect(outputValues()).toEqual([25, -18, 1]);
+    f.editor.undo();
+    await flushPromises();
+    expect(toolbarValues()).toEqual(initialToolbar);
+    expect(outputValues()).toEqual(initialOutput);
+    f.editor.redo();
+    await flushPromises();
+    expect(toolbarValues()).toEqual([175, 12, 25, -18]);
+    expect(outputValues()).toEqual([25, -18, 1]);
+
+    const fade = toolbarFields[2];
+    const gate = outputFields[1];
+    if (!fade || !gate) throw new Error('Missing document controls');
+    fade.vm.$emit('update:modelValue', 40);
+    gate.vm.$emit('update:modelValue', -24);
+    await flushPromises();
+    expect(toolbarValues()).toEqual([175, 12, 40, -24]);
+    expect(outputValues()).toEqual([40, -24, 1]);
+
+    const replacement = createEmptyProject();
+    replacement.timing.bpm = 90;
+    replacement.timing.shiftTicks = -6;
+    replacement.slicing.fadeoutMs = 80;
+    replacement.slicing.noisegateDb = -42;
+    replacement.output.clipStartNumber = 7;
+    f.editor.replaceDocument(replacement);
+    await flushPromises();
+    expect(toolbarValues()).toEqual([90, -6, 80, -42]);
+    expect(outputValues()).toEqual([80, -42, 7]);
+  });
   it('routes output controls through undoable document edits and reflects undo in the form', async () => {
     const { f, options } = setup();
     const wrapper = mount(OutputPanel, options);

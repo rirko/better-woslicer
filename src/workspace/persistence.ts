@@ -27,21 +27,12 @@ export function createSessionPersistence(
     if (paused || disposed || !pending) return writes;
     pending = false;
     const snapshot = captureEditorSession(editor);
-    let succeed!: () => void, fail!: (error: unknown) => void;
-    const attempt = new Promise<void>((resolve, reject) => {
-      succeed = resolve;
-      fail = reject;
+    const attempt = writes.then(() => platform.writeSession(snapshot));
+    // Keep the queue usable after failure while returning this attempt's error to its caller.
+    writes = attempt.catch((error: unknown) => {
+      if (!paused && !disposed) pending = true;
+      onWriteError(error);
     });
-    writes = writes
-      .then(() => platform.writeSession(snapshot))
-      .then(
-        () => succeed(),
-        (error) => {
-          if (!paused && !disposed) pending = true;
-          fail(error);
-          onWriteError(error);
-        },
-      );
     return attempt;
   }
   const stop = watch(

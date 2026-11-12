@@ -26,21 +26,14 @@ const ffNumbering = computed({
   get: () => editor.useFfNumbering,
   set: (value: boolean) => editor.setOutputOptions({ useFfNumbering: value }),
 });
-// Fade and gate track the document revision (undo) and forward only defined numbers.
 const fade = computed({
-  get: () => {
-    void editor.docRevision;
-    return editor.doc.fadeoutMs;
-  },
+  get: () => editor.doc.fadeoutMs,
   set: (value: number | undefined) => {
     if (value !== undefined) editor.setDocumentOptions({ fadeoutMs: value });
   },
 });
 const gate = computed({
-  get: () => {
-    void editor.docRevision;
-    return editor.doc.noisegateDb;
-  },
+  get: () => editor.doc.noisegateDb,
   set: (value: number | undefined) => {
     if (value !== undefined) editor.setDocumentOptions({ noisegateDb: value });
   },

@@ -7,6 +7,43 @@
 - `tests/` contains unit, component and browser tests, along with their runner configuration.
 - `scripts/` contains build, packaging and verification commands.
 
+### Finding a UI behavior
+
+| UI area | Entry point and behavior owner |
+| --- | --- |
+| Application menu | `src/app/components/ApplicationMenu.vue` renders `src/app/menu.ts`, which owns the menu entries, command type and availability. `src/app/commands.ts` dispatches actions and keyboard shortcuts. |
+| Waveform | `src/timeline/TimelineEditor.vue` owns the canvas lifecycle; `gestures.ts` handles pointer edits and `render.ts` draws the timeline. |
+| Cut list | `src/slicing/MarkerList.vue` owns selection controls; `editor-actions.ts` implements marker operations. |
+| Project open/save | `src/workspace/workspace.ts` coordinates file operations and recovery; `persistence.ts` serializes recovery writes. `src/project/schema.ts` defines Zod field schemas and derives document types; `codec.ts` owns version compatibility, normalization and business validation. |
+| Playback | `src/playback/PlaybackControls.vue` owns controls; `index.ts` manages audio playback and cleanup. |
+| Document/output settings | `src/app/components/DocumentOptions.vue` and `src/export/OutputPanel.vue` read reactive editor projections and write undoable transactions through `src/slicing/editor-store.ts`. |
+| Language/theme and dialogs | `src/app/components/PreferencesControls.vue` uses `src/ui/preferences.ts`. About lives beside the toolbar; calibration lives in `src/calibration/CalibrationDialog.vue`. |
+
+`src/app/App.vue` assembles these features and owns project-replacement confirmations.
+UI consumers read the editor's reactive document projections directly; revision
+checks are for detecting stale asynchronous work and gestures. Platform file
+access stays in `src/platform/`, and audio worker processing stays in `src/audio/`.
+
+### Input, commands and platform boundaries
+
+Discrete user intents follow input → command → feature action. Keyboard shortcuts
+and menu buttons share `src/app/commands.ts`; the feature action owns document
+validation, undo and playback behavior. Continuous pointer gestures and local
+form edits stay with their feature rather than routing every movement through a
+global dispatcher. Platform capabilities are used only when an action needs
+files, clipboard, recovery storage or other host services.
+
+Gamepad and dedicated BMS controller adapters are not implemented. When added,
+map device events to the same intents and actions; keep device polling, focus
+rules and connection lifetime in the input adapter. Choose a native adapter only
+when the actual device protocol requires it, rather than introducing a general
+hardware framework in advance.
+
+Web and Tauri share the Vue interface, editing rules and audio worker. The Rust
+host in `src-tauri/src/` handles native file access and transfers (`files.rs`),
+clipboard interoperability (`clipboard.rs`), recovery storage (`session.rs`) and
+window setup (`lib.rs`). It does not implement audio processing or editing rules.
+
 ## Commands
 
 Install Node.js 26.x, npm and Git. For desktop work, also install stable Rust and the Tauri system dependencies for your platform. Windows uses WebView2 and Linux needs WebKitGTK and the corresponding system development packages. The [desktop build action](../.github/actions/build-desktop/action.yml) lists the Linux packages used by CI.

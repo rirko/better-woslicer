@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { menuCommandEnabled, type MenuEditorState } from '../../src/app/menu';
-import { APP_COMMANDS, MENU_COMMANDS, type MenuCommand } from '../../src/app/command-types';
+import {
+  menuCommandEnabled,
+  MENU_COMMANDS,
+  type MenuCommand,
+  type MenuEditorState,
+} from '../../src/app/menu';
+import { APP_COMMANDS } from '../../src/app/command-types';
 
 const state = (overrides: Partial<MenuEditorState> = {}): MenuEditorState => ({
   document: { media: [], tracks: [] } as unknown as MenuEditorState['document'],

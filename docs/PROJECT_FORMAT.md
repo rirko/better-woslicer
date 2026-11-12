@@ -8,8 +8,10 @@
 - `.wosdx` 是有界 UTF-8 JSON，`format: "wosdx"`、`schemaVersion: 1`。
 - schemaVersion 与应用 package version、session version、Rust crate version 独立。
 - 文件不包含音频。BMHelper 数据可以内嵌；音频只保存媒体事实和来源提示。
-- 编解码入口是 `src/project/codec.ts` 的 `decodeProject` / `parseProject` / `encodeProject`；类型与预算在 `schema.ts`。
+- 编解码入口是 `src/project/codec.ts` 的 `decodeProject` / `parseProject` / `encodeProject`。`schema.ts` 用 Zod 定义字段结构、范围和枚举，并推导项目类型。
 - 不合法 UTF-8/JSON、错误 format、越界字段/重复 ID/悬空引用等拒绝；未来版本单独分流，不尝试降级解释。
+
+解析先校验格式和版本，再对 v1 执行结构校验。Zod 不做字符串、数字或布尔值的隐式转换；字符串长度沿用 UTF-16 单元计数。重复 ID、媒体引用、片段范围、片段总数和重复打点仍由 `codec.ts` 校验。新增字段时修改 schema；新增跨字段业务规则时修改 codec。
 
 ## 当前 v1 字段
 

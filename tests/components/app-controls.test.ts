@@ -1,21 +1,28 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, disposePinia } from 'pinia';
 import { nextTick } from 'vue';
-import { ElInputNumber, ElSelect, ElOption, ElTabs } from 'element-plus';
+import {
+  ElInputNumber,
+  ElSelect,
+  ElOption,
+  ElTabs,
+  ElDropdown,
+  ElDropdownItem,
+} from 'element-plus';
 import { describe, expect, it } from 'vitest';
 import DocumentOptions from '../../src/app/components/DocumentOptions.vue';
 import EditorToolbar from '../../src/app/components/EditorToolbar.vue';
 import WorkspacePanels from '../../src/app/components/WorkspacePanels.vue';
 import AboutDialog from '../../src/app/components/AboutDialog.vue';
 import ApplicationMenu from '../../src/app/components/ApplicationMenu.vue';
-import { createApplicationMenu } from '../../src/app/menu';
+import { APPLICATION_MENU, isMenuCommand } from '../../src/app/menu';
 import { setupI18n } from '../../src/i18n/setup';
 import { useEditorStore } from '../../src/slicing/editor-store';
 import { useBmhelperStore } from '../../src/bmhelper/store';
 import { useUiPreferencesStore } from '../../src/ui/preferences';
 import { GRID_DENSITIES } from '../../src/core/gridlines';
 import { MAX_TICKS } from '../../src/core/timebase';
-import { APP_COMMANDS, isMenuCommand } from '../../src/app/command-types';
+import { APP_COMMANDS } from '../../src/app/command-types';
 import { createI18n } from 'vue-i18n';
 import en from '../../src/i18n/en.json';
 import { workspaceKey } from '../../src/workspace/workspace';
@@ -112,7 +119,7 @@ describe('application controls', () => {
     const instance = setup();
     const wrapper = mount(ApplicationMenu, { global: instance.global });
     try {
-      const groups = createApplicationMenu(instance.editor);
+      const groups = APPLICATION_MENU;
       const menuCommands = groups.flatMap((group) => group.commands.map((item) => item.id));
       expect(new Set(menuCommands).size).toBe(menuCommands.length);
       expect(menuCommands.every(isMenuCommand)).toBe(true);
@@ -135,29 +142,51 @@ describe('application controls', () => {
       instance.dispose();
     }
   });
-  it('keeps limited projects saving while disabling editing and media menu entries', () => {
+  it('updates menu availability as the project changes and validates dropdown commands', async () => {
     const instance = setup();
+    const wrapper = mount(ApplicationMenu, { global: instance.global });
     try {
-      const groups = createApplicationMenu(instance.editor);
-      const find = (id: string) =>
-        groups.flatMap((group) => group.commands).find((item) => item.id === id);
-      if (!find) throw new Error('Missing menu items');
+      const dropdowns = wrapper.findAllComponents(ElDropdown);
+      for (const dropdown of dropdowns) {
+        await dropdown.find('button').trigger('click');
+      }
+      const disabled = (command: string) => {
+        const item = wrapper
+          .findAllComponents(ElDropdownItem)
+          .find((candidate) => candidate.props('command') === command);
+        if (!item) throw new Error('Missing menu command: ' + command);
+        return item.props('disabled');
+      };
       instance.editor.setTicks([24]);
-      expect(find('open-audio')?.enabled()).toBe(true);
-      expect(find('clear-markers')?.enabled()).toBe(true);
+      await nextTick();
+      expect(disabled('open-audio')).toBe(false);
+      expect(disabled('clear-markers')).toBe(false);
       instance.editor.setLimited(true);
-      expect(find('open-audio')?.enabled()).toBe(false);
-      expect(find('import-wos')?.enabled()).toBe(false);
-      expect(find('export-wos')?.enabled()).toBe(false);
-      expect(find('clear-markers')?.enabled()).toBe(false);
-      expect(find('select-cut')?.enabled()).toBe(false);
-      expect(find('select-paste')?.enabled()).toBe(false);
-      expect(find('save-project')?.enabled()).toBe(true);
-      expect(find('open-project')?.enabled()).toBe(true);
-      expect(find('about')?.enabled()).toBe(true);
+      await nextTick();
+      for (const command of [
+        'open-audio',
+        'import-wos',
+        'export-wos',
+        'clear-markers',
+        'select-cut',
+        'select-paste',
+      ]) {
+        expect(disabled(command)).toBe(true);
+      }
+      for (const command of ['save-project', 'open-project', 'about']) {
+        expect(disabled(command)).toBe(false);
+      }
       instance.editor.setLimited(false);
-      expect(find('open-audio')?.enabled()).toBe(true);
+      await nextTick();
+      expect(disabled('open-audio')).toBe(false);
+      const dropdown = wrapper.findComponent(ElDropdown);
+      dropdown.vm.$emit('command', 'save-project');
+      dropdown.vm.$emit('command', 'toggle-marker');
+      dropdown.vm.$emit('command', 'unknown');
+      dropdown.vm.$emit('command', null);
+      expect(wrapper.emitted('command')).toEqual([['save-project']]);
     } finally {
+      wrapper.unmount();
       instance.dispose();
     }
   });

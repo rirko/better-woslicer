@@ -5,6 +5,7 @@ import {
   decodeProject,
   encodeProject,
   parseProject,
+  ProjectFormatError,
 } from '../../src/project/codec';
 import type { ProjectFileV1 } from '../../src/project/schema';
 
@@ -28,6 +29,111 @@ function project(): ProjectFileV1 {
 }
 
 describe('.wosdx project document', () => {
+  it.each([
+    null,
+    [],
+    {},
+    { format: 'other', schemaVersion: 99 },
+    { format: 'wosdx', schemaVersion: '99' },
+    { format: 'wosdx', schemaVersion: 1.5 },
+    { format: 'wosdx', schemaVersion: 0 },
+    { format: 'wosdx', schemaVersion: 1_000_001 },
+  ])('rejects an invalid version envelope: %j', (input) => {
+    expect(() => parseProject(input)).toThrow(ProjectFormatError);
+  });
+
+  it.each(['120', null, undefined, NaN, Infinity, -1, 0, 10001])(
+    'rejects invalid BPM without coercion: %s',
+    (bpm) => {
+      const value = project();
+      expect(() => parseProject({ ...value, timing: { ...value.timing, bpm } })).toThrow(
+        /timing.bpm/,
+      );
+    },
+  );
+
+  it('retains UTF-16 string bounds and accepts an empty output basename', () => {
+    const value = project();
+    expect(
+      parseProject({ ...value, name: '😀'.repeat(256), output: { ...value.output, baseName: '' } })
+        .kind,
+    ).toBe('supported');
+    expect(() => parseProject({ ...value, name: '😀'.repeat(257) })).toThrow(/name/);
+  });
+
+  it('distinguishes nullable metadata from absent required fields', () => {
+    const value = project();
+    const media = value.media[0];
+    if (!media) throw new Error('Expected media');
+    expect(parseProject({ ...value, media: [{ ...media, channels: null }] }).kind).toBe(
+      'supported',
+    );
+    expect(() => parseProject({ ...value, media: [{ ...media, channels: undefined }] })).toThrow();
+    expect(() => parseProject({ ...value, media: [{ ...media, channels: 1.5 }] })).toThrow();
+    expect(() =>
+      parseProject({ ...value, global: { ...value.global, masterMuted: 'false' } }),
+    ).toThrow();
+  });
+
+  it('preserves origin variant normalization and reports only unknown keys', () => {
+    const value = project();
+    const media = value.media[0];
+    if (!media) throw new Error('Expected media');
+    const parsed = parseProject({
+      ...value,
+      media: [
+        {
+          ...media,
+          originHint: { kind: 'desktop', pathHint: 'audio.wav', name: 7, extension: true },
+        },
+      ],
+    });
+    if (parsed.kind !== 'supported') throw new Error('Expected supported project');
+    expect(parsed.project.media[0]?.originHint).toEqual({ kind: 'desktop', pathHint: 'audio.wav' });
+    expect(parsed.unknownFields).toEqual(['media[0].originHint.extension']);
+  });
+
+  it('bounds unknown-field diagnostics and strips extensions from normalized output', () => {
+    const value = project();
+    const extensions = Object.fromEntries(
+      Array.from({ length: 20 }, (_, index) => ['extra' + index, index]),
+    );
+    const parsed = parseProject({ ...value, ...extensions });
+    if (parsed.kind !== 'supported') throw new Error('Expected supported project');
+    expect(parsed.unknownFields).toHaveLength(16);
+    expect(parsed.project).toEqual(value);
+  });
+
+  it('omits undefined browser hints without mutating an in-memory draft', () => {
+    const value = project();
+    const media = value.media[0];
+    if (!media) throw new Error('Expected media');
+    const hint = {
+      kind: 'browser' as const,
+      name: 'audio.wav',
+      relativePathHint: undefined,
+      lastModified: undefined,
+    };
+    const parsed = parseProject({ ...value, media: [{ ...media, originHint: hint }] });
+    if (parsed.kind !== 'supported') throw new Error('Expected supported project');
+    expect(parsed.project.media[0]?.originHint).toEqual({ kind: 'browser', name: 'audio.wav' });
+    expect(hint).toHaveProperty('relativePathHint');
+    expect(hint).toHaveProperty('lastModified');
+  });
+
+  it('rejects duplicate markers and invalid embedded BMHelper data', () => {
+    const value = project();
+    expect(() =>
+      parseProject({ ...value, slicing: { ...value.slicing, markers: [24, 24] } }),
+    ).toThrow(/duplicate ticks/);
+    expect(() =>
+      parseProject({ ...value, bmhelper: { format: 'bmh', bytesBase64: 'not base64' } }),
+    ).toThrow(/bmhelper/);
+    expect(parseProject({ ...value, bmhelper: { format: 'bmh', bytesBase64: '' } }).kind).toBe(
+      'supported',
+    );
+  });
+
   it('reports unrecognized fields by path instead of dropping them silently', () => {
     const value = project();
     const parsed = parseProject({

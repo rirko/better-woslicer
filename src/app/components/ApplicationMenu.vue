@@ -1,23 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { useEditorStore } from '../../slicing/editor-store';
-import { createApplicationMenu } from '../menu';
-import { isMenuCommand, type MenuCommand } from '../command-types';
+import { APPLICATION_MENU, isMenuCommand, menuCommandEnabled, type MenuCommand } from '../menu';
 
 const emit = defineEmits<{ command: [command: MenuCommand] }>();
 const { t } = useI18n();
 const editor = useEditorStore();
-// Menu groups derive from the current editor state.
-const groups = computed(() => createApplicationMenu(editor));
-// Forward only commands that are still present in the visible menu.
 function dispatch(value: unknown): void {
-  if (
-    isMenuCommand(value) &&
-    groups.value.some((group) => group.commands.some((item) => item.id === value))
-  )
-    emit('command', value);
+  if (isMenuCommand(value)) emit('command', value);
 }
 </script>
 <template>
@@ -28,7 +19,7 @@ function dispatch(value: unknown): void {
     role="menubar"
   >
     <ElDropdown
-      v-for="group in groups"
+      v-for="group in APPLICATION_MENU"
       :key="group.label"
       trigger="click"
       :show-timeout="0"
@@ -46,7 +37,7 @@ function dispatch(value: unknown): void {
             v-for="item in group.commands"
             :key="item.id"
             :command="item.id"
-            :disabled="!item.enabled()"
+            :disabled="!menuCommandEnabled(item.id, editor)"
             >{{ t(item.key) }}</ElDropdownItem
           >
         </ElDropdownMenu>
