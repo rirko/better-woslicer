@@ -22,11 +22,12 @@ Releases（プレリリース）または Actions の成果物から、ご利用
 
 | プラットフォーム | 形式 | 使い方 |
 | --- | --- | --- |
-| Windows | .msi / -setup.exe | インストーラーを実行 |
+| Windows | .zip | ZIP を展開して起動。WebView2 が必要 |
 | Linux | .deb / .AppImage | deb をインストール、または AppImage を実行 |
+| macOS | .dmg | ディスクイメージを開き、アプリを「アプリケーション」にドラッグ |
 | Web | .zip | 展開して静的サイトとして配信 |
 
-Windows x64 が主要なデスクトップ版です。ほかのアーキテクチャや Linux パッケージは利用可能な場合に提供します。本アプリはファイルをローカルで処理し、オフラインで動作します。
+Windows x64 が主要なデスクトップ版です。ほかの Windows アーキテクチャ、Linux、macOS 向けのパッケージは利用可能な場合に提供します。本アプリはファイルをローカルで処理し、オフラインで動作します。
 
 Web 版はブラウザーで直接動作します：[woslicer-dx app](https://woslicer-dx.pages.dev/) （インストール不要）。
 

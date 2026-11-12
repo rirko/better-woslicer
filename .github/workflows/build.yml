@@ -2,14 +2,8 @@ name: Build and test
 
 on:
   push:
-    branches: ['**']
+    branches: [main, dev]
   pull_request:
-  workflow_dispatch:
-    inputs:
-      optional_platforms:
-        description: Also attempt Windows ARM64 and Linux x64/ARM64
-        type: boolean
-        default: false
   workflow_call:
     inputs:
       optional_platforms:
@@ -43,20 +37,14 @@ jobs:
       - name: Use the source commit time for all build identities
         run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
       - run: npm ci
-      - run: npm run lint
-      - run: npm run fmt:check
-      - run: npm run typecheck
+      - run: npm run check:quality
       - run: npm test
       - run: npm run build
       - run: npm exec --no -- playwright install chromium --with-deps
       - name: Test the production web output (isolated 30-second profiles)
         run: npm run test:app-ui
       - name: Archive and validate the tested web output
-        run: |
-          archive="$(node -p '`${require("./package.json").name}-${require("./package.json").version}-web.zip`')"
-          mkdir -p release/web
-          (cd dist/app && zip -q -r "../../release/web/$archive" . -x '*.map' '.vite/*')
-          unzip -t "release/web/$archive"
+        run: bash .github/scripts/package-web.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: woslicer-web-${{ github.sha }}
@@ -90,12 +78,11 @@ jobs:
         with:
           platform: windows-x64
           target: x86_64-pc-windows-msvc
-          bundles: msi,nsis
 
   optional-desktop:
     name: ${{ matrix.platform }} (optional)
     needs: web
-    if: inputs.optional_platforms || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    if: inputs.optional_platforms || github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     continue-on-error: true
@@ -106,7 +93,6 @@ jobs:
           - platform: windows-arm64
             os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            bundles: msi,nsis
           - platform: linux-x64
             os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
@@ -115,6 +101,14 @@ jobs:
             os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             bundles: deb,appimage
+          - platform: macos-arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - platform: macos-x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -123,7 +117,7 @@ jobs:
         with:
           platform: ${{ matrix.platform }}
           target: ${{ matrix.target }}
-          bundles: ${{ matrix.bundles }}
+          bundles: ${{ matrix.bundles || '' }}
 
   required:
     name: Required release checks

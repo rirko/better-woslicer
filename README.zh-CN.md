@@ -22,11 +22,12 @@
 
 | 平台 | 格式 | 使用方式 |
 | --- | --- | --- |
-| Windows | .msi / -setup.exe | 运行安装程序 |
+| Windows | .zip | 解压后直接运行。需要已安装 WebView2 |
 | Linux | .deb / .AppImage | 安装 deb 或运行 AppImage |
+| macOS | .dmg | 打开磁盘映像，将应用拖入“应用程序” |
 | Web | .zip | 解压后作为静态网站托管 |
 
-Windows x64 为主要桌面版本；其他架构和 Linux 包在可用时提供。应用在本地处理文件，运行时无需联网。
+Windows x64 为主要桌面版本。其他 Windows 架构、Linux 和 macOS 软件包在可用时提供。应用在本地处理文件，运行时无需联网。
 
 网页版在浏览器中直接运行：[woslicer-dx app](https://woslicer-dx.pages.dev/)，无需安装。
 

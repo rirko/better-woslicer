@@ -1,0 +1,3 @@
+# Store and check out text files with LF on every platform.
+# This prevents CI build failures on Windows runners.
+* text=auto eol=lf

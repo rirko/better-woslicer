@@ -8,8 +8,8 @@ inputs:
     required: true
     description: Native Rust target triple
   bundles:
-    required: true
-    description: Comma-separated Tauri bundle formats
+    required: false
+    description: Comma-separated Tauri bundle formats for Linux and macOS
 runs:
   using: composite
   steps:
@@ -44,12 +44,9 @@ runs:
       with:
         workspaces: src-tauri -> target
         shared-key: tauri-release-${{ runner.os }}-${{ inputs.target }}
-        save-if: ${{ github.event_name != 'pull_request' }}
     - name: Build frontend and generate identity before Cargo
       shell: bash
-      run: |
-        npm run check:version
-        npm run build:app:tauri
+      run: npm run build:app:tauri
     - name: Rust format, tests and Clippy
       shell: bash
       env:
@@ -58,66 +55,45 @@ runs:
         cargo fmt --manifest-path src-tauri/Cargo.toml --check
         cargo test --manifest-path src-tauri/Cargo.toml --locked --release --target "$RUST_TARGET" --all-features
         cargo clippy --manifest-path src-tauri/Cargo.toml --locked --release --target "$RUST_TARGET" --all-targets --all-features -- -D warnings
-    - name: Build default Tauri installers
+    - name: Build the Windows release executable
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+      # Both builds reuse the frontend prepared for Cargo checks.
+      run: >-
+        npm run tauri -- build --ci --config '{"build":{"beforeBuildCommand":""}}'
+        --target "$RUST_TARGET" --no-bundle -- --locked
+    - name: Build Linux and macOS bundles
+      if: runner.os != 'Windows'
       shell: bash
       env:
         RUST_TARGET: ${{ inputs.target }}
         TAURI_BUNDLES: ${{ inputs.bundles }}
-      # The all-features Cargo checks above need the embedded frontend already built.
-      # Reuse those exact assets instead of running the frontend hook twice.
-      run: npm run tauri -- build --ci --config '{"build":{"beforeBuildCommand":""}}' --target "$RUST_TARGET" --bundles "$TAURI_BUNDLES" -- --locked
-    - name: Check Windows installer metadata
+      run: >-
+        npm run tauri -- build --ci --config '{"build":{"beforeBuildCommand":""}}'
+        --target "$RUST_TARGET" --bundles "$TAURI_BUNDLES" -- --locked
+    - name: Package the Windows portable ZIP
       if: runner.os == 'Windows'
       shell: pwsh
       env:
+        RELEASE_PLATFORM: ${{ inputs.platform }}
         RUST_TARGET: ${{ inputs.target }}
-      run: |
-        $package = Get-Content package.json -Raw | ConvertFrom-Json
-        $bundle = "src-tauri/target/$env:RUST_TARGET/release/bundle"
-        $installers = @(Get-ChildItem "$bundle/msi/*.msi")
-        $setups = @(Get-ChildItem "$bundle/nsis/*-setup.exe")
-        if ($installers.Count -eq 0 -or $setups.Count -eq 0) { throw 'Missing MSI or NSIS installer' }
-        $windowsInstaller = New-Object -ComObject WindowsInstaller.Installer
-        foreach ($installer in $installers) {
-          $database = $windowsInstaller.OpenDatabase($installer.FullName, 0)
-          $view = $database.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'ProductVersion'")
-          $view.Execute()
-          if ($view.Fetch().StringData(1) -ne $package.version) { throw 'MSI version differs from package.json' }
-          $view.Close()
-        }
-        foreach ($installer in @($installers) + @($setups)) {
-          if ($installer.Length -eq 0) { throw "Empty installer: $($installer.Name)" }
-        }
-    - name: Inspect native Linux packages
+      run: ./.github/scripts/package-windows-portable.ps1
+    - name: Verify and collect Linux packages
       if: runner.os == 'Linux'
-      shell: bash
-      env:
-        RUST_TARGET: ${{ inputs.target }}
-      run: |
-        version="$(node -p 'require("./package.json").version')"
-        for file in src-tauri/target/"$RUST_TARGET"/release/bundle/deb/*.deb; do
-          test "$(dpkg-deb --field "$file" Version)" = "$version"
-          dpkg-deb --info "$file"
-          dpkg-deb --contents "$file"
-        done
-        for file in src-tauri/target/"$RUST_TARGET"/release/bundle/appimage/*.AppImage; do
-          chmod +x "$file"
-          "$file" --appimage-version
-        done
-    - name: Collect native bundles without repacking them
       shell: bash
       env:
         RELEASE_PLATFORM: ${{ inputs.platform }}
         RUST_TARGET: ${{ inputs.target }}
-      run: |
-        bundle="src-tauri/target/$RUST_TARGET/release/bundle"
-        destination="release/$RELEASE_PLATFORM"
-        mkdir -p "$destination"
-        if [[ "$RUNNER_OS" == Windows ]]; then
-          cp "$bundle"/msi/*.msi "$bundle"/nsis/*-setup.exe "$destination/"
-        else
-          cp "$bundle"/deb/*.deb "$bundle"/appimage/*.AppImage "$destination/"
-        fi
+      run: bash .github/scripts/collect-linux.sh
+    - name: Verify and collect macOS disk images
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        RELEASE_PLATFORM: ${{ inputs.platform }}
+        RUST_TARGET: ${{ inputs.target }}
+      run: bash .github/scripts/collect-macos.sh
     - name: Upload complete platform artifacts
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:

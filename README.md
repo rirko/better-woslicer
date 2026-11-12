@@ -22,11 +22,12 @@ Download the package for your system from Releases (prereleases) or Actions arti
 
 | Platform | Package | Usage |
 | --- | --- | --- |
-| Windows | .msi / -setup.exe | Run the installer |
+| Windows | .zip | Extract the ZIP and run the app. Requires WebView2 |
 | Linux | .deb / .AppImage | Install the deb or run the AppImage |
+| macOS | .dmg | Open the disk image and drag the app to Applications |
 | Web | .zip | Unpack and serve as a static website |
 
-Windows x64 is the primary desktop package. Other architectures and Linux packages are included when available. The application processes files locally and works offline.
+Windows x64 is the primary desktop package. Other Windows architectures, Linux and macOS packages are included when available. The application processes files locally and works offline.
 
 The web version runs directly in the browser: [woslicer-dx app](https://woslicer-dx.pages.dev/) — no installation needed.
 

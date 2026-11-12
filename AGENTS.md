@@ -11,7 +11,12 @@
 - Follow existing module boundaries. Keep changes focused and preserve unrelated work. In TypeScript, keep strict checks enabled, validate external input at boundaries, and avoid `any`, unchecked assertions, non-null assertions and compiler suppressions.
 - Test observable behavior. Use Node.js 26.x and npm. Run `npm ci` for clean installs. See [development commands](docs/DEVELOPMENT.md) and [CI](docs/CI.md).
 - Build locally in debug by default. CI builds and Rust tests and Clippy use release. Before reporting a complete build, run typecheck, unit tests, both browser UI profiles and archive validation. Diagnose failures before packaging. Report missing oracle fixtures as skipped and state the actual platform and coverage. Run each browser UI profile separately with isolated user data and a 30-second hard timeout. Check menu visibility, device scale and canvas size, using a numeric tolerance for fractional DPR. Browser checks do not verify the native window.
-- Keep changes to CI within the existing workflows unless the user requests deployment or publishing. Use single-subject Conventional Commits for local commits. Pushing, tagging and publishing require explicit authorization.
+- CI runs on pushes to `main` and `dev` and on pull requests. Keep changes within the existing workflows unless the user requests deployment or publishing. Pushing, tagging and publishing require explicit authorization.
+
+## Commit messages
+
+- Use Conventional Commit types and write exactly one concise line in the form `genre(module): contents`.
+- Include the module and summarize the change in the imperative mood. Omit the commit body and footers.
 
 ## Documentation and versioning
 

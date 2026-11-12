@@ -22,11 +22,12 @@ Releases(사전 릴리스) 또는 Actions 아티팩트에서 시스템에 맞는
 
 | 플랫폼 | 형식 | 사용 방법 |
 | --- | --- | --- |
-| Windows | .msi / -setup.exe | 설치 프로그램 실행 |
+| Windows | .zip | ZIP을 풀고 앱을 실행합니다. WebView2가 필요합니다 |
 | Linux | .deb / .AppImage | deb 설치 또는 AppImage 실행 |
+| macOS | .dmg | 디스크 이미지를 열고 앱을 응용 프로그램 폴더로 드래그 |
 | Web | .zip | 압축을 풀고 정적 웹사이트로 호스팅 |
 
-Windows x64가 기본 데스크톱 버전입니다. 다른 아키텍처와 Linux 패키지는 제공 가능한 경우 포함됩니다. 앱은 파일을 로컬에서 처리하며 오프라인으로 동작합니다.
+Windows x64가 기본 데스크톱 버전입니다. 다른 Windows 아키텍처와 Linux 및 macOS 패키지는 제공 가능한 경우 포함됩니다. 앱은 파일을 로컬에서 처리하며 오프라인으로 동작합니다.
 
 웹 버전은 브라우저에서 직접 실행됩니다: [woslicer-dx app](https://woslicer-dx.pages.dev/) (설치 불필요).
 
