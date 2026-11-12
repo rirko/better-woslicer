@@ -1,4 +1,4 @@
-// R0 baseline capture for docs/refactoring/UI_READABILITY_PLAN.md.
+// Capture layout and interaction baselines across browser profiles.
 // Each test records one visual scenario of the CURRENT implementation so later
 // refactoring cards can be compared against these artifacts. Assertions only
 // pin existing behavior needed for a stable capture; they add no new contracts.

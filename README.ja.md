@@ -4,11 +4,12 @@
 
 wosderge の woslicerIII をベースにした、BMS 向けのオフライン音声スライサー。
 
-![タイムライン](screenshots/timeline.png)
+![タイムライン](docs/screenshots/timeline.png)
 
 ## 機能
 
-- WAV/OGG の読み込み、WAV スライスの書き出し、`.wos` プロジェクトと BMSE クリップボードに対応。
+- WAV と OGG の読み込み、WAV スライスの書き出し。
+- `.wosdx` プロジェクトの保存と読み込み、旧形式 `.wos` 設定の入出力、BMSE クリップボードでのマーカー交換。
 - スナップ、範囲選択、クオンタイズ、元に戻す／やり直しを備えたタイムライン編集。
 - 再生速度を変えたモニタリング、キュー音、タップ補正。
 - 周波数帯域の表示と自動カット検出。
@@ -29,13 +30,6 @@ Windows x64 が主要なデスクトップ版です。ほかのアーキテク�
 
 Web 版はブラウザーで直接動作します：[woslicer-dx app](https://woslicer-dx.pages.dev/) （インストール不要）。
 
-ソースから実行するには Node.js 26.x、npm、Git、Rust stable ツールチェーンが必要です。Tauri のパッケージングにはプラットフォームごとの追加ツール（Linux は WebKit/GTK、Windows は WebView2）も必要です。
-
-```sh
-npm ci
-npm run dev
-```
-
 ## 操作
 
 | キー | 動作 |
@@ -50,34 +44,18 @@ npm run dev
 | Ctrl+C / X / V | 選択したマーカーをコピー / 切り取り / 貼り付け |
 | Ctrl+Z / Ctrl+Shift+Z | 元に戻す / やり直す |
 | M | すべてのスライスを書き出す |
-| T / Y | `.wos` の保存 / 読み込み |
+| Ctrl+O / Ctrl+Shift+O / Ctrl+S | 音声を開く / `.wosdx` プロジェクトを開く / プロジェクトを保存 |
+| T / Y | `.wos` 設定の読み込み / 書き出し |
 | V / B | BMSE クリップボードへの書き込み / 読み込み |
 
 左ドラッグでカットを描画、右ドラッグで消去、Shift/Ctrl+ドラッグで範囲選択、カットをドラッグすると選択範囲が移動します。Ctrl+ホイールでズーム、中ボタンドラッグでパン。Alt を押している間はスナップが無効になります。
 
-## 開発
+## プロジェクト情報
 
-```sh
-npm run lint
-npm run fmt:check
-npm run typecheck
-npm test
-npm run build
-npm run test:app-ui
-npm run test:tauri-ui
-npm run package
-```
-
-ローカルのビルドとテストは既定で debug を使用します。release ビルドには `npm run build -- --release` または `npm run package -- --release` を実行してください。CI は release のみを使用します。
-
-コミット時は pre-commit フックがステージ済みファイルの lint とフォーマット検査を行います。
-
-ネイティブ Tauri ウィンドウテスト（`npm run test:tauri-ui`）は Windows 限定で、release ビルドに対して実行します。
-
-音声は内部的に 16-bit に変換され、書き出しは 16-bit PCM です。原版との比較テストには外部のフィクスチャが必要で、無い場合はスキップされます。
-
-[CI](docs/CI.md)、[バージョン規則](docs/VERSIONING.md)、[変更履歴](CHANGELOG.md) を参照してください。
+[変更履歴](CHANGELOG.md) · [開発ガイド（英語）](docs/DEVELOPMENT.md)
 
 ## ライセンスとクレジット
 
 オリジナルの woslicer II/III: **wosderge**。コントリビューターが権利を持つ部分は [MIT](LICENSE) です。原版由来の部分とサードパーティの依存関係はこの許諾に含まれません。範囲と帰属については [NOTICE](NOTICE) を参照してください。
+
+内蔵 BMHelper は、**exclusion** が公開したソースコードをもとに、Be-Music Helper（beta 4′）の動作を再実装したものです。原版の README では、金銭が絡まないことと作者を明示することを条件に二次利用が許可されています。[オリジナルの BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)

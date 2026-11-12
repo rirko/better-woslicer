@@ -23,7 +23,7 @@
     "test-artifacts/",
     "test-results/",
     "playwright-report/",
-    "screenshots/",
+    "docs/screenshots/",
     "package-lock.json"
   ]
 }

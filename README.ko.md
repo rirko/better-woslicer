@@ -4,11 +4,12 @@
 
 wosderge의 woslicerIII를 기반으로 만든 BMS용 오프라인 오디오 슬라이서입니다.
 
-![타임라인](screenshots/timeline.png)
+![타임라인](docs/screenshots/timeline.png)
 
 ## 기능
 
-- WAV/OGG 가져오기, WAV 슬라이스 내보내기, `.wos` 프로젝트와 BMSE 클립보드 지원.
+- WAV 및 OGG 가져오기와 WAV 슬라이스 내보내기.
+- `.wosdx` 프로젝트 저장 및 열기, 기존 `.wos` 설정 가져오기 및 내보내기, BMSE 클립보드로 마커 교환.
 - 스냅, 범위 선택, 퀀타이즈, 실행 취소/다시 실행을 지원하는 타임라인 편집.
 - 배속 모니터링, 큐 사운드, 탭 보정.
 - 주파수 대역 표시와 자동 컷 감지.
@@ -29,13 +30,6 @@ Windows x64가 기본 데스크톱 버전입니다. 다른 아키텍처와 Linux
 
 웹 버전은 브라우저에서 직접 실행됩니다: [woslicer-dx app](https://woslicer-dx.pages.dev/) (설치 불필요).
 
-소스에서 실행하려면 Node.js 26.x, npm, Git, Rust stable 툴체인이 필요합니다. Tauri 패키징에는 플랫폼별 도구(Linux는 WebKit/GTK, Windows는 WebView2)도 필요합니다.
-
-```sh
-npm ci
-npm run dev
-```
-
 ## 조작
 
 | 키 | 동작 |
@@ -50,34 +44,18 @@ npm run dev
 | Ctrl+C / X / V | 선택한 마커 복사 / 잘라내기 / 붙여넣기 |
 | Ctrl+Z / Ctrl+Shift+Z | 실행 취소 / 다시 실행 |
 | M | 모든 슬라이스 내보내기 |
-| T / Y | `.wos` 저장 / 불러오기 |
+| Ctrl+O / Ctrl+Shift+O / Ctrl+S | 오디오 열기 / `.wosdx` 프로젝트 열기 / 프로젝트 저장 |
+| T / Y | `.wos` 설정 가져오기 / 내보내기 |
 | V / B | BMSE 클립보드 쓰기 / 읽기 |
 
 왼쪽 드래그로 컷을 그리고, 오른쪽 드래그로 지우며, Shift/Ctrl+드래그로 범위를 선택하고, 컷을 드래그하면 선택 영역이 이동합니다. Ctrl+휠로 확대/축소, 가운데 버튼 드래그로 이동합니다. Alt를 누르는 동안에는 스냅이 해제됩니다.
 
-## 개발
+## 프로젝트 정보
 
-```sh
-npm run lint
-npm run fmt:check
-npm run typecheck
-npm test
-npm run build
-npm run test:app-ui
-npm run test:tauri-ui
-npm run package
-```
-
-로컬 빌드와 테스트는 기본적으로 debug를 사용합니다. release 빌드는 `npm run build -- --release` 또는 `npm run package -- --release`로 실행합니다. CI는 release만 사용합니다.
-
-커밋 시 pre-commit 훅이 스테이지된 파일의 lint와 포맷 검사를 실행합니다.
-
-네이티브 Tauri 창 테스트(`npm run test:tauri-ui`)는 Windows 전용이며 release 빌드를 대상으로 실행합니다.
-
-오디오는 내부적으로 16-bit로 변환되며 내보내기는 16-bit PCM을 사용합니다. 원본 프로그램과의 비교 테스트에는 외부 픽스처가 필요하며, 없으면 건너뜁니다.
-
-[CI](docs/CI.md), [버전 규칙](docs/VERSIONING.md), [변경 로그](CHANGELOG.md)를 참고하세요.
+[변경 로그](CHANGELOG.md) · [개발 가이드(영어)](docs/DEVELOPMENT.md)
 
 ## 라이선스와 크레딧
 
 원본 woslicer II/III: **wosderge**. 기여자가 권리를 가진 부분은 [MIT](LICENSE)이며, 원본에서 파생된 부분과 서드파티 의존성은 이 허여에 포함되지 않습니다. 범위와 저작자 표시는 [NOTICE](NOTICE)를 참고하세요.
+
+내장 BMHelper는 **exclusion**이 공개한 소스 코드를 바탕으로 Be-Music Helper(beta 4′)의 동작을 재구현했습니다. 원본 README는 금전이 오가지 않고 원작자를 명시하는 조건으로 2차 사용을 허용합니다. [원본 BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)

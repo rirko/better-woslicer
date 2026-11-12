@@ -1,5 +1,5 @@
 // @ts-check
-// Lint/fmt tool contract: docs/refactoring/LINT_FORMAT_PLAN.md
+// See docs/DEVELOPMENT.md for local quality checks.
 // ESLint checks semantics only; Oxfmt owns formatting (eslint-config-prettier turns off stylistic rules, loaded last).
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
@@ -25,7 +25,7 @@ export default tseslint.config(
       'test-artifacts/**',
       'test-results/**',
       'playwright-report/**',
-      'screenshots/**',
+      '.zcode/**',
     ],
   },
 
@@ -83,7 +83,7 @@ export default tseslint.config(
 
   {
     name: 'woslicer/node-globals',
-    files: ['scripts/**/*.{js,mjs,cjs}', '*.{js,mjs,cjs}', '*.mts'],
+    files: ['scripts/**/*.{js,mjs,cjs}', '*.{js,mjs,cjs}', '*.mts', 'tests/vitest.config.mts'],
     languageOptions: {
       globals: {
         ...globals.node,

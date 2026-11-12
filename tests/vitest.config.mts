@@ -8,7 +8,7 @@ export default defineConfig({
     vue(),
     VueI18n({
       include: ['en', 'zh', 'ja', 'ko'].map((language) =>
-        fileURLToPath(new URL(`./src/i18n/${language}.json`, import.meta.url)),
+        fileURLToPath(new URL(`../src/i18n/${language}.json`, import.meta.url)),
       ),
       runtimeOnly: true,
       compositionOnly: true,

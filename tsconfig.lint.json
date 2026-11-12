@@ -14,9 +14,9 @@
     "src/**/*.ts",
     "src/**/*.vue",
     "tests/**/*.ts",
-    "tsconfig.lint.shims.d.ts",
+    "tests/tsconfig.lint.shims.d.ts",
     "vite.config.mts",
-    "vitest.config.mts",
+    "tests/vitest.config.mts",
     "playwright.app.config.mts"
   ],
   "exclude": ["src/i18n/generated.ts", "node_modules", "dist", "src-tauri"]

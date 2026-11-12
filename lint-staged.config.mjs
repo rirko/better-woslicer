@@ -1,5 +1,5 @@
 // pre-commit checks only; tasks must never rewrite, fix, or git add staged
-// content (docs/refactoring/LINT_FORMAT_PLAN.md §3). The --concurrency 1 flag
+// content. The --concurrent false flag
 // on the lint:staged script keeps every group and task strictly serial.
 export default {
   // Staged code is linted, then checked against the committed formatter state.

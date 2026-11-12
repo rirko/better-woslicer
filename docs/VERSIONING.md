@@ -11,7 +11,7 @@ The root `package.json` → `version` is the **single editable source of truth**
 | English/Chinese CHANGELOG | Historical records, not build inputs; the first release heading must match root version |
 | CI | Executes the same version gate; no application version literal in YAML |
 
-Third-party library versions are not application versions. The Rust shell crate intentionally keeps `version = "0.0.0"` because Tauri reads the application version from the root package.json. Windows executables are unsigned; the Rust MSRV tracks the current stable toolchain (see docs/migration/IMPLEMENTATION.md).
+Third-party library versions are not application versions. The Rust shell crate intentionally keeps `version = "0.0.0"` because Tauri reads the application version from the root package.json. Windows executables are unsigned; the minimum Rust version is declared in [Cargo.toml](../src-tauri/Cargo.toml).
 
 For a new release:
 

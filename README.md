@@ -4,11 +4,12 @@
 
 An offline audio slicer for BMS, based on wosderge's woslicerIII.
 
-![Timeline](screenshots/timeline.png)
+![Timeline](docs/screenshots/timeline.png)
 
 ## Features
 
-- WAV/OGG import, WAV slice export, `.wos` projects and BMSE clipboard support.
+- Import WAV and OGG and export WAV slices.
+- Save and reopen `.wosdx` projects. Import or export legacy `.wos` settings and exchange markers with BMSE.
 - Timeline editing with snapping, selection, quantization and undo/redo.
 - Variable-speed monitoring, cue sounds and tap calibration.
 - Frequency-band display and automatic cut detection.
@@ -29,13 +30,6 @@ Windows x64 is the primary desktop package. Other architectures and Linux packag
 
 The web version runs directly in the browser: [woslicer-dx app](https://woslicer-dx.pages.dev/) — no installation needed.
 
-For source builds, use Node.js 26.x, npm, Git and the Rust stable toolchain; the Tauri bundler also needs its per-platform tooling (WebKit/GTK packages on Linux, WebView2 on Windows):
-
-```sh
-npm ci
-npm run dev
-```
-
 ## Controls
 
 | Key | Action |
@@ -50,34 +44,18 @@ npm run dev
 | Ctrl+C / X / V | Copy / cut / paste selected markers |
 | Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
 | M | Export all slices |
-| T / Y | Save / load `.wos` |
+| Ctrl+O / Ctrl+Shift+O / Ctrl+S | Open audio / open a `.wosdx` project / save the project |
+| T / Y | Import / export `.wos` settings |
 | V / B | Write / read BMSE clipboard |
 
 Left-drag paints cuts, right-drag erases, Shift/Ctrl+drag selects, and dragging a cut moves the selection. Ctrl+wheel zooms; middle-drag pans. Hold Alt to bypass snapping.
 
-## Development
+## Project links
 
-```sh
-npm run lint
-npm run fmt:check
-npm run typecheck
-npm test
-npm run build
-npm run test:app-ui
-npm run test:tauri-ui
-npm run package
-```
-
-Local builds and tests default to debug. For a release build, run `npm run build -- --release` or `npm run package -- --release`. CI uses release only.
-
-Commits run lint and format checks on staged files through a pre-commit hook.
-
-The native Tauri window profiles (`npm run test:tauri-ui`) are Windows-only and run against the release build.
-
-Audio is converted to 16-bit internally and exports use 16-bit PCM. Original-program comparison tests require external fixtures and are skipped when those are absent.
-
-See [CI](docs/CI.md), [versioning](docs/VERSIONING.md) and [changelog](CHANGELOG.md).
+[Changelog](CHANGELOG.md) · [Development guide](docs/DEVELOPMENT.md)
 
 ## License and credits
 
 Original woslicer II/III: **wosderge**. Contributor-owned material uses [MIT](LICENSE); original-derived portions and third-party dependencies are excluded from that grant. See [NOTICE](NOTICE) for scope and attribution.
+
+The built-in BMHelper reimplements the behavior of Be-Music Helper (beta 4′) using source code published by its author, **exclusion**. The original README permits secondary use when no money is involved and the author is credited. [Original BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
