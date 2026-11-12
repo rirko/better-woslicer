@@ -62,6 +62,10 @@ npm run lint
 npm run fmt:check
 npm run typecheck
 npm test
+npm run build:app:tauri
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo test --manifest-path src-tauri/Cargo.toml --locked --all-features
+cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets --all-features -- -D warnings
 npm run build
 npm run test:app-ui
 npm run package
@@ -86,11 +90,33 @@ from the preceding build, which is debug locally unless release was selected.
 
 Debug frontend output still comes from `vite build`, with the same offline
 CSP and application behavior; it skips JS/CSS minification and compressed-size
-reporting. Release frontend output minifies JS/CSS and omits source maps.
+reporting. Static builds omit source maps to reduce build work; use the Vite
+development server for source debugging. Rust dev/test builds use no optimization,
+no debug symbols, no LTO, incremental compilation and 256 codegen units to favor
+compile/link speed. Debug assertions and overflow checks remain enabled. For native
+source debugging, set `CARGO_PROFILE_DEV_DEBUG=2` explicitly.
+Release frontend output minifies JS/CSS and omits source maps.
 Rust release builds use `opt-level = "z"`, LTO, one codegen unit and symbol
 stripping. Panic unwinding remains enabled so tests and bundles can reuse
 compatible release dependencies. These settings prioritize size, without
 promising a fixed reduction for every platform.
+
+The release settings are independent of audio precision: decoding, DSP and WAV
+encoding run in TypeScript, and the OGG decoder is prebuilt WASM. Rust profile
+changes optimize the native host, not those algorithms.
+`strip = "symbols"` is equivalent to `strip = true`; it removes symbol information
+without changing normal error handling. Keep separate symbols when native crash
+symbolication is required. `panic = "abort"` is a separate failure-policy choice:
+it terminates the process on a Rust panic, skips stack unwinding and prevents
+`catch_unwind` recovery. Ordinary `Result` errors still behave normally. Standard
+Cargo tests require unwind, so abort application builds may need a second set of
+compiled dependencies. Unwind permits cleanup and catch boundaries but does not
+guarantee that the application survives every panic.
+Fat LTO and one codegen unit favor cross-crate optimization at the expense of
+build parallelism and link time. Evaluate `s`, thin LTO and more codegen units as
+a combination using identical frontend assets; compare compressed package size
+as well as executable size. See [Cargo profiles](https://doc.rust-lang.org/cargo/reference/profiles.html).
+
 
 Lint and format checks run on the whole managed scope and must pass with zero
 findings; CI runs them right after `npm ci` and before any build. Local commits
@@ -116,12 +142,14 @@ window at device scale 2), each with an isolated per-run app-data root, a
 30-second hard deadline and full process-tree cleanup. It verifies the
 application menu bar visibility, devicePixelRatio, canvas-to-DPR size
 relationships and captures per-profile screenshots under
-`test-artifacts/tauri-ui/`. It requires the release executable
-built with the following commands. On non-Windows hosts the profiles report skipped.
+`test-artifacts/tauri-ui/`. It defaults to the debug executable built with the
+following command. Tauri embeds static assets in debug builds too; plain
+`cargo build` without `custom-protocol` instead requires the development server.
+Use `--release` on both commands to check a release build explicitly.
+On non-Windows hosts the profiles report skipped.
 
 ```sh
-npm run build:app:tauri -- --release
-cargo build --release --manifest-path src-tauri/Cargo.toml
+npm run tauri -- build --no-bundle
 npm run test:tauri-ui
 ```
 

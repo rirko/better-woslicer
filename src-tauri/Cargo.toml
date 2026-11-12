@@ -38,7 +38,15 @@ unwrap_used = "deny"
 [features]
 custom-protocol = ["tauri/custom-protocol"]
 
-# Keep local dev/test incremental and unoptimized (Cargo defaults).
+# Local dev/test prioritize compile and link time. Keep debug assertions and
+# overflow checks, but skip debug symbol generation; test inherits dev.
+[profile.dev]
+opt-level = 0
+debug = 0
+incremental = true
+codegen-units = 256
+lto = false
+
 # CI tests, Clippy and bundles share this size-oriented release profile.
 [profile.release]
 opt-level = "z"

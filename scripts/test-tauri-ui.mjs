@@ -8,7 +8,7 @@
 // Outer bounds are tuned per run (title bar and OS scaling shift the client
 // area), so assertions check the reached css viewport and the DPR/canvas
 // relationships instead of assuming exact outer bounds. Requires the selected
-// build (npm run build:app:tauri + cargo build) and Windows WebView2.
+// static build (npm run tauri -- build --no-bundle) and Windows WebView2.
 // Run: node scripts/test-tauri-ui.mjs
 import { createConnection, createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
@@ -32,13 +32,9 @@ const PROFILES = [
 const HARD_TIMEOUT_MS = 30_000;
 const VIEWPORT_TOLERANCE = 3;
 
-// A plain `cargo build` debug exe bakes in the devUrl and shows the WebView2
-// error page without a running dev server, so UI profiles default to release.
-const argv = process.argv.slice(2);
-const explicitProfile =
-  argv.some((arg) => ['--debug', '-d', '--release'].includes(arg)) ||
-  process.env.WOSLICER_BUILD_PROFILE !== undefined;
-const selected = resolveBuildProfile(explicitProfile ? argv : [...argv, '--release']);
+// Tauri's build command embeds static assets in debug too. A plain cargo build
+// without custom-protocol instead targets devUrl and is not a standalone app.
+const selected = resolveBuildProfile(process.argv.slice(2));
 if (selected.args.length) throw new Error(`Unknown profile options: ${selected.args.join(' ')}`);
 if (platform() !== 'win32') {
   console.log('tauri ui profiles: skipped on this platform (WebView2/CDP is Windows-only)');
@@ -48,7 +44,7 @@ const targetDir = process.env.CARGO_TARGET_DIR ?? resolve('src-tauri/target');
 const exe = resolve(targetDir, selected.profile, 'woslicer-dx.exe');
 if (!existsSync(exe)) {
   console.error(
-    `built executable not found: ${exe} — run npm run build:app:tauri && cargo build --manifest-path src-tauri/Cargo.toml first`,
+    `built executable not found: ${exe} — run npm run tauri -- build --no-bundle${selected.profile === 'release' ? ' --release' : ''} first`,
   );
   process.exit(1);
 }

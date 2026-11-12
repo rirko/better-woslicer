@@ -40,7 +40,7 @@ export default defineConfig({
     emptyOutDir: true,
     minify: release ? 'oxc' : false,
     cssMinify: release,
-    sourcemap: release ? false : 'hidden',
+    sourcemap: false,
     reportCompressedSize: release,
     target: 'es2022',
     manifest: true,

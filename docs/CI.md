@@ -62,9 +62,18 @@ The workflow creates an immediately public **prerelease**, not a draft.
 Reruns update matching assets and convert an existing draft to a public
 prerelease. It does not mark the prerelease as the latest stable release.
 
-When repository variable CLOUDFLARE_PROJECT_NAME is set, the same tested web
-ZIP is deployed to Cloudflare Pages after release publication. This requires
-CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets. Without the project
-variable, Pages deployment is skipped; the web ZIP still ships in the release.
+The same tested web ZIP is deployed to the existing Cloudflare Pages Direct Upload
+project after release publication. Pages is not connected to the Git repository:
+GitHub Actions uploads the prebuilt files through Wrangler and the Cloudflare API.
+Repository variable CLOUDFLARE_PROJECT_NAME and secrets CLOUDFLARE_API_TOKEN and
+CLOUDFLARE_ACCOUNT_ID are required; missing configuration fails the deployment
+job instead of silently skipping it. The workflow reads the project's existing
+`production_branch` from the API and passes it to Wrangler. This is a Pages
+deployment target, independent of the repository branch or release tag; no Pages
+settings are changed and no Git integration is required. After upload, the
+job requires a production deployment and compares the deployed `build-info.json`
+with the tested archive's copy.
+If deployment fails, the prerelease remains published and the failed job can be
+rerun without rebuilding or changing the desktop release gate.
 
 Use a workflow run to verify hosted platforms.
