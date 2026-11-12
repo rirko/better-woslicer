@@ -2,12 +2,16 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
-## Unreleased
+## 1.0.0 — 2026-11-13
 
 ### Added
 
 - A visible banner shows the current stage while restoring a session or loading audio.
 - DX projects preserve Unicode BMHelper division names and ZZ/FF numbering mode. BMH export follows the original character substitutions and warns when names change.
+- Save and reopen `.wosdx` projects with cuts, settings and BMHelper work. Moved audio files can be linked again.
+- Open multi-track projects for viewing and save the original file unchanged.
+- Import `.wos` timing and cuts into the current project or use them to start a new one.
+- Import saved sessions from older versions, with a preview before replacing your work.
 
 ### Fixed
 
@@ -15,17 +19,6 @@
 - Desktop projects save absolute audio paths and reconnect available media when opened. Relinking a moved file updates its saved path.
 - Projects can save BMHelper work above the previous 16 MiB limit. Large MIDI note lists no longer fail with a stack overflow during saving.
 - BMHelper follows project undo, redo and reopening, so its panel and exports use the current project contents.
-
-## 1.0.0 — 2026-11-11
-
-### Added
-
-- Save and reopen `.wosdx` projects with cuts, settings and BMHelper work. Moved audio files can be linked again.
-- Open multi-track projects for viewing and save the original file unchanged.
-- Import `.wos` timing and cuts into the current project or use them to start a new one.
-- Import saved sessions from older versions, with a preview before replacing your work.
-
-### Fixed
 
 - 32-bit WAV files now show their original bit depth and format. Processing and output remain 16-bit.
 - The app keeps damaged recovery files until you agree to discard them. Failed recovery saves show a warning and keep your work ready to retry.
