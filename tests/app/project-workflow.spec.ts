@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { encodeWav16 } from '../../src/core/wav';
 import { decodeProject } from '../../src/project/codec';
+import { readBmh } from '../../src/core/bmh';
 
 async function pick(page: Page, label: string, name: string, bytes: Uint8Array): Promise<void> {
   const choosing = page.waitForEvent('filechooser');
@@ -12,12 +13,66 @@ async function pick(page: Page, label: string, name: string, bytes: Uint8Array):
   ).setFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) });
 }
 
+test('opens and exports an original BMH file without changing its bytes', async ({ page }) => {
+  page.on('dialog', (dialog) => {
+    void dialog.accept();
+  });
+  const original = await readFile('tests/fixtures/bmh/original-events.bmh');
+  await page.addInitScript(() =>
+    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true }),
+  );
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'BMHelper', exact: true }).click();
+  await pick(page, 'Open project', 'original-events.bmh', original);
+  await expect(page.locator('.division-actions .el-select')).toContainText('コード分割');
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save project', exact: true }).click();
+  const path = await (await downloading).path();
+  if (!path) throw new Error('Missing BMH download');
+  expect(await readFile(path)).toEqual(original);
+  const name = '简体中文・한국어・🎵';
+  const rename = page.locator('.division-name input');
+  await rename.fill(name);
+  await rename.press('Tab');
+  const savingLegacy = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save project', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('CP932');
+  const legacyPath = await (await savingLegacy).path();
+  if (!legacyPath) throw new Error('Missing converted BMH download');
+  expect(readBmh(new Uint8Array(await readFile(legacyPath))).divisions[0].name).not.toBe(name);
+  await expect(rename).toHaveValue(name);
+  const savingDx = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Save \.wosdx/ }).click();
+  const dxPath = await (await savingDx).path();
+  if (!dxPath) throw new Error('Missing DX project download');
+  const dx = await readFile(dxPath);
+  expect(dx.toString('utf8')).toContain(name);
+  const decoded = decodeProject(dx);
+  if (decoded.kind !== 'supported') throw new Error('Unexpected project version');
+  expect(decoded.project.bmhelper?.divisions[0].name).toBe(name);
+  await pick(page, 'Open .wosdx...', 'unicode.wosdx', dx);
+  await expect(rename).toHaveValue(name);
+});
+
 test('opens, saves and relinks a project at native browser scale', async ({ page }, info) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() =>
     Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true }),
   );
+  await page.addInitScript(() => {
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    let first = true;
+    crypto.subtle.digest = async (...args) => {
+      if (first) {
+        first = false;
+        await new Promise<void>((resolve) =>
+          document.addEventListener('resume-media', () => resolve(), { once: true }),
+        );
+      }
+      return digest(...args);
+    };
+  });
   page.on('dialog', (dialog) => {
     void dialog.accept();
   });
@@ -26,7 +81,18 @@ test('opens, saves and relinks a project at native browser scale', async ({ page
   const pcm = Int16Array.from({ length: 48000 }, (_, i) => Math.round(Math.sin(i / 12) * 16000));
   const wav = encodeWav16([pcm], 48000, pcm.length);
   await pick(page, 'Open', 'tone.wav', wav);
+  const loading = page.locator('.media-loading');
+  await expect(loading).toBeVisible();
+  await expect(loading).toContainText('Checking media');
+  await expect(loading).toContainText('tone.wav');
+  await expect(page.getByRole('menubar')).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+  ).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: info.outputPath('media-loading.png'), fullPage: true });
+  await page.evaluate(() => document.dispatchEvent(new Event('resume-media')));
   await expect(page.locator('.status-message')).toContainText('Ready: tone');
+  await expect(loading).toBeHidden();
   await page.locator('.timeline-viewport').focus();
   await page.keyboard.press('z');
   await page.keyboard.press('ArrowRight');

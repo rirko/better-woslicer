@@ -1,4 +1,4 @@
-import { inject, provide, type InjectionKey } from 'vue';
+import { inject, provide, readonly, shallowRef, type InjectionKey } from 'vue';
 import {
   decodeProject,
   encodeProject,
@@ -54,6 +54,11 @@ export interface WorkspaceOptions {
   confirmRelinkDifference?: (difference: RelinkDifference) => Promise<boolean>;
   confirmLegacyImport?: (summary: LegacySummary) => Promise<boolean>;
 }
+export interface LoadingActivity {
+  stage: 'restoring' | 'opening' | 'reading' | 'verifying' | 'decoding';
+  name?: string;
+  mediaId?: string;
+}
 export function createWorkspace(options: WorkspaceOptions) {
   const { platform, editor, createEngine = createAudioEngine } = options;
   let generation = 0,
@@ -65,6 +70,7 @@ export function createWorkspace(options: WorkspaceOptions) {
   let engine: AudioEngine | null = null;
   let pendingEngine: AudioEngine | null = null;
   let opening = 0;
+  const loading = shallowRef<LoadingActivity | null>(null);
   let resetPending: Promise<void> | null = null;
   const actions = createEditorActions(editor);
   const message = (error: unknown): string =>
@@ -83,13 +89,17 @@ export function createWorkspace(options: WorkspaceOptions) {
     () => engine,
     () => generation,
   );
-  function beginOpening(): number {
+  function beginOpening(activity: LoadingActivity | null = null): number {
     opening++;
+    loading.value = activity;
     pendingEngine?.dispose();
     pendingEngine = null;
     if (editor.phase.kind === 'loading')
       editor.setPhase({ kind: editor.source ? 'ready' : 'empty' });
     return opening;
+  }
+  function finishOpening(request: number): void {
+    if (request === opening) loading.value = null;
   }
   function invalidate(): number {
     beginOpening();
@@ -123,11 +133,14 @@ export function createWorkspace(options: WorkspaceOptions) {
   async function loadAudio(file: OpenedFile, preserveBaseName = false): Promise<void> {
     if (!requireEditable()) return;
     if (resetPending) await resetPending;
-    if (resetPending) await resetPending;
     if (disposed) return;
     sessionClosed = false;
     persistence.resume();
-    const request = beginOpening(),
+    const request = beginOpening({
+        stage: 'verifying',
+        name: file.name,
+        mediaId: preserveBaseName ? activeMedia(editor.document)?.mediaId : undefined,
+      }),
       revision = editor.docRevision;
     const previousPhase = editor.source ? { kind: 'ready' as const } : { kind: 'empty' as const };
     editor.setPhase({ kind: 'loading', name: file.name });
@@ -136,6 +149,7 @@ export function createWorkspace(options: WorkspaceOptions) {
     try {
       const identity = await identifyAudio(file);
       if (disposed || request !== opening) return;
+      loading.value = { ...loading.value, stage: 'decoding', name: file.name };
       worker = createEngine();
       pendingEngine = worker;
       const result = await worker.decode(file.name, file.bytes);
@@ -144,6 +158,7 @@ export function createWorkspace(options: WorkspaceOptions) {
         throw new Error('Project changed during audio loading; select the audio again');
       const expected = preserveBaseName ? activeMedia(editor.document) : null;
       if (expected) {
+        let different = false;
         try {
           verifyAudio(expected, identity, result);
         } catch (error) {
@@ -153,9 +168,21 @@ export function createWorkspace(options: WorkspaceOptions) {
             throw error;
           if (!(await confirm({ current: expected.name, selected: file.name }))) throw error;
           if (disposed || request !== opening || revision !== editor.docRevision) throw error;
+          different = true;
+        }
+        const pathChanged =
+          file.absolutePath !== undefined &&
+          (expected.originHint?.kind !== 'desktop' ||
+            expected.originHint.pathHint !== file.absolutePath);
+        if (different || pathChanged) {
           editor.transact((draft) => {
             const media = draft.media.find((item) => item.mediaId === expected.mediaId);
             if (media) {
+              media.originHint = file.absolutePath
+                ? { kind: 'desktop', pathHint: file.absolutePath }
+                : null;
+            }
+            if (media && different) {
               media.name = file.name;
               media.format = identity.format;
               media.byteLength = identity.byteLength;
@@ -165,7 +192,7 @@ export function createWorkspace(options: WorkspaceOptions) {
               media.integrity = identity.integrity;
             }
             const clip = draft.tracks[0]?.clips.find((item) => item.mediaId === expected.mediaId);
-            if (clip) clip.frameCount = result.source.length;
+            if (clip && different) clip.frameCount = result.source.length;
           });
         }
       }
@@ -200,6 +227,7 @@ export function createWorkspace(options: WorkspaceOptions) {
       editor.setPhase(previousPhase);
       editor.setStatus('loadFailed', { message: message(error) }, true);
     } finally {
+      finishOpening(request);
       if (pendingEngine === worker) pendingEngine = null;
       worker?.dispose();
     }
@@ -209,7 +237,7 @@ export function createWorkspace(options: WorkspaceOptions) {
     if (recoveryBlock && !(await releaseRecoveryBlock())) return;
     const version = generation,
       revision = editor.docRevision,
-      request = beginOpening();
+      request = beginOpening({ stage: 'opening' });
     try {
       const file = await platform.openFile('audio');
       if (
@@ -223,13 +251,15 @@ export function createWorkspace(options: WorkspaceOptions) {
     } catch (error) {
       if (!disposed && request === opening)
         editor.setStatus('loadFailed', { message: message(error) }, true);
+    } finally {
+      finishOpening(request);
     }
   }
   async function relinkAudio(): Promise<void> {
     if (!requireEditable()) return;
     if (!activeMedia(editor.document)) return;
     const revision = editor.docRevision,
-      request = beginOpening();
+      request = beginOpening({ stage: 'opening', name: activeMedia(editor.document)?.name });
     try {
       const file = await platform.openFile('audio');
       if (file && !disposed && revision === editor.docRevision && request === opening)
@@ -237,9 +267,11 @@ export function createWorkspace(options: WorkspaceOptions) {
     } catch (error) {
       if (!disposed && request === opening)
         editor.setStatus('loadFailed', { message: message(error) }, true);
+    } finally {
+      finishOpening(request);
     }
   }
-  function acceptProject(file: OpenedFile): void {
+  async function acceptProject(file: OpenedFile): Promise<void> {
     const parsed = decodeProject(file.bytes);
     if (parsed.kind === 'unsupported-version')
       throw new Error(`Unsupported project version: ${parsed.version}`);
@@ -269,20 +301,36 @@ export function createWorkspace(options: WorkspaceOptions) {
       editor.setStatus(media ? 'projectMediaMissing' : 'projectOpened', {
         name: media?.name ?? file.name,
       });
+    if (!limited && media && file.reference && media.originHint?.kind === 'desktop') {
+      const request = beginOpening({ stage: 'reading', name: media.name, mediaId: media.mediaId }),
+        revision = editor.docRevision;
+      try {
+        const audio = await platform.openProjectMedia(file.reference, media.mediaId);
+        if (audio && !disposed && request === opening && revision === editor.docRevision)
+          await loadAudio(audio, true);
+      } catch {
+        if (!disposed && request === opening)
+          editor.setStatus('projectMediaMissing', { name: media.name }, true);
+      } finally {
+        finishOpening(request);
+      }
+    }
   }
   async function openProject(): Promise<void> {
     if (recoveryBlock && !(await releaseRecoveryBlock())) return;
     if (resetPending) await resetPending;
     if (disposed) return;
     const revision = editor.docRevision,
-      request = beginOpening();
+      request = beginOpening({ stage: 'opening' });
     try {
       const file = await platform.openFile('wosdx');
       if (file && !disposed && request === opening && revision === editor.docRevision)
-        acceptProject(file);
+        await acceptProject(file);
     } catch (error) {
       if (!disposed && request === opening)
         editor.setStatus('loadFailed', { message: message(error) }, true);
+    } finally {
+      finishOpening(request);
     }
   }
   async function saveProject(): Promise<void> {
@@ -326,24 +374,29 @@ export function createWorkspace(options: WorkspaceOptions) {
     if (recoveryBlock && !(await releaseRecoveryBlock())) return;
     const project = /\.wosdx$/i.test(file.name);
     if (!project && !requireEditable()) return;
-    const request = beginOpening(),
+    const request = beginOpening({ stage: 'reading', name: file.name }),
       revision = editor.docRevision;
     try {
       if (file.size > (project ? PROJECT_FILE_MAX_BYTES : 2 * 1024 * 1024 * 1024))
-        throw new Error(project ? 'Project exceeds 16 MiB' : 'Audio exceeds 2 GiB');
+        throw new Error(project ? 'Project exceeds 64 MiB' : 'Audio exceeds 2 GiB');
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (!disposed && request === opening && revision === editor.docRevision) {
         const opened = { name: file.name, bytes, reference: null };
-        if (project) acceptProject(opened);
+        if (project) await acceptProject(opened);
         else await loadAudio(opened);
       }
     } catch (error) {
       if (!disposed && request === opening)
         editor.setStatus('dropFailed', { message: message(error) }, true);
+    } finally {
+      finishOpening(request);
     }
   }
   async function reopen(reference: string, preserveBaseName = false): Promise<void> {
-    const request = beginOpening(),
+    const request = beginOpening({
+        stage: 'reading',
+        name: activeMedia(editor.document)?.name ?? editor.lastFile?.name,
+      }),
       revision = editor.docRevision;
     try {
       const file = await platform.reopenFile(reference);
@@ -356,6 +409,8 @@ export function createWorkspace(options: WorkspaceOptions) {
           { name: activeMedia(editor.document)?.name ?? reference },
           true,
         );
+    } finally {
+      finishOpening(request);
     }
   }
   function assertWosTiming(data: {
@@ -517,7 +572,7 @@ export function createWorkspace(options: WorkspaceOptions) {
   async function restoreSession(): Promise<void> {
     const version = generation,
       revision = editor.docRevision,
-      request = beginOpening();
+      request = beginOpening({ stage: 'restoring' });
     persistence.pause();
     try {
       let outcome: SessionReadResult;
@@ -558,6 +613,7 @@ export function createWorkspace(options: WorkspaceOptions) {
         editor.setStatus('sessionRecoverFuture', { version: outcome.version }, true);
       else editor.setStatus('sessionRecoverReadFailed', { message: message(outcome.error) }, true);
     } finally {
+      finishOpening(request);
       if (!disposed && !sessionClosed && !recoveryBlock) persistence.resume();
     }
   }
@@ -590,6 +646,7 @@ export function createWorkspace(options: WorkspaceOptions) {
   }
   return {
     editor,
+    loading: readonly(loading),
     platform,
     actions,
     openAudio,

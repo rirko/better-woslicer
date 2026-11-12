@@ -8,7 +8,8 @@ use std::{
 use tauri::{AppHandle, Manager};
 use tempfile::NamedTempFile;
 
-const MAX_SESSION_BYTES: u64 = 16 * 1024 * 1024;
+// Recovery wraps the project with local bindings and UI settings.
+const MAX_SESSION_BYTES: u64 = super::files::MAX_PROJECT_BYTES + 1024 * 1024;
 
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path.parent().ok_or("missing data directory")?;
@@ -45,7 +46,7 @@ fn read_json(path: &Path) -> Result<Value, String> {
         .read_to_end(&mut bytes)
         .map_err(|error| error.to_string())?;
     if bytes.len() as u64 > MAX_SESSION_BYTES {
-        return Err("session exceeds 16 MiB".into());
+        return Err("session exceeds 65 MiB".into());
     }
     serde_json::from_slice(&bytes).map_err(|error| error.to_string())
 }
@@ -61,7 +62,7 @@ pub(crate) fn read_session(app: AppHandle) -> Result<Value, String> {
 pub(crate) fn write_session(snapshot: Value, app: AppHandle) -> Result<(), String> {
     let bytes = serde_json::to_vec(&snapshot).map_err(|error| error.to_string())?;
     if bytes.len() as u64 > MAX_SESSION_BYTES {
-        return Err("session exceeds 16 MiB".into());
+        return Err("session exceeds 65 MiB".into());
     }
     atomic_write(&session_path(&app)?, &bytes)
 }
@@ -89,6 +90,18 @@ pub(crate) async fn import_legacy_session() -> Result<Option<Value>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recovery_accepts_large_embedded_payloads_and_rejects_oversized_files()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("session.json");
+        let value = serde_json::json!({"project": {"bmhelper": {"bytesBase64": "A".repeat(17 * 1024 * 1024)}}});
+        atomic_write(&path, &serde_json::to_vec(&value)?)?;
+        assert_eq!(read_json(&path)?, value);
+        File::create(&path)?.set_len(MAX_SESSION_BYTES + 1)?;
+        assert!(read_json(&path).is_err());
+        Ok(())
+    }
     #[test]
     fn legacy_json_is_data_only_and_round_trips() -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;

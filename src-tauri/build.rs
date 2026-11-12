@@ -32,6 +32,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "open_file",
             "reopen_file",
+            "open_project_media",
             "begin_read",
             "close_reader",
             "read_file_chunk",

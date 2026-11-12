@@ -1,4 +1,12 @@
 {
+  "loading": {
+    "restoring": "Restoring session…",
+    "opening": "Opening file…",
+    "reading": "Reading media…",
+    "verifying": "Checking media…",
+    "decoding": "Decoding audio and preparing waveform…",
+    "hint": "Large audio files can take a while. Loading continues in the background."
+  },
   "chrome": {
     "projectUnsaved": "Unsaved changes",
     "mediaMissing": "Audio unavailable: {name}. Select the original file to relink it.",
@@ -287,6 +295,7 @@
     "bmhProjectOpened": "Project opened: {file}",
     "bmhProjectSaved": "Project saved: {file}",
     "bmhOpenFailed": "Failed to open: {message}",
+    "bmhNameConverted": "BMH export converts these names with the original program's CP932 rules: {names}. DX keeps the original Unicode names. Save .wosdx to preserve them.",
     "cutBeyondEnd": "Cut position is beyond the end of the audio",
     "emptySlice": "This cut is at the end of the audio — empty slice",
     "exportSkippedBeyond": "{count} cut(s) beyond the audio end were skipped",

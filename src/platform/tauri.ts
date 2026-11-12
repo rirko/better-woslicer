@@ -17,6 +17,9 @@ async function readOpened(value: unknown, project = false): Promise<OpenedFile> 
     !('name' in value) ||
     typeof value.name !== 'string' ||
     !('reference' in value) ||
+    !('absolutePath' in value) ||
+    typeof value.absolutePath !== 'string' ||
+    value.absolutePath.length === 0 ||
     !('size' in value) ||
     typeof value.size !== 'number' ||
     !Number.isSafeInteger(value.size) ||
@@ -27,7 +30,7 @@ async function readOpened(value: unknown, project = false): Promise<OpenedFile> 
   }
   const id = reference(value.reference);
   if ((project || /\.wosdx$/i.test(value.name)) && value.size > PROJECT_FILE_MAX_BYTES)
-    throw new Error('Project exceeds 16 MiB');
+    throw new Error('Project exceeds 64 MiB');
   // Every transfer reads through its own host handle; concurrent transfers of
   // the same reference keep independent seek positions and lifetimes.
   const transfer = reference(await invoke('begin_read', { reference: id }));
@@ -40,7 +43,7 @@ async function readOpened(value: unknown, project = false): Promise<OpenedFile> 
         throw new Error('Incomplete binary file transfer');
       bytes.set(new Uint8Array(raw), offset);
     }
-    return { name: value.name, reference: id, bytes };
+    return { name: value.name, reference: id, absolutePath: value.absolutePath, bytes };
   } finally {
     await invoke('close_reader', { transfer }).catch(() => undefined);
   }
@@ -70,9 +73,13 @@ export function createTauriPlatform(): Platform {
     async reopenFile(id) {
       return readOpened(await invoke<unknown>('reopen_file', { reference: id }));
     },
+    async openProjectMedia(projectReference, mediaId) {
+      const value: unknown = await invoke('open_project_media', { projectReference, mediaId });
+      return value === null ? null : readOpened(value);
+    },
     async saveFile(kind, name, bytes) {
       if (kind === 'wosdx' && bytes.byteLength > PROJECT_FILE_MAX_BYTES)
-        throw new Error('Project exceeds 16 MiB');
+        throw new Error('Project exceeds 64 MiB');
       const id: unknown = await invoke('prepare_save', { kind, name, size: bytes.byteLength });
       if (id === null) return false;
       await writeBytes(reference(id), bytes);

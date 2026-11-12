@@ -1,4 +1,12 @@
 {
+  "loading": {
+    "restoring": "正在恢复上次会话…",
+    "opening": "正在打开文件…",
+    "reading": "正在读取媒体…",
+    "verifying": "正在校验媒体…",
+    "decoding": "正在解码音频并生成波形…",
+    "hint": "较大的音频文件需要一些时间，加载正在后台进行。"
+  },
   "chrome": {
     "projectUnsaved": "有未保存的修改",
     "mediaMissing": "音频不可用：{name}。请选择原文件重新关联。",
@@ -287,6 +295,7 @@
     "bmhProjectOpened": "工程已打开：{file}",
     "bmhProjectSaved": "工程已保存：{file}",
     "bmhOpenFailed": "打开失败：{message}",
+    "bmhNameConverted": "BMH 导出按原版 CP932 规则转换这些名称：{names}。DX 保留原始 Unicode 名称，请保存 .wosdx 工程以保留完整内容。",
     "cutBeyondEnd": "切点超出音频末尾",
     "emptySlice": "该切点位于音频末尾——空切片",
     "exportSkippedBeyond": "已跳过 {count} 个超出音频末尾的切点",

@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef, triggerRef, watch } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 import { defineStore } from 'pinia';
 import {
   createDivision,
@@ -7,48 +7,27 @@ import {
   setStartDefinition,
   type DivisionSetting,
 } from '../core/bmhelper';
-import { readBmh, writeBmh, type BmhProject } from '../core/bmh';
+import { readBmh, writeBmh, type BmhProject, type BmhNameChange } from '../core/bmh';
 import { inspectSmf, readSmfSequence, writeSmfSequence } from '../core/smf';
 import type { EditorStore } from '../slicing/editor-store';
-import type { ProjectDocument } from '../project/schema';
-
-/** Matches the wosdx codec bound for the bmhelper payload. */
-const BMH_PAYLOAD_MAX_BASE64 = 32 * 1024 * 1024;
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 0x8000)
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  return btoa(binary);
-}
-function base64ToBytes(value: string): Uint8Array {
-  return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
-}
+import {
+  bmhelperDocumentSchema,
+  bmhelperFromDocument,
+  bmhelperToDocument,
+  type BmhelperDocument,
+} from '../project/bmhelper';
 
 export const useBmhelperStore = defineStore('bmhelper', () => {
   const bound = shallowRef<EditorStore | null>(null);
-  const standalonePayload = ref<string | null>(null);
-  const payload = computed(() =>
-    bound.value ? (bound.value.document.bmhelper?.bytesBase64 ?? null) : standalonePayload.value,
+  const standaloneDocument = shallowRef<BmhelperDocument | null>(null);
+  const document = computed(() =>
+    bound.value ? bound.value.document.bmhelper : standaloneDocument.value,
   );
-  // BMH bytes omit session settings such as zzDefinition. Cache committed
-  // snapshots without making them independently editable. Weak keys retain
-  // those settings through undo/redo without retaining discarded history.
-  const history = shallowRef(new WeakMap<ProjectDocument, BmhProject>());
-  const committed = shallowRef<{ payload: string; project: BmhProject } | null>(null);
-  const project = computed(() => {
-    const bytesBase64 = payload.value;
-    if (bytesBase64 === null) return null;
-    const document = bound.value?.document;
-    const snapshot = document ? history.value.get(document) : undefined;
-    if (snapshot) return snapshot;
-    if (committed.value?.payload === bytesBase64) return committed.value.project;
-    try {
-      const decoded = readBmh(base64ToBytes(bytesBase64));
-      return decoded.source.notes.length ? decoded : null;
-    } catch {
-      return null;
-    }
-  });
+  // The UTF-8 document owns names and numbering mode. BMH conversion happens only at file IO.
+  const project = computed(() =>
+    document.value ? bmhelperFromDocument(bmhelperDocumentSchema.parse(document.value)) : null,
+  );
+  const payload = computed(() => (document.value === null ? null : JSON.stringify(document.value)));
   const name = ref('');
   const selectedIndex = ref(0);
   const savedPayload = ref<string | null>(null);
@@ -59,8 +38,6 @@ export const useBmhelperStore = defineStore('bmhelper', () => {
     () => bound.value?.documentGeneration,
     () => {
       saveScope++;
-      history.value = new WeakMap();
-      committed.value = null;
       name.value = '';
       selectedIndex.value = 0;
       savedPayload.value = payload.value;
@@ -77,31 +54,18 @@ export const useBmhelperStore = defineStore('bmhelper', () => {
     },
     { flush: 'sync' },
   );
-  watch(
-    () => bound.value?.document,
-    (document) => {
-      if (document && project.value) history.value.set(document, project.value);
-    },
-    { flush: 'sync' },
-  );
   /** The document payload owns content; only names and selection stay local. */
   function bindEditor(target: EditorStore): void {
     if (!bound.value) bound.value = target;
   }
   function commitProject(next: BmhProject): void {
-    const bytesBase64 = bytesToBase64(writeBmh(next));
-    if (bytesBase64.length > BMH_PAYLOAD_MAX_BASE64) throw new Error('bmh-too-large');
+    const nextDocument = bmhelperToDocument(next);
     const editor = bound.value;
     if (editor) {
       editor.transact((draft) => {
-        draft.bmhelper = { format: 'bmh', bytesBase64 };
+        draft.bmhelper = nextDocument;
       });
-      history.value.set(editor.document, next);
-      // Reopening identical BMH bytes can reset session settings without a
-      // document revision. Publish the cache change explicitly in that case too.
-      triggerRef(history);
-    } else standalonePayload.value = bytesBase64;
-    committed.value = { payload: bytesBase64, project: next };
+    } else standaloneDocument.value = nextDocument;
   }
   function inspectMidi(bytes: Uint8Array) {
     const inspection = inspectSmf(bytes);
@@ -130,6 +94,12 @@ export const useBmhelperStore = defineStore('bmhelper', () => {
   }
   function selectDivision(index: number): void {
     if (Number.isInteger(index) && project.value?.divisions[index]) selectedIndex.value = index;
+  }
+  function renameDivision(name: string): void {
+    if (!project.value?.divisions[selectedIndex.value]) return;
+    const next = structuredClone(project.value);
+    next.divisions[selectedIndex.value].name = name;
+    commitProject(next);
   }
   function deleteDivision(index = selectedIndex.value): void {
     if (!Number.isInteger(index) || !project.value?.divisions[index]) return;
@@ -181,12 +151,17 @@ export const useBmhelperStore = defineStore('bmhelper', () => {
     return writeBmh(project.value);
   }
   /** A completed save updates its byte baseline, never a newer project's state. */
-  async function saveBmhProject(save: (bytes: Uint8Array) => Promise<boolean>): Promise<boolean> {
-    const bytes = saveProjectBytes();
+  async function saveBmhProject(
+    save: (bytes: Uint8Array, nameChanges: BmhNameChange[]) => Promise<boolean>,
+  ): Promise<boolean> {
+    if (!project.value) throw new Error('no-project');
+    const nameChanges: BmhNameChange[] = [];
+    const bytes = writeBmh(project.value, (change) => nameChanges.push(change));
     const savedAt = saveScope;
     const savingPayload = payload.value;
-    if (!(await save(bytes))) return false;
-    if (savedAt === saveScope) savedPayload.value = savingPayload;
+    if (!(await save(bytes, nameChanges))) return false;
+    // A lossy legacy export does not save the original Unicode names.
+    if (savedAt === saveScope && nameChanges.length === 0) savedPayload.value = savingPayload;
     return true;
   }
   function cutTicks(): number[] {
@@ -200,9 +175,7 @@ export const useBmhelperStore = defineStore('bmhelper', () => {
       bound.value.transact((draft) => {
         draft.bmhelper = null;
       });
-    standalonePayload.value = null;
-    committed.value = null;
-    history.value = new WeakMap();
+    standaloneDocument.value = null;
     saveScope++;
     name.value = '';
     selectedIndex.value = 0;
@@ -219,6 +192,7 @@ export const useBmhelperStore = defineStore('bmhelper', () => {
     importMidi,
     addDivision,
     selectDivision,
+    renameDivision,
     deleteDivision,
     transpose,
     setStart,

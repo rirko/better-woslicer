@@ -1,9 +1,12 @@
 import { z } from 'zod';
 import { MAX_TICKS } from '../core/timebase';
+import { bmhelperDocumentSchema } from './bmhelper';
 
 export const PROJECT_FORMAT = 'wosdx' as const;
 export const PROJECT_SCHEMA_VERSION = 1 as const;
-export const PROJECT_FILE_MAX_BYTES = 16 * 1024 * 1024;
+// Application memory budgets, not requirements of the original binary formats.
+export const PROJECT_FILE_MAX_BYTES = 64 * 1024 * 1024;
+export const SESSION_FILE_MAX_BYTES = PROJECT_FILE_MAX_BYTES + 1024 * 1024;
 export const PROJECT_MAX_MEDIA = 256;
 export const PROJECT_MAX_TRACKS = 256;
 export const PROJECT_MAX_CLIPS = 100_000;
@@ -46,7 +49,7 @@ const mediaSchema = z.object({
   mediaId: text(128),
   name: text(1024),
   format: z.enum(['wav', 'ogg']),
-  byteLength: integer(0, PROJECT_FILE_MAX_BYTES * 1024).nullable(),
+  byteLength: integer(0, 16 * 1024 * 1024 * 1024).nullable(),
   sampleRateHz: integer(1, 768000).nullable(),
   channels: integer(1, 64).nullable(),
   framesPerChannel: integer(0, PROJECT_MAX_FRAMES).nullable(),
@@ -121,15 +124,7 @@ export const projectV1Schema = z.object({
   }),
   media: z.array(mediaSchema).max(PROJECT_MAX_MEDIA),
   tracks: z.array(trackSchema).min(1).max(PROJECT_MAX_TRACKS),
-  bmhelper: z
-    .object({
-      format: z.literal('bmh'),
-      bytesBase64: z
-        .string()
-        .max(32 * 1024 * 1024)
-        .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
-    })
-    .nullable(),
+  bmhelper: bmhelperDocumentSchema.nullable(),
 });
 
 export type ProjectFileV1 = z.infer<typeof projectV1Schema>;

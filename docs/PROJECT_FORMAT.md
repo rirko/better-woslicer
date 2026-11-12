@@ -6,6 +6,7 @@ This document describes the v1 fields, compatibility rules and local media bindi
 ## Format and validation
 
 - `.wos` is the locked, 6,168-byte settings exchange format implemented in `src/core/wos.ts`. Do not add fields or change its encoding.
+- Original `.bmh` compatibility is also locked. The [BMH format contract](BMH_FORMAT.md) applies at import and export. DX uses UTF-8 JSON internally.
 - `.wosdx` is bounded UTF-8 JSON with `format: "wosdx"` and `schemaVersion: 1`.
 - The schema version is independent of the application, session and Rust crate versions.
 - Audio is not embedded. Projects store media metadata and origin hints. Projects may embed BMHelper data.
@@ -37,7 +38,24 @@ to the schema and cross-field business rules to the codec. The parser rejects in
 | `tracks[]` | `trackId`, `name`, `gainDb`, `muted`, `solo`, `views`, `clips[]`. |
 | `track.views` | `rms` and `bands` accept `null` (inherit), `true` or `false`. Spectrum is `"reserved"`. |
 | `clip` | `clipId`, `mediaId`, `timelineStartSeconds`, `sourceOffsetFrames`, `frameCount`. |
-| `bmhelper` | `null` or `{format: "bmh", bytesBase64: string}` containing BMHelper work. |
+| `bmhelper` | `null` or `{format: "bmhelper", source, divisions}` containing structured BMHelper work. |
+
+### BMHelper data
+
+`src/project/bmhelper.ts` validates the DX representation and reconstructs derived note references.
+`source` contains `quantize`, `notes`, `pitches` and `controls`.
+Each division contains `name`, `quantize`, `recording`, `definitions`, `src2def` and `zzDefinition`.
+Event fields retain the signed 32-bit ranges used by BMH. Quantize must be positive.
+Definition indices must refer to recording notes. The source mapping must cover every source note and reference valid definitions.
+
+Names remain Unicode in memory and UTF-8 in the project file. Unpaired surrogates are rejected.
+DX does not impose a CP932 restriction or a separate name-length limit. The total project byte limit still applies.
+DX also preserves ZZ/FF numbering mode. Original `.bmh` files omit that mode and reopen in ZZ mode.
+The project stores neither original MIDI bytes nor Base64 BMH data. It does not duplicate derived note references.
+Legacy BMH conversion occurs only at file import and export.
+BMH export applies the original program's CP932 substitutions and continues with a warning showing the original and converted names.
+The editor retains the Unicode project and its unsaved state. Lossy BMH output does not mark Unicode content as saved.
+Users can rename the division before another export, or save `.wosdx` to preserve the name.
 
 ### Media metadata
 
@@ -74,7 +92,8 @@ schema contain the complete validation rules.
 
 | Resource or field | Limit |
 | --- | --- |
-| Entire encoded JSON | 16 MiB, including base64 and metadata. |
+| Entire encoded UTF-8 JSON | 64 MiB, including BMHelper data and metadata. |
+| Desktop recovery JSON | 65 MiB, including the project and session fields. |
 | Media / tracks | 256 each. |
 | Clips | 100,000 across all tracks. |
 | Markers | At most 49,152 markers. Ticks range from 0 through 49,151. |
@@ -87,7 +106,23 @@ schema contain the complete validation rules.
 | Media `byteLength` metadata | `null` or 0 through 16 GiB. This does not guarantee the host can load that size. |
 | Actual audio input | Platform limit of 2 GiB. Decoding also depends on memory and format limits. |
 | `playbackRate` | 0.25 through 1.5. |
-| BMHelper base64 | At most 32 Mi characters, further constrained by the 16 MiB file limit. Validation checks the envelope and base64, not whether the embedded BMH content is usable. |
+
+These are application memory budgets, not format requirements. The former 16 MiB project
+cap was introduced with the Vue workspace. The 64 MiB cap permits larger note collections and project metadata.
+Recovery has an additional 1 MiB for local bindings and UI settings. JSON remains uncompressed.
+Structured JSON can be larger than binary BMH. The byte limit applies after UTF-8 serialization, not to the original MIDI file size.
+
+The original BMHelper beta 4′ source (`src/serialize.h`, `src/project.cpp`, `src/midi_sr.cpp`)
+has no 32 MiB check and does not use base64. Its Windows build writes 32-bit chunk lengths
+and allocates the declared data size. That is not a guarantee that multi-gigabyte projects
+are usable. The earlier application's 32 Mi-character Base64 cap represented at most 24 MiB of binary data.
+That cap was an application policy, not an original BMHelper restriction.
+DX now stores structured data, so the former Base64 cap and its roughly one-third encoding overhead no longer apply.
+The browser recovery store also depends on the browser's local-storage quota. Raising the
+project file limit does not raise that quota. Failed recovery writes remain visible to users.
+
+The BMH codec reads and writes the original little-endian chunk format.
+No fallback reads the unreleased application's earlier big-endian encoding or its Base64 project field.
 
 `createEmptyProject` creates one empty track without media or clips.
 `createSingleTrackProject` creates one track with a full-source clip at timeline
@@ -145,16 +180,23 @@ The app cannot save these projects because recovery lacks the original bytes.
 
 Portable projects must not contain Tauri UUIDs, picker tokens, Blob URLs,
 `FileSystemHandle` objects, PCM buffers or machine-specific window state.
-The app stores the `projectId/mediaId → host-local binding` mapping separately.
-Decode failures must not delete bindings, and desktop paths must not be
-converted into browser references. A `pathHint` never authorizes arbitrary disk
-reads: access requires a user picker grant or verified local authorization.
+The recovery session stores the active media's host reference separately as `lastFile`.
+Decode failures must not delete bindings. Desktop paths must not become browser references.
 
-Relinking stages and decodes the candidate, then compares name, size, format,
+Desktop media stores its absolute native path in `originHint.pathHint`.
+Opening a selected `.wosdx` file resolves its active media through `open_project_media`.
+This command accepts the selected project's host reference and a media ID, not a path.
+The host reads the bounded project file and grants access only to that entry's absolute WAV or OGG path.
+The workspace verifies the media metadata and hash before adoption.
+Recovery reuses the persisted host grant. Browser file inputs and drops cannot provide absolute paths and require manual relinking.
+Old projects without paths also require one manual relink before saving the path.
+
+Relinking stages and decodes the candidate, then compares size, format,
 sample rate, channels, frames and hash. Matching names do not prove matching
 content. Unknown metadata stays unknown. Users can confirm replacement when
 media differs. Replacement updates media metadata and clip length as one
-undoable transaction. Cancellation or failure leaves the document, bindings
+undoable transaction. A matching file at a new native path updates the path as an undoable edit.
+Cancellation or failure leaves the document, bindings
 and history unchanged. Clip range changes must be disclosed, never silently
 truncated.
 

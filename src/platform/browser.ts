@@ -1,5 +1,5 @@
 import { Zip, ZipPassThrough } from 'fflate';
-import { PROJECT_FILE_MAX_BYTES } from '../project/schema';
+import { PROJECT_FILE_MAX_BYTES, SESSION_FILE_MAX_BYTES } from '../project/schema';
 import type { FileKind, OpenedFile, OutputFile, Platform } from './contracts';
 
 const SESSION_KEY = 'woslicer.vue.session.v2';
@@ -225,8 +225,11 @@ export function createBrowserPlatform(): Platform {
         throw new Error('Unsupported file extension');
       if (file.size > FILE_LIMIT) throw new Error('File exceeds 2 GiB');
       if (kind === 'wosdx' && file.size > PROJECT_FILE_MAX_BYTES)
-        throw new Error('Project exceeds 16 MiB');
+        throw new Error('Project exceeds 64 MiB');
       return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), reference: null };
+    },
+    openProjectMedia() {
+      return Promise.resolve(null);
     },
     reopenFile() {
       return Promise.reject(
@@ -235,7 +238,7 @@ export function createBrowserPlatform(): Platform {
     },
     async saveFile(kind, name, bytes) {
       if (kind === 'wosdx' && bytes.byteLength > PROJECT_FILE_MAX_BYTES)
-        throw new Error('Project exceeds 16 MiB');
+        throw new Error('Project exceeds 64 MiB');
       const destination = await chooseDestination(name, 'application/octet-stream');
       if (!destination) return false;
       try {
@@ -301,7 +304,7 @@ export async function getBrowserBuildIdentity(): Promise<unknown> {
 export async function importBrowserLegacySession(): Promise<unknown> {
   const file = await pickFile('.json');
   if (file === null) return null;
-  if (file.size > 16 * 1024 * 1024) throw new Error('Session exceeds 16 MiB');
+  if (file.size > SESSION_FILE_MAX_BYTES) throw new Error('Session exceeds 65 MiB');
   const value: unknown = JSON.parse(await file.text());
   return value;
 }

@@ -21,6 +21,9 @@
 | Language/theme and dialogs | `src/app/components/PreferencesControls.vue` uses `src/ui/preferences.ts`. About lives beside the toolbar. Calibration lives in `src/calibration/CalibrationDialog.vue`. |
 
 `src/app/App.vue` assembles these features and owns project-replacement confirmations.
+`src/app/components/MediaLoading.vue` shows the current recovery or media-loading stage.
+The workspace owns this transient state. Each open request clears only its own indicator.
+The component accepts a media ID and file name, so a future track layout can place it beside its media.
 UI consumers read the editor's reactive document projections directly. Revision
 checks are for detecting stale asynchronous work and gestures. Platform file
 access stays in `src/platform/`, and audio worker processing stays in `src/audio/`.

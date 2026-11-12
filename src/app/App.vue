@@ -18,6 +18,7 @@ import CalibrationDialog from '../calibration/CalibrationDialog.vue';
 import EditorToolbar from './components/EditorToolbar.vue';
 import WorkspacePanels from './components/WorkspacePanels.vue';
 import StatusBar from './components/StatusBar.vue';
+import MediaLoading from './components/MediaLoading.vue';
 import AboutDialog from './components/AboutDialog.vue';
 
 // Assembly: platform, stores, workspace and playback providers.
@@ -32,6 +33,7 @@ const workspace = createWorkspace({
   confirmRelinkDifference,
   confirmLegacyImport,
 });
+const loading = workspace.loading;
 const playback = createPlayback(editor);
 provideWorkspace(workspace);
 providePlayback(playback);
@@ -240,6 +242,10 @@ onUnmounted(() => {
         :calibrating="calibrating"
         @command="execute"
         @calibrate="calibrate"
+      />
+      <MediaLoading
+        v-if="loading"
+        :activity="loading"
       />
       <!-- workspace: playback strip and timeline on the left, side panels on the right -->
       <section class="workspace">

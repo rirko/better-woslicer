@@ -91,9 +91,8 @@ export interface Division {
   /** Definition index per source note (source notes in position order). */
   src2def: number[];
   /**
-   * Session-only flag of the id mode used at creation (drives the `<`/`>`/始番号
-   * wrap boundary). Not serialized — the original loses it on reload the same
-   * way; reopened projects default to the ZZ mode.
+   * Numbering mode used by transpose/start-number actions. DX projects preserve
+   * this flag. Original BMH files omit it and reopen in ZZ mode.
    */
   zzDefinition: boolean;
 }

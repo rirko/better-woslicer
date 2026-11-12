@@ -1,4 +1,12 @@
 {
+  "loading": {
+    "restoring": "前回のセッションを復元中…",
+    "opening": "ファイルを開いています…",
+    "reading": "メディアを読み込み中…",
+    "verifying": "メディアを確認中…",
+    "decoding": "音声をデコードして波形を作成中…",
+    "hint": "大きな音声ファイルは時間がかかる場合があります。読み込みはバックグラウンドで続行されます。"
+  },
   "chrome": {
     "projectUnsaved": "未保存の変更があります",
     "mediaMissing": "音声を利用できません：{name}。元のファイルを選択して再リンクしてください。",
@@ -287,6 +295,7 @@
     "bmhProjectOpened": "プロジェクトを開きました：{file}",
     "bmhProjectSaved": "プロジェクトを保存しました：{file}",
     "bmhOpenFailed": "読み込みに失敗しました：{message}",
+    "bmhNameConverted": "BMH 出力では、原版の CP932 規則で次の名前を変換します：{names}。DX は元の Unicode 名を保持します。名前を保持するには .wosdx プロジェクトを保存してください。",
     "cutBeyondEnd": "切断位置が音源の末尾を超えています",
     "emptySlice": "この切断位置は音源の末尾です——空スライス",
     "exportSkippedBeyond": "音源の末尾を超える {count} 個の切断位置をスキップしました",

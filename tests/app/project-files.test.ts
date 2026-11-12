@@ -18,6 +18,49 @@ afterEach(async () => {
 });
 
 describe('portable project workflow', () => {
+  it('saves absolute media paths and opens project media through the project grant', async () => {
+    const f = setup();
+    const file = { ...audioFile(), absolutePath: 'C:\\Audio\\tone.wav' };
+    await f.workspace.loadAudio(file);
+    await f.workspace.saveProject();
+    const saved = f.saved[0];
+    if (!saved) throw new Error('Missing saved project');
+    const restored = setup();
+    restored.opened = { ...saved, reference: 'project-grant' };
+    const resolve = vi.spyOn(restored.platform, 'openProjectMedia').mockResolvedValue(file);
+    await restored.workspace.openProject();
+    expect(resolve).toHaveBeenCalledWith('project-grant', f.editor.document.media[0]?.mediaId);
+    expect(restored.editor.document.media[0]?.originHint).toEqual({
+      kind: 'desktop',
+      pathHint: file.absolutePath,
+    });
+    expect(restored.editor.source?.length).toBe(48000);
+    expect(restored.editor.isDirty).toBe(false);
+    expect(restored.editor.canUndo).toBe(false);
+    await restored.workspace.flushSession();
+    const recovered = setup();
+    recovered.session = restored.session;
+    recovered.opened = file;
+    await recovered.workspace.restoreSession();
+    expect(recovered.editor.source?.length).toBe(48000);
+  });
+  it('updates a moved media path on relink and saves it for the next open', async () => {
+    const f = setup();
+    await f.workspace.loadAudio({ ...audioFile(), absolutePath: 'C:\\Old\\tone.wav' });
+    await f.workspace.saveProject();
+    f.opened = { ...audioFile(), absolutePath: 'D:\\New\\tone.wav' };
+    await f.workspace.relinkAudio();
+    expect(f.editor.document.media[0]?.originHint).toEqual({
+      kind: 'desktop',
+      pathHint: 'D:\\New\\tone.wav',
+    });
+    expect(f.editor.isDirty).toBe(true);
+    f.workspace.actions.undo();
+    expect(f.editor.document.media[0]?.originHint).toEqual({
+      kind: 'desktop',
+      pathHint: 'C:\\Old\\tone.wav',
+    });
+  });
   it('records audio identity, round-trips the project, and relinks without changing its document or history', async () => {
     const f = setup();
     const file = audioFile();
@@ -433,7 +476,7 @@ describe('portable project workflow', () => {
   it('bounds dropped projects before reading them and never follows portable origin hints', async () => {
     const f = setup();
     const file = new File(['{}'], 'large.wosdx');
-    Object.defineProperty(file, 'size', { value: 16 * 1024 * 1024 + 1 });
+    Object.defineProperty(file, 'size', { value: 64 * 1024 * 1024 + 1 });
     const read = vi.spyOn(file, 'arrayBuffer');
     const original = f.editor.document;
     await f.workspace.openDroppedFile(file);

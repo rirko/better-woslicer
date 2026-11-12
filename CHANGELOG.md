@@ -4,8 +4,16 @@
 
 ## Unreleased
 
+### Added
+
+- A visible banner shows the current stage while restoring a session or loading audio.
+- DX projects preserve Unicode BMHelper division names and ZZ/FF numbering mode. BMH export follows the original character substitutions and warns when names change.
+
 ### Fixed
 
+- BMH files now open and save in the original BMHelper beta 4′ format, including Japanese division names.
+- Desktop projects save absolute audio paths and reconnect available media when opened. Relinking a moved file updates its saved path.
+- Projects can save BMHelper work above the previous 16 MiB limit. Large MIDI note lists no longer fail with a stack overflow during saving.
 - BMHelper follows project undo, redo and reopening, so its panel and exports use the current project contents.
 
 ## 1.0.0 — 2026-11-11

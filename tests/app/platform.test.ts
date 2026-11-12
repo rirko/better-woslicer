@@ -62,14 +62,14 @@ describe('browser host capabilities', () => {
   it('selects project files and rejects oversized projects before reading bytes', async () => {
     const opened = createBrowserPlatform().openFile('wosdx');
     const file = new File(['{}'], 'project.WOSDX');
-    Object.defineProperty(file, 'size', { value: 16 * 1024 * 1024 + 1 });
+    Object.defineProperty(file, 'size', { value: 64 * 1024 * 1024 + 1 });
     const read = vi.spyOn(file, 'arrayBuffer');
     expect(pickerInput().accept).toBe('.wosdx');
     const transfer = new DataTransfer();
     transfer.items.add(file);
     pickerInput().files = transfer.files;
     pickerInput().dispatchEvent(new Event('change'));
-    await expect(opened).rejects.toThrow('16 MiB');
+    await expect(opened).rejects.toThrow('64 MiB');
     expect(read).not.toHaveBeenCalled();
   });
   it('exposes one platform and validates local build identity', async () => {
@@ -215,14 +215,40 @@ describe('browser host capabilities', () => {
 });
 
 describe('Tauri adapter boundary', () => {
+  it('resolves project media by host reference and media ID, without submitting a path', async () => {
+    mockIPC((command, payload) => {
+      if (command === 'open_project_media') {
+        expect(payload).toEqual({ projectReference: 'project-grant', mediaId: 'media-1' });
+        return {
+          name: 'tone.wav',
+          reference: 'media-grant',
+          absolutePath: 'D:/Audio/tone.wav',
+          size: 3,
+        };
+      }
+      if (command === 'begin_read') return 'transfer-1';
+      if (command === 'read_file_chunk') return new Uint8Array([0, 1, 2]).buffer;
+    });
+    expect(await createTauriPlatform().openProjectMedia('project-grant', 'media-1')).toEqual({
+      name: 'tone.wav',
+      reference: 'media-grant',
+      absolutePath: 'D:/Audio/tone.wav',
+      bytes: new Uint8Array([0, 1, 2]),
+    });
+  });
   it('rejects oversized projects before opening any transfer reader', async () => {
     const calls: string[] = [];
     mockIPC((command) => {
       calls.push(command);
       if (command === 'open_file')
-        return { name: 'project.wosdx', reference: 'project-grant', size: 16 * 1024 * 1024 + 1 };
+        return {
+          name: 'project.wosdx',
+          reference: 'project-grant',
+          absolutePath: 'C:/project.wosdx',
+          size: 64 * 1024 * 1024 + 1,
+        };
     });
-    await expect(createTauriPlatform().openFile('wosdx')).rejects.toThrow('16 MiB');
+    await expect(createTauriPlatform().openFile('wosdx')).rejects.toThrow('64 MiB');
     expect(calls).toEqual(['open_file']);
   });
   it('saves and reads exact portable project bytes', async () => {
@@ -230,7 +256,12 @@ describe('Tauri adapter boundary', () => {
     mockIPC((command, payload) => {
       if (command === 'open_file') {
         expect(payload).toEqual({ kind: 'wosdx' });
-        return { name: 'project.wosdx', reference: 'grant', size: bytes.length };
+        return {
+          name: 'project.wosdx',
+          reference: 'grant',
+          absolutePath: 'C:/Audio/source.wav',
+          size: bytes.length,
+        };
       }
       if (command === 'begin_read') return 'transfer-1';
       if (command === 'read_file_chunk') {
@@ -298,28 +329,52 @@ describe('Tauri adapter boundary', () => {
   });
   it('validates host file metadata and exact binary response size', async () => {
     mockIPC((command) => {
-      if (command === 'open_file') return { name: 'source.wav', reference: 'grant', size: 3 };
+      if (command === 'open_file')
+        return {
+          name: 'source.wav',
+          reference: 'grant',
+          absolutePath: 'C:/Audio/source.wav',
+          size: 3,
+        };
       if (command === 'begin_read') return 'transfer-1';
       return new Uint8Array([0, 255, 7]).buffer;
     });
     expect(await createTauriPlatform().openFile('audio')).toEqual({
       name: 'source.wav',
       reference: 'grant',
+      absolutePath: 'C:/Audio/source.wav',
       bytes: new Uint8Array([0, 255, 7]),
     });
     mockIPC((command) => {
-      if (command === 'open_file') return { name: 'source.wav', reference: 'grant', size: 3 };
+      if (command === 'open_file')
+        return {
+          name: 'source.wav',
+          reference: 'grant',
+          absolutePath: 'C:/Audio/source.wav',
+          size: 3,
+        };
       if (command === 'begin_read') return 'transfer-1';
       return new Uint8Array([0]).buffer;
     });
     await expect(createTauriPlatform().openFile('audio')).rejects.toThrow('Incomplete binary');
-    mockIPC(() => ({ name: 'source.wav', reference: 'grant', size: -1 }));
+    mockIPC(() => ({
+      name: 'source.wav',
+      reference: 'grant',
+      absolutePath: 'C:/Audio/source.wav',
+      size: -1,
+    }));
     await expect(createTauriPlatform().openFile('audio')).rejects.toThrow('Invalid host file');
   });
   it('releases each transfer reader after successful and failed chunk reads', async () => {
     const closed: string[] = [];
     mockIPC((command) => {
-      if (command === 'open_file') return { name: 'source.wav', reference: 'grant', size: 3 };
+      if (command === 'open_file')
+        return {
+          name: 'source.wav',
+          reference: 'grant',
+          absolutePath: 'C:/Audio/source.wav',
+          size: 3,
+        };
       if (command === 'begin_read') return 'transfer-1';
       if (command === 'close_reader') {
         closed.push('transfer-1');
@@ -330,7 +385,13 @@ describe('Tauri adapter boundary', () => {
     await createTauriPlatform().openFile('audio');
     expect(closed).toEqual(['transfer-1']);
     mockIPC((command) => {
-      if (command === 'open_file') return { name: 'source.wav', reference: 'grant', size: 3 };
+      if (command === 'open_file')
+        return {
+          name: 'source.wav',
+          reference: 'grant',
+          absolutePath: 'C:/Audio/source.wav',
+          size: 3,
+        };
       if (command === 'begin_read') return 'transfer-2';
       if (command === 'close_reader') {
         closed.push('transfer-2');

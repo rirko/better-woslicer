@@ -1,29 +1,31 @@
 /**
- * .bmh project persistence — a byte-compatible port of the original
- * BMHelper project file (serialize.h / project.cpp): a RIFF-like chunk tree,
- * big-endian integers, no file-level wrapper. A chunk tag whose first byte is
+ * Original Windows BMHelper beta 4′ persistence: a RIFF-like chunk tree,
+ * little-endian integers, no file-level wrapper. A chunk tag whose first byte is
  * an ASCII capital letter is a container (payload = concatenated children);
  * anything else is a data leaf.
  *
  *   BMHP
  *     Src   (container)           source MIDI sequence
  *       qntz  i32                 ticks per quarter note
- *       note  16 B × n            { i32 position, gate, nn, vel }
- *       ptch   8 B × n            { i32 position, value }            (unused)
- *       cchg  12 B × n            { i32 position, value, cc }        (unused)
+ *       note  16 B, repeated      { i32 position, gate, nn, vel }
+ *       ptch   8 B, repeated      { i32 position, value }
+ *       ccgh  12 B, repeated      { i32 position, value, cc }
  *     Div   (container) × n       one per division
  *       Midi  (container)         the recording sequence, same layout as Src
  *       name  raw bytes           division name (original files use ANSI/Shift-JIS)
  *       s2df  i32 × n             definition index per source note
- *       dfnt  12 B × n            { u32 zz_low, u32 zz_high, i32 div }
+ *       dfnt  12 B, repeated      { u32 zz_low, u32 zz_high, i32 div }
+ *
+ * This layout is locked. See docs/BMH_FORMAT.md for source evidence and fixtures.
  *
  * The div notes themselves are not stored: they are rebuilt from the
  * recording sequence (positions/gates/averaged values) and the
- * s2df→dfnt mapping, exactly like the original reopens a project.
+ * s2df→dfnt mapping.
  */
 
 import type { MidiControlEvent, MidiNoteEvent, MidiParamEvent, MidiSequence } from './smf.js';
 import type { BmhDefinition, Division, DivNote } from './bmhelper.js';
+import { CP932_BEST_FIT } from './cp932-best-fit.js';
 
 export interface BmhProject {
   source: MidiSequence;
@@ -32,40 +34,17 @@ export interface BmhProject {
 
 export class BmhFormatError extends Error {}
 
+export interface BmhNameChange {
+  original: string;
+  exported: string;
+}
+
 interface Chunk {
   tag: string;
   payload: Uint8Array;
 }
 
 // --- byte helpers -----------------------------------------------------------
-
-class ByteWriter {
-  readonly bytes: number[] = [];
-
-  ascii(text: string): this {
-    for (const ch of text) this.bytes.push(ch.charCodeAt(0) & 0xff);
-    return this;
-  }
-
-  u32(value: number): this {
-    this.bytes.push(
-      (value >>> 24) & 0xff,
-      (value >>> 16) & 0xff,
-      (value >>> 8) & 0xff,
-      value & 0xff,
-    );
-    return this;
-  }
-
-  i32(value: number): this {
-    return this.u32(value < 0 ? value + 0x100000000 : value);
-  }
-
-  raw(bytes: Uint8Array): this {
-    this.bytes.push(...bytes);
-    return this;
-  }
-}
 
 class ByteReader {
   private pos = 0;
@@ -85,14 +64,11 @@ class ByteReader {
   }
 
   u32(): number {
-    // Same truncation boundary and big-endian assembly as smf.ts's ByteReader;
-    // the two format readers must stay in step.
     if (this.pos + 4 > this.bytes.length) throw new BmhFormatError('truncated chunk size');
-    const value =
-      this.bytes[this.pos] * 0x1000000 +
-      (this.bytes[this.pos + 1] << 16) +
-      (this.bytes[this.pos + 2] << 8) +
-      this.bytes[this.pos + 3];
+    const value = new DataView(this.bytes.buffer, this.bytes.byteOffset + this.pos, 4).getUint32(
+      0,
+      true,
+    );
     this.pos += 4;
     return value;
   }
@@ -119,18 +95,21 @@ class ByteReader {
 // --- chunk tree -------------------------------------------------------------
 
 function chunk(tag: string, payload: Uint8Array): Uint8Array {
-  const writer = new ByteWriter();
-  writer.ascii(tag).u32(payload.length).raw(payload);
-  return Uint8Array.from(writer.bytes);
+  return containerChunk(tag, [payload]);
 }
 
 function containerChunk(tag: string, children: Uint8Array[]): Uint8Array {
   let size = 0;
   for (const child of children) size += child.length;
-  const writer = new ByteWriter();
-  writer.ascii(tag).u32(size);
-  for (const child of children) writer.raw(child);
-  return Uint8Array.from(writer.bytes);
+  const bytes = new Uint8Array(8 + size);
+  for (let i = 0; i < 4; i++) bytes[i] = tag.charCodeAt(i);
+  new DataView(bytes.buffer).setUint32(4, size, true);
+  let offset = 8;
+  for (const child of children) {
+    bytes.set(child, offset);
+    offset += child.length;
+  }
+  return bytes;
 }
 
 function childrenOf(chunk: Chunk): Chunk[] {
@@ -152,91 +131,126 @@ function child(children: Chunk[], tag: string): Chunk {
 
 // --- sequence <-> Midi chunk ------------------------------------------------
 
-// i32 values are stored big-endian (matching the original's serialize.h).
-function i32BePayload(values: number[]): Uint8Array {
-  const writer = new ByteWriter();
-  for (const value of values) writer.i32(value);
-  return Uint8Array.from(writer.bytes);
+function i32Payload(values: number[]): Uint8Array {
+  const bytes = new Uint8Array(values.length * 4);
+  const view = new DataView(bytes.buffer);
+  values.forEach((value, index) => {
+    if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff)
+      throw new BmhFormatError('value does not fit a BMH signed 32-bit integer');
+    view.setInt32(index * 4, value, true);
+  });
+  return bytes;
 }
 
-/** The qntz/note/ptch/cchg children shared by the Src and Midi containers. */
+/** The qntz/note/ptch/ccgh children shared by the Src and Midi containers. */
 function serializeSequenceChildren(sequence: MidiSequence): Uint8Array[] {
-  const notes: number[] = [];
+  const children = [chunk('qntz', i32Payload([sequence.quantize]))];
   for (const note of sequence.notes) {
-    notes.push(note.position, note.gate, note.nn, note.vel);
+    children.push(chunk('note', i32Payload([note.position, note.gate, note.nn, note.vel])));
   }
-  const pitches: number[] = [];
-  for (const event of sequence.pitches) pitches.push(event.position, event.value);
-  const controls: number[] = [];
-  for (const event of sequence.controls) controls.push(event.position, event.value, event.cc);
-  return [
-    chunk('qntz', i32BePayload([sequence.quantize])),
-    chunk('note', i32BePayload(notes)),
-    chunk('ptch', i32BePayload(pitches)),
-    chunk('cchg', i32BePayload(controls)),
-  ];
+  for (const event of sequence.pitches)
+    children.push(chunk('ptch', i32Payload([event.position, event.value])));
+  // The original uses a map keyed by controller number. Preserve order within each lane.
+  for (const event of [...sequence.controls].sort((a, b) => a.cc - b.cc))
+    children.push(chunk('ccgh', i32Payload([event.position, event.value, event.cc])));
+  return children;
 }
 
-function parseMidiChunk(chunk: Chunk): MidiSequence {
-  const children = childrenOf(chunk);
-  const qntz = new ByteReader(child(children, 'qntz').payload).i32();
-  const notePayload = child(children, 'note').payload;
-  if (notePayload.length % 16 !== 0) throw new BmhFormatError('malformed note chunk');
-  const reader = new ByteReader(notePayload);
+function leafReader(entry: Chunk, size: number): ByteReader {
+  if (entry.payload.length !== size) throw new BmhFormatError('malformed ' + entry.tag + ' chunk');
+  return new ByteReader(entry.payload);
+}
+
+function parseMidiChunk(entry: Chunk): MidiSequence {
+  const children = childrenOf(entry);
+  const qntz = leafReader(child(children, 'qntz'), 4).i32();
+  if (qntz <= 0) throw new BmhFormatError('invalid BMH quantize');
   const notes: MidiNoteEvent[] = [];
-  for (let i = 0; i < notePayload.length / 16; i++) {
-    notes.push({ position: reader.i32(), gate: reader.i32(), nn: reader.i32(), vel: reader.i32() });
-  }
-  const pitchPayload = child(children, 'ptch').payload;
-  const pitchReader = new ByteReader(pitchPayload);
   const pitches: MidiParamEvent[] = [];
-  for (let i = 0; i + 8 <= pitchPayload.length; i += 8) {
-    pitches.push({ position: pitchReader.i32(), value: pitchReader.i32() });
-  }
-  const controlPayload = child(children, 'cchg').payload;
-  const controlReader = new ByteReader(controlPayload);
   const controls: MidiControlEvent[] = [];
-  for (let i = 0; i + 12 <= controlPayload.length; i += 12) {
-    controls.push({
-      position: controlReader.i32(),
-      value: controlReader.i32(),
-      cc: controlReader.i32(),
-    });
+  for (const event of children) {
+    if (event.tag === 'note') {
+      const reader = leafReader(event, 16);
+      notes.push({
+        position: reader.i32(),
+        gate: reader.i32(),
+        nn: reader.i32(),
+        vel: reader.i32(),
+      });
+    } else if (event.tag === 'ptch') {
+      const reader = leafReader(event, 8);
+      pitches.push({ position: reader.i32(), value: reader.i32() });
+    } else if (event.tag === 'ccgh') {
+      const reader = leafReader(event, 12);
+      controls.push({ position: reader.i32(), value: reader.i32(), cc: reader.i32() });
+    }
   }
   return { quantize: qntz, notes, pitches, controls };
 }
 
 // --- name encoding ----------------------------------------------------------
 
+// Web platforms provide a CP932-compatible decoder, but no encoder. Build its
+// reverse table once, on the first non-ASCII name. Prefer the first byte mapping.
+const nameDecoder = new TextDecoder('shift_jis', { fatal: true });
+let nameEncoding: Map<string, number> | undefined;
+
+function nameEncodingTable(): Map<string, number> {
+  if (nameEncoding) return nameEncoding;
+  const table = new Map<string, number>();
+  for (let code = 0; code <= 0xffff; code++) {
+    const lead = code >>> 8;
+    if (code > 0xff && !((lead >= 0x81 && lead <= 0x9f) || (lead >= 0xe0 && lead <= 0xfc)))
+      continue;
+    const bytes = code <= 0xff ? Uint8Array.of(code) : Uint8Array.of(lead, code & 0xff);
+    try {
+      const character = nameDecoder.decode(bytes);
+      if ([...character].length === 1 && !table.has(character)) table.set(character, code);
+    } catch {
+      // Unassigned byte sequences have no reverse mapping.
+    }
+  }
+  nameEncoding = table;
+  return table;
+}
+
 function encodeName(name: string): Uint8Array {
-  return new TextEncoder().encode(name);
+  const bytes: number[] = [];
+  // Windows converts each UTF-16 code unit: a non-BMP character becomes '??'.
+  for (let index = 0; index < name.length; index++) {
+    const character = name[index];
+    const ascii = character.charCodeAt(0);
+    // Match the original's NUL-terminated name handling; report the truncated result.
+    if (ascii === 0) break;
+    const code =
+      ascii < 0x80
+        ? ascii
+        : (nameEncodingTable().get(character) ?? CP932_BEST_FIT.get(character) ?? 0x3f);
+    if (code > 0xff) bytes.push(code >>> 8);
+    bytes.push(code & 0xff);
+  }
+  return Uint8Array.from(bytes);
 }
 
 function decodeName(bytes: Uint8Array): string {
-  // Original projects store ANSI/Shift-JIS names; ours write UTF-8.
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    if (bytes.includes(0)) throw new BmhFormatError('NUL in BMH division name');
+    return nameDecoder.decode(bytes);
   } catch {
-    try {
-      return new TextDecoder('shift_jis').decode(bytes);
-    } catch {
-      return new TextDecoder('latin1').decode(bytes);
-    }
+    throw new BmhFormatError('invalid Windows-31J (CP932) division name');
   }
 }
 
 // --- division <-> Div chunk -------------------------------------------------
 
-function serializeDivisionChunk(division: Division): Uint8Array {
-  const s2df = i32BePayload(division.src2def);
-  const dfntWriter = new ByteWriter();
-  for (const definition of division.definitions) {
-    const zz = ((definition.zz % 1296) + 1296) % 1296;
-    const high = Math.floor(zz / 36);
-    const low = zz % 36;
-    dfntWriter.u32(low).u32(high).i32(definition.div);
-  }
-  return containerChunk('Div ', [
+function serializeDivisionChunk(
+  division: Division,
+  onNameChange?: (change: BmhNameChange) => void,
+): Uint8Array {
+  const name = encodeName(division.name);
+  const exported = decodeName(name);
+  if (exported !== division.name) onNameChange?.({ original: division.name, exported });
+  const children = [
     containerChunk(
       'Midi',
       serializeSequenceChildren({
@@ -246,31 +260,35 @@ function serializeDivisionChunk(division: Division): Uint8Array {
         controls: [],
       }),
     ),
-    chunk('name', encodeName(division.name)),
-    chunk('s2df', s2df),
-    chunk('dfnt', Uint8Array.from(dfntWriter.bytes)),
-  ]);
+    chunk('name', name),
+    chunk('s2df', i32Payload(division.src2def)),
+  ];
+  for (const definition of division.definitions) {
+    const zz = ((definition.zz % 1296) + 1296) % 1296;
+    children.push(chunk('dfnt', i32Payload([zz % 36, Math.floor(zz / 36), definition.div])));
+  }
+  return containerChunk('Div ', children);
 }
 
 function parseDivisionChunk(chunk: Chunk, sourceNoteCount: number): Division {
   const children = childrenOf(chunk);
   const recording = parseMidiChunk(child(children, 'Midi'));
   const name = decodeName(child(children, 'name').payload);
-  const s2df = new ByteReader(child(children, 's2df').payload).i32Array(sourceNoteCount);
-  const dfntPayload = child(children, 'dfnt').payload;
-  if (dfntPayload.length % 12 !== 0) throw new BmhFormatError('malformed dfnt chunk');
-  const dfntReader = new ByteReader(dfntPayload);
+  const s2df = leafReader(child(children, 's2df'), sourceNoteCount * 4).i32Array(sourceNoteCount);
   const definitions: BmhDefinition[] = [];
-  for (let i = 0; i < dfntPayload.length / 12; i++) {
+  for (const entry of children) {
+    if (entry.tag !== 'dfnt') continue;
+    const dfntReader = leafReader(entry, 12);
     const low = dfntReader.u32();
     const high = dfntReader.u32();
     const div = dfntReader.i32();
+    if (low >= 36 || high >= 36 || div < 0 || div >= recording.notes.length)
+      throw new BmhFormatError('invalid BMH definition');
     definitions.push({ zz: high * 36 + low, div });
   }
 
   // Rebuild the div notes: the recording sequence IS the div-note list in
   // sorted order; referrers come from walking s2def→dfnt backwards.
-  const divCount = definitions.reduce((max, definition) => Math.max(max, definition.div + 1), 0);
   const notes: DivNote[] = recording.notes.map((note) => ({
     nn: note.nn,
     gate: note.gate,
@@ -283,8 +301,6 @@ function parseDivisionChunk(chunk: Chunk, sourceNoteCount: number): Division {
     if (definition === undefined) throw new BmhFormatError('s2def references a missing definition');
     notes[definition.div]?.referrers.push(sourceIndex);
   });
-  if (notes.length < divCount)
-    throw new BmhFormatError('division list is inconsistent with the definitions');
   return {
     name,
     quantize: recording.quantize,
@@ -298,22 +314,27 @@ function parseDivisionChunk(chunk: Chunk, sourceNoteCount: number): Division {
 
 // --- project ----------------------------------------------------------------
 
-/** Serializes a project into the original .bmh chunk-tree format. */
-export function writeBmh(project: BmhProject): Uint8Array {
-  // NB: the source sequence's qntz/note/ptch/cchg children sit DIRECTLY in
+/** Writes the original Windows BMHelper beta 4′ format. */
+export function writeBmh(
+  project: BmhProject,
+  onNameChange?: (change: BmhNameChange) => void,
+): Uint8Array {
+  // NB: the source sequence's qntz/note/ptch/ccgh children sit DIRECTLY in
   // the Src container — the extra Midi wrapper only exists inside Div.
   const children = [containerChunk('Src ', serializeSequenceChildren(project.source))];
-  for (const division of project.divisions) children.push(serializeDivisionChunk(division));
+  for (const division of project.divisions)
+    children.push(serializeDivisionChunk(division, onNameChange));
   return containerChunk('BMHP', children);
 }
 
-/** Parses an original or reimplementation .bmh project file. */
+/** Reads the original Windows BMHelper beta 4′ format. */
 export function readBmh(bytes: Uint8Array): BmhProject {
   const reader = new ByteReader(bytes);
   const tag = reader.ascii(4);
   if (tag !== 'BMHP') throw new BmhFormatError('not a BMHelper project (missing BMHP)');
   const size = reader.u32();
   const root = { tag, payload: reader.raw(size) };
+  if (!reader.done) throw new BmhFormatError('unexpected data after BMHP');
   const children = childrenOf(root);
   const source = parseMidiChunk(child(children, 'Src '));
   const divisions: Division[] = [];

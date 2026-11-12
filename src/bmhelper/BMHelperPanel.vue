@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, shallowRef } from 'vue';
+import { computed, reactive, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   ElAlert,
@@ -31,12 +31,21 @@ import PianoRoll from './PianoRoll.vue';
 const emit = defineEmits<{ applyCuts: [value: { ticks: number[] }] }>();
 const { t } = useI18n();
 const store = useBmhelperStore();
+const divisionName = ref('');
+watch(
+  () => store.selectedDivision,
+  (division) => {
+    divisionName.value = division?.name ?? '';
+  },
+  { immediate: true },
+);
 // The workspace service is injected once by the app shell and stays stable
 // across panel remounts, so in-flight dialog actions keep one platform identity.
 const platform = useWorkspace().platform;
 // Shared async state: every action funnels through one busy flag and one error message.
 const busy = ref(false);
 const error = ref('');
+const warning = ref('');
 // Both dialogs stay in this panel by decision: settingsOpen serves MIDI import and
 // new divisions alike, definitionsOpen shows the definition text; pending holds the
 // imported file until the settings dialog is confirmed or closed.
@@ -99,6 +108,7 @@ async function run(action: () => void | Promise<void>): Promise<void> {
   if (busy.value) return;
   busy.value = true;
   error.value = '';
+  warning.value = '';
   try {
     await action();
   } catch (cause: unknown) {
@@ -159,6 +169,7 @@ function parseStart(value: string): number {
 async function create(): Promise<void> {
   await run(() => {
     const start = parseStart(settings.startDefinition);
+    const name = settings.name.trim() || 'division';
     if (pending.value && !channels.value.length) throw new Error('no-notes');
     for (const { field } of numericSettings)
       if (!Number.isFinite(settings[field]) || settings[field] < 0)
@@ -174,7 +185,7 @@ async function create(): Promise<void> {
     if (!quantize) throw new Error('no-project');
     store.addDivision({
       ...settings,
-      name: settings.name.trim() || 'division',
+      name,
       startDefinition: start,
       headMargin: Math.trunc(settings.headMargin * quantize),
       minInterval: Math.trunc(settings.minInterval * quantize),
@@ -196,9 +207,17 @@ async function openProject(): Promise<void> {
 // Cancelled saves leave the stored byte baseline unchanged.
 async function saveProject(): Promise<void> {
   await run(async () => {
-    await store.saveBmhProject((bytes) =>
-      platform.saveFile('bmh', `${store.name || 'project'}.bmh`, bytes),
-    );
+    await store.saveBmhProject((bytes, changes) => {
+      if (changes.length)
+        warning.value = t('status.bmhNameConverted', {
+          names: changes
+            .map(
+              (change) => `${JSON.stringify(change.original)} → ${JSON.stringify(change.exported)}`,
+            )
+            .join('; '),
+        });
+      return platform.saveFile('bmh', `${store.name || 'project'}.bmh`, bytes);
+    });
   });
 }
 // Export the selected division recording as a .mid file.
@@ -265,6 +284,13 @@ function showDefinitions(): void {
       :closable="false"
       role="alert"
     />
+    <ElAlert
+      v-if="warning"
+      :title="warning"
+      type="warning"
+      :closable="false"
+      role="alert"
+    />
     <!-- source summary and division selector -->
     <template v-if="store.project">
       <p>
@@ -292,6 +318,15 @@ function showDefinitions(): void {
       </div>
       <!-- selected division: piano roll, export/apply/copy actions, transpose and start number -->
       <template v-if="store.selectedDivision">
+        <label class="division-name">
+          {{ t('chrome.bmhNameLabel') }}
+          <ElInput
+            v-model="divisionName"
+            :aria-label="t('chrome.bmhNameLabel')"
+            :disabled="busy"
+            @change="(name: string) => run(() => store.renameDivision(name))"
+          />
+        </label>
         <PianoRoll
           :notes="store.selectedDivision.recording"
           :quantize="store.selectedDivision.quantize"

@@ -64,6 +64,9 @@ export function fixture(createEngine = processorEngine) {
   let clipboard = '';
   const platform: Platform = {
     kind: 'browser',
+    openProjectMedia() {
+      return Promise.resolve(null);
+    },
     openFile() {
       return Promise.resolve(opened);
     },

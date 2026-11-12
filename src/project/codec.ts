@@ -159,12 +159,12 @@ export function encodeProject(value: ProjectDocument): Uint8Array {
     throw new ProjectFormatError('unsupported project schema cannot be written');
   const bytes = new TextEncoder().encode(JSON.stringify(normalized.project));
   if (bytes.byteLength > PROJECT_FILE_MAX_BYTES)
-    throw new ProjectFormatError('project exceeds the 16 MiB limit');
+    throw new ProjectFormatError('project exceeds the 64 MiB limit');
   return bytes;
 }
 export function decodeProject(bytes: Uint8Array): ProjectDecodeResult {
   if (bytes.byteLength > PROJECT_FILE_MAX_BYTES)
-    throw new ProjectFormatError('project exceeds the 16 MiB limit');
+    throw new ProjectFormatError('project exceeds the 64 MiB limit');
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));

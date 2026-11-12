@@ -52,6 +52,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             files::open_file,
             files::reopen_file,
+            files::open_project_media,
             files::begin_read,
             files::close_reader,
             files::read_file_chunk,

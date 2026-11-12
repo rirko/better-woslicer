@@ -6,6 +6,8 @@ export interface OpenedFile {
   bytes: Uint8Array;
   /** A host-owned reference for reopening; browser drops have no durable reference. */
   reference: string | null;
+  /** Absolute native path. Browser file inputs cannot provide this value. */
+  absolutePath?: string;
 }
 
 export interface OutputFile {
@@ -26,6 +28,8 @@ export interface Platform {
   readonly kind: 'browser' | 'tauri';
   openFile(kind: FileKind): Promise<OpenedFile | null>;
   reopenFile(reference: string): Promise<OpenedFile>;
+  /** Resolve media from a host-authorized project, never from a renderer-supplied path. */
+  openProjectMedia(projectReference: string, mediaId: string): Promise<OpenedFile | null>;
   saveFile(
     kind: Exclude<FileKind, 'audio'> | 'wav',
     name: string,

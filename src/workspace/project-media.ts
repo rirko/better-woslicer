@@ -3,7 +3,7 @@ import type { MediaAsset, ProjectDocument, ProjectFileV1 } from '../project/sche
 import type { OpenedFile } from '../platform/contracts';
 import type { DecodedAudio } from '../audio/audio-jobs';
 
-/** Portable metadata never includes a host grant. Hints never authorize file access. */
+/** Portable metadata includes media identity but never a host grant. */
 export async function identifyAudio(file: OpenedFile) {
   const extension = file.name.split('.').pop()?.toLowerCase();
   if (extension !== 'wav' && extension !== 'ogg')
@@ -67,7 +67,7 @@ export function projectWithAudio(
       sampleRateHz: source.sampleRate,
       channels: source.channels,
       framesPerChannel: source.length,
-      originHint: null,
+      originHint: file.absolutePath ? { kind: 'desktop', pathHint: file.absolutePath } : null,
     },
   ];
   track.clips = [

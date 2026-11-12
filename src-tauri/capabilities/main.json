@@ -4,10 +4,26 @@
   "description": "Only the local editor can invoke the selected offline host operations.",
   "windows": ["main"],
   "permissions": [
-    "allow-open-file", "allow-reopen-file", "allow-begin-read", "allow-close-reader", "allow-read-file-chunk", "allow-prepare-save",
-    "allow-begin-export", "allow-begin-export-file", "allow-write-chunk", "allow-finish-write",
-    "allow-cancel-write", "allow-end-export", "allow-read-clipboard", "allow-write-clipboard",
-    "allow-read-session", "allow-write-session", "allow-clear-session", "allow-import-legacy-session",
-    "allow-set-theme", "allow-build-identity"
+    "allow-open-file",
+    "allow-reopen-file",
+    "allow-open-project-media",
+    "allow-begin-read",
+    "allow-close-reader",
+    "allow-read-file-chunk",
+    "allow-prepare-save",
+    "allow-begin-export",
+    "allow-begin-export-file",
+    "allow-write-chunk",
+    "allow-finish-write",
+    "allow-cancel-write",
+    "allow-end-export",
+    "allow-read-clipboard",
+    "allow-write-clipboard",
+    "allow-read-session",
+    "allow-write-session",
+    "allow-clear-session",
+    "allow-import-legacy-session",
+    "allow-set-theme",
+    "allow-build-identity"
   ]
 }

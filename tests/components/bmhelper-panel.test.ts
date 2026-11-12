@@ -40,6 +40,7 @@ function createPlatform() {
     kind: 'browser' as const,
     openFile: vi.fn<() => Promise<OpenedFile | null>>(() => Promise.resolve(null)),
     reopenFile: vi.fn(() => Promise.reject(new Error('unused'))),
+    openProjectMedia: vi.fn(() => Promise.resolve(null)),
     saveFile: vi.fn(() => Promise.resolve(true)),
     exportFiles: vi.fn(() => Promise.resolve(null)),
     readClipboard: vi.fn(() => Promise.resolve('')),
@@ -110,6 +111,54 @@ function importOneNote(store: ReturnType<typeof useBmhelperStore>, midi: Uint8Ar
   const track = store.inspectMidi(midi).tracks.find((value) => value.noteCount > 0)?.index ?? 0;
   store.importMidi(midi, 'sample.mid', track, new Set([0]));
 }
+
+it('exports converted BMH names with a warning and keeps Unicode DX work', async () => {
+  const platform = createPlatform();
+  const harness = mountPanel({
+    platform,
+    setup: (store) => {
+      importOneNote(store, oneNoteMidi(480));
+      store.addDivision(defaultDivisionSetting('keep', 480));
+    },
+  });
+  try {
+    platform.openFile.mockResolvedValue({
+      name: 'replacement.mid',
+      bytes: oneNoteMidi(960),
+      reference: 'replacement',
+    });
+    await harness.findButton('Import MIDI').trigger('click');
+    await flushPromises();
+    const name = harness.wrapper
+      .findAll<HTMLInputElement>('form input')
+      .find((input) => input.element.value === 'division 2');
+    if (!name) throw new Error('Expected the division name field');
+    await name.setValue('🎵');
+    await harness.wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(harness.store.selectedDivision?.name).toBe('🎵');
+    const before = structuredClone(harness.store.project);
+    await harness.findButton('Save project').trigger('click');
+    await flushPromises();
+    expect(harness.wrapper.text()).toContain('CP932');
+    expect(harness.wrapper.text()).toContain('??');
+    expect(platform.saveFile).toHaveBeenCalledOnce();
+    expect(harness.store.project).toEqual(before);
+    expect(harness.store.dirty).toBe(true);
+    const rename = harness.wrapper.get<HTMLInputElement>('.division-name input');
+    await rename.setValue('recording');
+    await rename.trigger('change');
+    await flushPromises();
+    expect(harness.store.selectedDivision?.name).toBe('recording');
+    await harness.findButton('Save project').trigger('click');
+    await flushPromises();
+    expect(platform.saveFile).toHaveBeenCalledTimes(2);
+    expect(harness.store.selectedDivision?.name).toBe('recording');
+    expect(harness.store.dirty).toBe(false);
+  } finally {
+    await harness.dispose();
+  }
+});
 
 it('emits 48-per-beat cuts and uses platform clipboard and save actions', async () => {
   const platform = createPlatform();

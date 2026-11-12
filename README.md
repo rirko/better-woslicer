@@ -14,6 +14,7 @@ An offline audio slicer for BMS, based on wosderge's woslicerIII.
 - Variable-speed monitoring, cue sounds and tap calibration.
 - Frequency-band display and automatic cut detection.
 - Built-in BMHelper divides key-sound MIDI into a recording sequence with WAVE definitions. Apply its cut positions to the timeline.
+- Open and save original BMHelper beta 4′ `.bmh` files. DX projects preserve Unicode division names. BMH export uses the original CP932 character substitutions and warns when names change.
 - English, Chinese, Japanese and Korean UI. About shows the version, commit and build date.
 
 ## Run
@@ -32,6 +33,8 @@ Windows x64 is the primary desktop package. Other Windows architectures, Linux a
 Use the [web version](https://woslicer-dx.pages.dev/) directly in your browser. No installation is needed.
 
 ## Controls
+
+Desktop projects store absolute audio paths and reconnect available files when opened. Use **Relink audio** after moving a file. Browsers require manual relinking. A banner shows session recovery and audio loading stages.
 
 | Key | Action |
 | --- | --- |

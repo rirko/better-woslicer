@@ -16,7 +16,9 @@ use uuid::Uuid;
 
 pub(crate) const CHUNK_BYTES: usize = 1024 * 1024;
 const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
-const MAX_PROJECT_BYTES: u64 = 16 * 1024 * 1024;
+// Keep aligned with PROJECT_FILE_MAX_BYTES in src/project/schema.ts.
+// Memory budget for UTF-8 project JSON, including structured BMHelper data.
+pub(crate) const MAX_PROJECT_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_REFERENCES: usize = 1024;
 const MAX_OPEN_READERS: usize = 64;
 
@@ -56,6 +58,7 @@ impl FileKind {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenedFile {
     name: String,
+    absolute_path: String,
     reference: String,
     size: u64,
 }
@@ -142,6 +145,51 @@ impl HostFiles {
         }
         descriptor(path, reference, &File::open(path).map_err(message)?)
     }
+    /// Resolves only media declared in a project selected through the native picker.
+    fn project_media(&self, reference: &str, media_id: &str) -> Result<Option<OpenedFile>, String> {
+        let project = self.reopen(reference)?;
+        let project_path = Path::new(&project.absolute_path);
+        if !FileKind::Wosdx.accepts(project_path) {
+            return Err("expected a selected project file".into());
+        }
+        let mut bytes = Vec::new();
+        File::open(project_path)
+            .map_err(message)?
+            .take(MAX_PROJECT_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(message)?;
+        if bytes.len() as u64 > MAX_PROJECT_BYTES {
+            return Err("project exceeds 64 MiB".into());
+        }
+        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(message)?;
+        if value["format"] != "wosdx" || value["schemaVersion"] != 1 {
+            return Err("unsupported project format".into());
+        }
+        let media = value["media"].as_array().ok_or("missing project media")?;
+        if media.len() > 256 {
+            return Err("too many project media entries".into());
+        }
+        let mut matches = media
+            .iter()
+            .filter(|asset| asset["mediaId"].as_str() == Some(media_id));
+        let asset = matches
+            .next()
+            .ok_or("media is not in the selected project")?;
+        if matches.next().is_some() {
+            return Err("duplicate project media ID".into());
+        }
+        if asset["originHint"]["kind"] != "desktop" {
+            return Ok(None);
+        }
+        let path = asset["originHint"]["pathHint"]
+            .as_str()
+            .ok_or("missing media path")?;
+        let path = Path::new(path);
+        if !path.is_absolute() || !FileKind::Audio.accepts(path) {
+            return Err("project media requires an absolute WAV or OGG path".into());
+        }
+        self.grant(path).map(Some)
+    }
     /// Opens one independent transfer reader per call; concurrent transfers of
     /// the same reference keep their own handles and seek positions.
     fn begin_read(&self, reference: &str) -> Result<String, String> {
@@ -183,7 +231,7 @@ fn descriptor(path: &Path, reference: &str, file: &File) -> Result<OpenedFile, S
         return Err("file is not a regular file or exceeds 2 GiB".into());
     }
     if FileKind::Wosdx.accepts(path) && metadata.len() > MAX_PROJECT_BYTES {
-        return Err("project exceeds 16 MiB".into());
+        return Err("project exceeds 64 MiB".into());
     }
     let name = path
         .file_name()
@@ -192,13 +240,17 @@ fn descriptor(path: &Path, reference: &str, file: &File) -> Result<OpenedFile, S
         .into_owned();
     Ok(OpenedFile {
         name,
+        absolute_path: path
+            .to_str()
+            .ok_or("file path is not valid Unicode")?
+            .into(),
         reference: reference.into(),
         size: metadata.len(),
     })
 }
 fn start_write(files: &mut Files, destination: PathBuf, size: u64) -> Result<String, String> {
     if FileKind::Wosdx.accepts(&destination) && size > MAX_PROJECT_BYTES {
-        return Err("project exceeds 16 MiB".into());
+        return Err("project exceeds 64 MiB".into());
     }
     if size > MAX_FILE_BYTES {
         return Err("output exceeds 2 GiB".into());
@@ -274,6 +326,14 @@ pub(crate) fn reopen_file(
 ) -> Result<OpenedFile, String> {
     state.reopen(&reference)
 }
+#[tauri::command]
+pub(crate) fn open_project_media(
+    project_reference: String,
+    media_id: String,
+    state: State<'_, HostFiles>,
+) -> Result<Option<OpenedFile>, String> {
+    state.project_media(&project_reference, &media_id)
+}
 /// Opens one bounded transfer reader for an existing grant reference.
 #[tauri::command]
 pub(crate) fn begin_read(reference: String, state: State<'_, HostFiles>) -> Result<String, String> {
@@ -324,7 +384,7 @@ pub(crate) async fn prepare_save(
         return Err("audio sources cannot be overwritten".into());
     }
     if matches!(kind, FileKind::Wosdx) && size > MAX_PROJECT_BYTES {
-        return Err("project exceeds 16 MiB".into());
+        return Err("project exceeds 64 MiB".into());
     }
     let Some(file) = rfd::AsyncFileDialog::new()
         .add_filter("Output", kind.extensions())
@@ -558,9 +618,74 @@ mod tests {
         assert!(state.reopen(&file.to_string_lossy()).is_err());
         let opened = state.grant(&file)?;
         assert_eq!(opened.size, 3);
+        assert_eq!(Path::new(&opened.absolute_path), file.canonicalize()?);
         let reloaded = HostFiles::load(directory.path())?;
         assert_eq!(reloaded.reopen(&opened.reference)?.name, "audio.wav");
         assert!(reloaded.reopen("fabricated-reference").is_err());
+        Ok(())
+    }
+    #[test]
+    fn selected_project_resolves_absolute_media_and_persists_its_grant()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let media = directory.path().join("audio.wav");
+        fs::write(&media, [0, 1, 2])?;
+        let project = directory.path().join("project.wosdx");
+        fs::write(
+            &project,
+            serde_json::to_vec(&serde_json::json!({
+                "format": "wosdx", "schemaVersion": 1,
+                "media": [{"mediaId": "audio", "originHint": {"kind": "desktop", "pathHint": media}}]
+            }))?,
+        )?;
+        let state = HostFiles::load(directory.path())?;
+        assert!(
+            state
+                .project_media(&project.to_string_lossy(), "audio")
+                .is_err()
+        );
+        let selected = state.grant(&project)?;
+        assert!(state.project_media(&selected.reference, "other").is_err());
+        let opened = state
+            .project_media(&selected.reference, "audio")?
+            .ok_or("missing media")?;
+        assert_eq!(Path::new(&opened.absolute_path), media.canonicalize()?);
+        assert_eq!(
+            HostFiles::load(directory.path())?
+                .reopen(&opened.reference)?
+                .size,
+            3
+        );
+        assert!(state.project_media(&opened.reference, "audio").is_err());
+        fs::remove_file(media)?;
+        assert!(state.project_media(&selected.reference, "audio").is_err());
+        Ok(())
+    }
+    #[test]
+    fn project_media_rejects_relative_paths_non_audio_and_unknown_versions()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let project = directory.path().join("project.wosdx");
+        fs::write(&project, b"{}")?;
+        let state = HostFiles::load(directory.path())?;
+        let selected = state.grant(&project)?;
+        for (version, path) in [
+            (1, PathBuf::from("audio.wav")),
+            (1, directory.path().join("private.json")),
+            (2, directory.path().join("audio.wav")),
+        ] {
+            fs::write(
+                &project,
+                serde_json::to_vec(&serde_json::json!({
+                    "format": "wosdx", "schemaVersion": version,
+                    "media": [{"mediaId": "audio", "originHint": {"kind": "desktop", "pathHint": path}}]
+                }))?,
+            )?;
+            assert!(
+                state.project_media(&selected.reference, "audio").is_err(),
+                "{path:?}"
+            );
+        }
         Ok(())
     }
     #[test]

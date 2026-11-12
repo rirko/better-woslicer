@@ -3,8 +3,9 @@
 ## Locked compatibility rule
 
 - The existing `.wos` binary format is locked. Preserve its layout, field encoding, size and read/write compatibility.
-- This is the only fixed project invariant. Other instructions are defaults that may change to support user goals and human maintenance.
-- If a user instruction would change `.wos` compatibility, explain the exact change and its compatibility effects. Obtain explicit user confirmation before implementation. The initial conflicting instruction does not count as confirmation. Continue unrelated work while confirmation is pending.
+- The original Windows BMHelper beta 4′ `.bmh` format is equally locked. Preserve its layout, field encoding and read/write compatibility at import and export. Use the original source and [format contract](docs/BMH_FORMAT.md) as the reference. DX projects use UTF-8 JSON independently of legacy BMH encoding. The unreleased application's incorrect encoding has no compatibility guarantee.
+- These format contracts are the fixed project invariants. Other instructions are defaults that may change to support user goals and human maintenance.
+- If a user instruction would change `.wos` or original `.bmh` compatibility, explain the exact change and its compatibility effects. Obtain explicit user confirmation before implementation. The initial conflicting instruction does not count as confirmation. Continue unrelated work while confirmation is pending.
 
 ## Product boundaries
 

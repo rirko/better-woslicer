@@ -7,7 +7,10 @@ import {
   parseProject,
   ProjectFormatError,
 } from '../../src/project/codec';
-import type { ProjectFileV1 } from '../../src/project/schema';
+import { PROJECT_FILE_MAX_BYTES, type ProjectFileV1 } from '../../src/project/schema';
+import { bmhelperToDocument } from '../../src/project/bmhelper';
+import { readBmh } from '../../src/core/bmh';
+import { readFileSync } from 'node:fs';
 
 function project(): ProjectFileV1 {
   return createSingleTrackProject({
@@ -129,9 +132,16 @@ describe('.wosdx project document', () => {
     expect(() =>
       parseProject({ ...value, bmhelper: { format: 'bmh', bytesBase64: 'not base64' } }),
     ).toThrow(/bmhelper/);
-    expect(parseProject({ ...value, bmhelper: { format: 'bmh', bytesBase64: '' } }).kind).toBe(
-      'supported',
-    );
+    expect(
+      parseProject({
+        ...value,
+        bmhelper: {
+          format: 'bmhelper',
+          source: { quantize: 480, notes: [], pitches: [], controls: [] },
+          divisions: [],
+        },
+      }).kind,
+    ).toBe('supported');
   });
 
   it('reports unrecognized fields by path instead of dropping them silently', () => {
@@ -339,8 +349,47 @@ describe('.wosdx project document', () => {
       version: 99,
       raw: { schemaVersion: 99 },
     });
-    expect(() => decodeProject(new Uint8Array(20 * 1024 * 1024))).toThrow(/16 MiB limit/i);
+    expect(() => decodeProject(new Uint8Array(PROJECT_FILE_MAX_BYTES + 1))).toThrow(
+      /64 MiB limit/i,
+    );
     expect(() => decodeProject(new TextEncoder().encode('{bad json'))).toThrow(/json/i);
+  });
+
+  it('round-trips structured BMHelper data above the old 16 MiB cap', () => {
+    const value = project();
+    const notes = Array.from({ length: 350_000 }, (_, index) => ({
+      position: index * 120,
+      gate: 60,
+      nn: 60,
+      vel: 100,
+    }));
+    value.bmhelper = {
+      format: 'bmhelper',
+      source: { quantize: 480, notes, pitches: [], controls: [] },
+      divisions: [],
+    };
+    const bytes = encodeProject(value);
+    expect(bytes.byteLength).toBeGreaterThan(16 * 1024 * 1024);
+    const result = decodeProject(bytes);
+    if (result.kind !== 'supported') throw new Error('Expected a supported project');
+    expect(result.project.bmhelper?.source.notes.length).toBe(notes.length);
+    expect(result.project.bmhelper?.source.notes[349_999]).toEqual(notes[349_999]);
+  });
+  it('validates BMHelper references and Unicode at the project boundary', () => {
+    const bmhelper = bmhelperToDocument(
+      readBmh(new Uint8Array(readFileSync('tests/fixtures/bmh/original.bmh'))),
+    );
+    const value = { ...project(), bmhelper };
+    bmhelper.divisions[0].name = '简体中文・한국어・🎵';
+    expect(parseProject(value).kind).toBe('supported');
+    bmhelper.divisions[0].src2def[0] = 999;
+    expect(() => parseProject(value)).toThrow(/source-to-definition/);
+    bmhelper.divisions[0].src2def[0] = 0;
+    bmhelper.divisions[0].definitions[0].div = 999;
+    expect(() => parseProject(value)).toThrow(/missing recording note/);
+    bmhelper.divisions[0].definitions[0].div = 0;
+    bmhelper.divisions[0].name = '\ud800';
+    expect(() => parseProject(value)).toThrow(/Unicode/);
   });
 
   it('keeps spectrum explicitly reserved and keeps global view defaults separate from detection settings', () => {

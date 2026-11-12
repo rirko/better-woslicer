@@ -498,7 +498,11 @@ describe('workspace and editor business operations', () => {
           frameCount: 400,
         },
       ];
-      draft.bmhelper = { format: 'bmh', bytesBase64: 'AQID' };
+      draft.bmhelper = {
+        format: 'bmhelper',
+        source: { quantize: 480, notes: [], pitches: [], controls: [] },
+        divisions: [],
+      };
     });
     f.editor.setSelectedTicks([12]);
     f.editor.setCursorTick(12);
