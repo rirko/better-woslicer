@@ -68,7 +68,7 @@ describe('Pinia playback lifetime and audio clock', () => {
     editor.setPlaybackRate(1.5); expect(playback.currentSample()).toBe(96000);
     context.currentTime = 3; expect(playback.currentSample()).toBe(168000);
     editor.setVolume(.2); editor.setCueVolume(.4);
-    expect(required(context.gains[0]).gain.value).toBe(.2); expect(required(context.gains[1]).gain.value).toBe(.4);
+    expect(required(context.gains[0]).gain.value).toBeCloseTo(.2, 12); expect(required(context.gains[1]).gain.value).toBeCloseTo(.4, 12);
   });
   it('renders preview samples through export DSP at 1x and retriggers exclusively', () => {
     const { editor, playback, context } = fixture(4800);
@@ -101,6 +101,46 @@ describe('Pinia playback lifetime and audio clock', () => {
     context.currentTime = .65; frame(); expect(context.oscillators).toHaveLength(2);
     playback.stop();
     for (const node of [...context.oscillators, ...context.filters]) expect(node.disconnect).toHaveBeenCalled();
+  });
+  it('routes master gain through project global state with mute winning and an independent cue route', () => {
+    const { editor, context } = fixture();
+    editor.transact(draft => {
+      draft.media = [{ mediaId: 'm1', name: 'a.wav', format: 'wav', byteLength: 1000, sampleRateHz: 48000, channels: 1, framesPerChannel: 48000, integrity: null, originHint: null }];
+      const track = draft.tracks[0]; if (!track) throw new Error('Missing track');
+      track.clips = [{ clipId: 'c1', mediaId: 'm1', timelineStartSeconds: 0, sourceOffsetFrames: 0, frameCount: 48000 }];
+      draft.global.masterGainDb = -20; draft.global.cueGainDb = -12;
+    });
+    // Non-neutral track playback opens limited, so the live route is the global bus;
+    // the track projection stays reserved for the multi-track schema.
+    const master = required(context.gains[0]);
+    expect(master.gain.value).toBeCloseTo(Math.pow(10, -20 / 20), 12);
+    editor.transact(draft => { draft.global.masterMuted = true; });
+    expect(editor.masterAmp).toBe(0); expect(master.gain.value).toBe(0);
+    editor.transact(draft => { draft.global.masterMuted = false; });
+    expect(master.gain.value).toBeCloseTo(Math.pow(10, -20 / 20), 12);
+    expect(required(context.gains[1]).gain.value).toBeCloseTo(Math.pow(10, -12 / 20), 12);
+  });
+  it('keeps cue crossings alive across unrelated document edits during playback', async () => {
+    const { editor, playback, context } = fixture();
+    editor.setTicks([24, 48]); editor.cueMode = 'cowbell';
+    await Promise.resolve(); await Promise.resolve(); // settle the crossing-state watcher before playing
+    playback.play();
+    context.currentTime = .3; frame();
+    expect(context.oscillators).toHaveLength(2);
+    // The clock passes cut 48 before the document edit settles: an unrelated
+    // output/gate change must not swallow that crossing.
+    editor.setOutputOptions({ baseName: 'renamed' }); editor.setNoisegateEnabled(false);
+    context.currentTime = .55;
+    await Promise.resolve(); await Promise.resolve();
+    frame();
+    expect(context.oscillators).toHaveLength(4);
+    // A time base change re-anchors the crossing state exactly once.
+    editor.setDocumentOptions({ bpm: 125 });
+    context.currentTime = .65;
+    await Promise.resolve(); await Promise.resolve();
+    frame();
+    expect(context.oscillators).toHaveLength(4);
+    playback.stop();
   });
   it('stops on source replacement, clears animation, and disposes watchers and context once', () => {
     const { editor, playback, context } = fixture(); playback.play();

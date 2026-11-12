@@ -175,6 +175,7 @@ describe('Vue timeline ownership', () => {
     const first = controls.findAll('button')[0], second = controls.findAll('button')[1]; if (!first || !second) throw new Error('Missing playback buttons');
     await first.trigger('click'); await second.trigger('click'); expect(playback.togglePlayPause).toHaveBeenCalledOnce(); expect(playback.stop).toHaveBeenCalledOnce();
     await wrapper.get('.timeline-ruler').trigger('pointerdown', { button: 0, clientX: 144 }); expect(editor.cursorTick).toBe(24); expect(playback.seekSample).toHaveBeenCalledWith(12000);
-    controls.findAllComponents(ElSlider)[0]?.vm.$emit('update:modelValue', 50); expect(editor.volume).toBeCloseTo(Math.pow(10, -30 / 20));
+    // Sliders commit on release: one drag is one document transaction.
+    controls.findAllComponents(ElSlider)[0]?.vm.$emit('change', 50); expect(editor.volume).toBeCloseTo(Math.pow(10, -30 / 20), 12);
   });
 });

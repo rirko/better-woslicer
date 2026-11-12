@@ -2,11 +2,12 @@ import { computed, markRaw, shallowRef, triggerRef } from 'vue';
 import { defineStore } from 'pinia';
 import { normalizeSelection } from '../core/markers';
 import { ProjectEditor } from '../project/editor';
-import { createEmptyProject } from '../project/codec';
+import { createEmptyProject, projectCapability } from '../project/codec';
 import type { ProjectDocument, ProjectFileV1, OutputRecipe } from '../project/schema';
+import { PROJECT_MAX_GAIN_DB, PROJECT_MIN_GAIN_DB } from '../project/schema';
 import { gridStepTicks } from '../core/gridlines';
 import { MAX_TICKS, resolveBreakpointTick, tickToSampleExport } from '../core/timebase';
-import { dbToAmp, DEFAULT_CUE_DB, DEFAULT_PLAYBACK_DB } from '../core/volume';
+import { ampToDb, dbToAmp } from '../core/volume';
 import type { PeakCache } from '../core/peaks';
 import type { BandAnalysis, BandName } from '../core/bands';
 import type { FormatParams, StatusKey } from '../core/messages';
@@ -48,13 +49,60 @@ export const useEditorStore = defineStore('editor', () => {
   const selectionStartTick = shallowRef<number | null>(null), selectionEndTick = shallowRef<number | null>(null);
   const pxPerTick = shallowRef(6), scrollTick = shallowRef(0);
   const playing = shallowRef(false), playheadSample = shallowRef(0);
-  const volume = shallowRef(dbToAmp(DEFAULT_PLAYBACK_DB)), cueVolume = shallowRef(dbToAmp(DEFAULT_CUE_DB));
-  const playbackRate = shallowRef(1), followPlayhead = shallowRef(true), cueMode = shallowRef<CueMode>('off');
+  // Project global/track playback state is the single truth; these writable
+  // projections keep the UI and command entry points stable. One user intent is
+  // one transaction, so playback properties participate in undo and dirty.
+  function clampGainDb(value: number): number { return Math.max(PROJECT_MIN_GAIN_DB, Math.min(PROJECT_MAX_GAIN_DB, value)); }
+  function applyGlobal(edit: (draft: ProjectFileV1) => void): void {
+    if (limited.value) return; // read-only projects expose playback controls as view state only
+    transact(edit);
+  }
+  const trackPlayback = computed(() => {
+    const capability = projectCapability(document.value);
+    const track = capability.kind === 'single-track' ? document.value.tracks[0] : null;
+    return { gainDb: track?.gainDb ?? 0, muted: track?.muted ?? false, solo: track?.solo ?? false };
+  });
+  // Master route: master mute or track mute wins over solo; gains sum in dB.
+  const masterAmp = computed(() => {
+    const global = document.value.global;
+    if (global.masterMuted || trackPlayback.value.muted) return 0;
+    return dbToAmp(clampGainDb(global.masterGainDb + trackPlayback.value.gainDb));
+  });
+  const volume = computed({
+    get: () => dbToAmp(document.value.global.masterGainDb),
+    set: value => { if (!Number.isFinite(value)) return; applyGlobal(draft => { draft.global.masterGainDb = clampGainDb(ampToDb(Math.max(0, Math.min(1, value)))); }); },
+  });
+  const cueVolume = computed({
+    get: () => dbToAmp(document.value.global.cueGainDb),
+    set: value => { if (!Number.isFinite(value)) return; applyGlobal(draft => { draft.global.cueGainDb = clampGainDb(ampToDb(Math.max(0, Math.min(1, value)))); }); },
+  });
+  const playbackRate = computed({
+    get: () => document.value.global.playbackRate,
+    set: value => { if (!Number.isFinite(value) || value < .25 || value > 1.5) return; applyGlobal(draft => { draft.global.playbackRate = value; }); },
+  });
+  const cueMode = computed<CueMode>({
+    get: () => document.value.global.cueMode,
+    set: value => applyGlobal(draft => { draft.global.cueMode = value; }),
+  });
+  const followPlayhead = shallowRef(true);
+  const effectiveViews = computed(() => {
+    const capability = projectCapability(document.value);
+    const track = capability.kind === 'single-track' ? document.value.tracks[0] : null;
+    return { rms: track?.views.rms ?? document.value.global.views.rms, bands: track?.views.bands ?? document.value.global.views.bands };
+  });
+  const rmsVisible = computed({
+    get: () => effectiveViews.value.rms,
+    set: value => applyGlobal(draft => { draft.global.views.rms = value; }),
+  });
+  const bandsVisible = computed({
+    get: () => effectiveViews.value.bands,
+    set: value => applyGlobal(draft => { draft.global.views.bands = value; }),
+  });
   const noisegateEnabled = computed(() => document.value.slicing.noisegateEnabled);
   const baseName = computed(() => document.value.output.baseName);
   const clipStartNumber = computed(() => document.value.output.clipStartNumber);
   const useFfNumbering = computed(() => document.value.output.useFfNumbering);
-  const exportLock = shallowRef(false), bandsVisible = shallowRef(false), rmsVisible = shallowRef(false);
+  const exportLock = shallowRef(false);
   const bandAnalysis = shallowRef<BandAnalysis | null>(null);
   const bandDetectBands = shallowRef<Record<BandName, boolean>>({ low: true, mid: true, high: true });
   const bandThresholdDb = shallowRef(6), bandMinGapUnits = shallowRef(1), bandSnap = shallowRef(true), tapOffsetMs = shallowRef(0);
@@ -116,8 +164,8 @@ export const useEditorStore = defineStore('editor', () => {
     pxPerTick.value = next; setScrollTick(anchor - pixels / next);
   }
   function setPlaybackRate(value: number): void { if (Number.isFinite(value) && value >= .25 && value <= 1.5) playbackRate.value = value; }
-  function setVolume(value: number): void { if (Number.isFinite(value)) volume.value = Math.max(0, Math.min(1, value)); }
-  function setCueVolume(value: number): void { if (Number.isFinite(value)) cueVolume.value = Math.max(0, Math.min(1, value)); }
+  function setVolume(value: number): void { volume.value = value; }
+  function setCueVolume(value: number): void { cueVolume.value = value; }
   function setPlaying(value: boolean): void { playing.value = value; }
   function setPlayheadSample(value: number): void { if (Number.isFinite(value)) playheadSample.value = Math.max(0, Math.min(source.value?.length ?? 0, value)); }
   function setSource(value: AudioSource | null, cache: PeakCache | null = null): void { cancelDraft(); source.value = value ? markRaw(value) : null; peaks.value = cache ? markRaw(cache) : null; bandAnalysis.value = null; bandEstimate.value = null; playing.value = false; playheadSample.value = 0; }
@@ -135,10 +183,10 @@ export const useEditorStore = defineStore('editor', () => {
     limited.value = false; lastFile.value = null;
     replaceDocument(createEmptyProject()); setSource(null); phase.value = { kind: 'empty' }; setStatus('statusEmpty');
     grid.value = 8; snap.value = true; cursorTick.value = 0; setSelection(null, null); pxPerTick.value = 6; scrollTick.value = 0;
-    volume.value = dbToAmp(DEFAULT_PLAYBACK_DB); cueVolume.value = dbToAmp(DEFAULT_CUE_DB); playbackRate.value = 1; followPlayhead.value = true; cueMode.value = 'off';
-    exportLock.value = false; bandsVisible.value = false; rmsVisible.value = false;
+    followPlayhead.value = true;
+    exportLock.value = false;
     bandDetectBands.value = { low: true, mid: true, high: true }; bandThresholdDb.value = 6; bandMinGapUnits.value = 1; bandSnap.value = true; tapOffsetMs.value = 0; bandBusy.value = false;
   }
-  return { document, doc, docRevision, isDirty, limited, lastFile, markSaved, previewTicks, source, peaks, phase, status, isError, grid, snap, cursorTick, selectedTicks, selectionStartTick, selectionEndTick, pxPerTick, scrollTick, playing, playheadSample, volume, cueVolume, playbackRate, followPlayhead, cueMode, noisegateEnabled, baseName, clipStartNumber, useFfNumbering, exportLock, bandsVisible, rmsVisible, bandAnalysis, bandDetectBands, bandThresholdDb, bandMinGapUnits, bandSnap, tapOffsetMs, bandEstimate, bandBusy, ticks, canUndo, canRedo, transact, replaceDocument, undo, redo, setLimited, setLastFile, setTicks, addTicks, setOutputOptions, setNoisegateEnabled, cancelDraft, registerDraftCancellation, setPreviewTicks, setStatus, tickBeyondEnd, legalTick, setCursorTick, setSelectedTicks, setSelection, setScrollTick, snapTick, zoomAt, setPlaybackRate, setVolume, setCueVolume, setPlaying, setPlayheadSample, setSource, setPhase, setBandAnalysis, setDocumentOptions, reset };
+  return { document, doc, docRevision, isDirty, limited, lastFile, markSaved, previewTicks, source, peaks, phase, status, isError, grid, snap, cursorTick, selectedTicks, selectionStartTick, selectionEndTick, pxPerTick, scrollTick, playing, playheadSample, masterAmp, volume, cueVolume, playbackRate, followPlayhead, cueMode, noisegateEnabled, baseName, clipStartNumber, useFfNumbering, exportLock, bandsVisible, rmsVisible, bandAnalysis, bandDetectBands, bandThresholdDb, bandMinGapUnits, bandSnap, tapOffsetMs, bandEstimate, bandBusy, ticks, canUndo, canRedo, transact, replaceDocument, undo, redo, setLimited, setLastFile, setTicks, addTicks, setOutputOptions, setNoisegateEnabled, cancelDraft, registerDraftCancellation, setPreviewTicks, setStatus, tickBeyondEnd, legalTick, setCursorTick, setSelectedTicks, setSelection, setScrollTick, snapTick, zoomAt, setPlaybackRate, setVolume, setCueVolume, setPlaying, setPlayheadSample, setSource, setPhase, setBandAnalysis, setDocumentOptions, reset };
 });
 export type EditorStore = ReturnType<typeof useEditorStore>;

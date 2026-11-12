@@ -1,9 +1,11 @@
 import { createEmptyProject, parseProject } from '../project/codec';
 import type { ProjectDocument, ProjectFileV1 } from '../project/schema';
+import { PROJECT_MAX_GAIN_DB, PROJECT_MIN_GAIN_DB } from '../project/schema';
 import { MAX_TICKS } from '../core/timebase';
+import { ampToDb } from '../core/volume';
 import type { EditorStore } from '../slicing/editor-store';
 
-const optionKeys = ['volume', 'cueVolume', 'playbackRate', 'followPlayhead', 'cueMode', 'grid', 'snap', 'bandDetectBands', 'bandThresholdDb', 'bandMinGapUnits', 'bandSnap', 'tapOffsetMs', 'cursorTick', 'selectedTicks', 'scrollTick', 'pxPerTick', 'rmsVisible', 'bandsVisible'] as const;
+const optionKeys = ['followPlayhead', 'grid', 'snap', 'bandDetectBands', 'bandThresholdDb', 'bandMinGapUnits', 'bandSnap', 'tapOffsetMs', 'cursorTick', 'selectedTicks', 'scrollTick', 'pxPerTick'] as const;
 export type SessionOptions = Partial<Pick<EditorStore, typeof optionKeys[number]>>;
 export interface EditorSession {
   version: 2;
@@ -15,7 +17,7 @@ export interface EditorSession {
 function object(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
 function number(value: unknown, min: number, max: number): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max; }
 function optionsFrom(state: EditorStore): SessionOptions {
-  return { volume: state.volume, cueVolume: state.cueVolume, playbackRate: state.playbackRate, followPlayhead: state.followPlayhead, cueMode: state.cueMode, grid: state.grid, snap: state.snap, bandDetectBands: { ...state.bandDetectBands }, bandThresholdDb: state.bandThresholdDb, bandMinGapUnits: state.bandMinGapUnits, bandSnap: state.bandSnap, tapOffsetMs: state.tapOffsetMs, cursorTick: state.cursorTick, selectedTicks: [...state.selectedTicks], scrollTick: state.scrollTick, pxPerTick: state.pxPerTick, rmsVisible: state.rmsVisible, bandsVisible: state.bandsVisible };
+  return { followPlayhead: state.followPlayhead, grid: state.grid, snap: state.snap, bandDetectBands: { ...state.bandDetectBands }, bandThresholdDb: state.bandThresholdDb, bandMinGapUnits: state.bandMinGapUnits, bandSnap: state.bandSnap, tapOffsetMs: state.tapOffsetMs, cursorTick: state.cursorTick, selectedTicks: [...state.selectedTicks], scrollTick: state.scrollTick, pxPerTick: state.pxPerTick };
 }
 function legacyProject(input: Record<string, unknown>): ProjectFileV1 | null {
   if (!object(input.doc)) return null;
@@ -43,15 +45,20 @@ export function parseEditorSession(input: unknown): EditorSession | null {
   } catch { return null; }
   const options: SessionOptions = {};
   const o = object(input.options) ? input.options : {};
-  if (number(o.volume, 0, 1)) options.volume = o.volume;
-  if (number(o.cueVolume, 0, 1)) options.cueVolume = o.cueVolume;
-  if (number(o.playbackRate, .25, 1.5)) options.playbackRate = o.playbackRate;
+  // Older archives carried playback state as session options; migrate it into
+  // the project document, which is the single truth for these properties now.
+  const clampGainDb = (value: number): number => Math.max(PROJECT_MIN_GAIN_DB, Math.min(PROJECT_MAX_GAIN_DB, value));
+  if (number(o.volume, 0, 1)) project.global.masterGainDb = clampGainDb(ampToDb(o.volume));
+  if (number(o.cueVolume, 0, 1)) project.global.cueGainDb = clampGainDb(ampToDb(o.cueVolume));
+  if (number(o.playbackRate, .25, 1.5)) project.global.playbackRate = o.playbackRate;
+  if (o.cueMode === 'off' || o.cueMode === 'cowbell' || o.cueMode === 'triangle' || o.cueMode === 'metronome') project.global.cueMode = o.cueMode;
+  if (typeof o.rmsVisible === 'boolean') project.global.views.rms = o.rmsVisible;
+  if (typeof o.bandsVisible === 'boolean') project.global.views.bands = o.bandsVisible;
   if (number(o.grid, 1, 192) && Number.isInteger(o.grid) && 192 % o.grid === 0) options.grid = o.grid;
   if (number(o.bandThresholdDb, 0, 120)) options.bandThresholdDb = o.bandThresholdDb;
   if (number(o.bandMinGapUnits, 0, 192)) options.bandMinGapUnits = o.bandMinGapUnits;
   if (number(o.tapOffsetMs, -2000, 2000)) options.tapOffsetMs = o.tapOffsetMs;
-  if (o.cueMode === 'off' || o.cueMode === 'cowbell' || o.cueMode === 'triangle' || o.cueMode === 'metronome') options.cueMode = o.cueMode;
-  for (const key of ['followPlayhead', 'snap', 'bandSnap', 'rmsVisible', 'bandsVisible'] as const) if (typeof o[key] === 'boolean') options[key] = o[key];
+  for (const key of ['followPlayhead', 'snap', 'bandSnap'] as const) if (typeof o[key] === 'boolean') options[key] = o[key];
   if (number(o.cursorTick, 0, MAX_TICKS - 1) && Number.isInteger(o.cursorTick)) options.cursorTick = o.cursorTick;
   if (number(o.scrollTick, 0, MAX_TICKS)) options.scrollTick = o.scrollTick;
   if (number(o.pxPerTick, .02, 1e9)) options.pxPerTick = o.pxPerTick;

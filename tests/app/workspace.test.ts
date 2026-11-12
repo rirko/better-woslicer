@@ -7,7 +7,7 @@ import { detectEdges } from '../../src/core/edge';
 import { encodeWav16 } from '../../src/core/wav';
 import { readWos, writeWos } from '../../src/core/wos';
 import type { DecodedAudio } from '../../src/audio/audio-jobs';
-import { projectToWos } from '../../src/project/codec';
+import { createEmptyProject, encodeProject, projectToWos } from '../../src/project/codec';
 import { createTimelineGestures } from '../../src/timeline/gestures';
 import { createCommands } from '../../src/app/commands';
 import type { Playback } from '../../src/playback';
@@ -17,14 +17,16 @@ function setup(createEngine = processorEngine) { const f = fixture(createEngine)
 afterEach(async () => { for (const f of fixtures.splice(0)) await f.dispose(); });
 
 describe('workspace and editor business operations', () => {
-  it('undoes timing edits and keeps monitoring outside document history', () => {
+  it('keeps playback properties in document history with one transaction per change', () => {
     const { editor, workspace } = setup();
     editor.setDocumentOptions({ bpm: 160, fadeoutMs: 40 });
     editor.setVolume(.2);
+    expect(editor.isDirty).toBe(true);
     expect(workspace.actions.undo()).toBe(true);
-    expect(editor.doc.bpm).toBe(120);
-    expect(editor.doc.fadeoutMs).toBe(0);
-    expect(editor.volume).toBe(.2);
+    expect(editor.doc.bpm).toBe(160); expect(editor.doc.fadeoutMs).toBe(40);
+    expect(editor.volume).toBeCloseTo(Math.pow(10, -10 / 20), 12);
+    workspace.actions.undo();
+    expect(editor.doc.bpm).toBe(120); expect(editor.doc.fadeoutMs).toBe(0);
   });
   it('commits parameters, output recipe and cuts as one operation and leaves no-op history untouched', () => {
     const { editor, workspace } = setup();
@@ -42,6 +44,71 @@ describe('workspace and editor business operations', () => {
     editor.setDocumentOptions({ bpm: 120 }); editor.setTicks([]);
     expect(editor.docRevision).toBe(undoneRevision); expect(editor.canRedo).toBe(true);
     workspace.actions.redo(); expect(editor.ticks).toEqual([24, 48]); expect(editor.noisegateEnabled).toBe(false);
+  });
+  it('ignores keyboard commands while a modal dialog is open', () => {
+    const f = setup();
+    const playback: Playback = {
+      play() {}, pause() {}, stop() {}, togglePlayPause() {}, seekSample() {}, currentSample: () => 0,
+      setRate() {}, previewSlice() {}, getAudioContext() { throw new Error('unused'); }, dispose() {},
+    };
+    const commands = createCommands({ editor: f.editor, workspace: f.workspace, playback, onClose() {}, onAbout() {} });
+    const overlay = document.createElement('div');
+    overlay.setAttribute('role', 'dialog');
+    document.body.appendChild(overlay);
+    const rects = vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([new DOMRect(0, 0, 320, 200)]);
+    try {
+      const event = new KeyboardEvent('keydown', { key: 'z', cancelable: true });
+      commands.onKeyDown(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(f.editor.ticks).toEqual([]);
+    } finally { rects.mockRestore(); overlay.remove(); }
+  });
+  it('cancels an active paint gesture when the project is replaced mid-stroke', async () => {
+    vi.useFakeTimers();
+    const f = setup(); f.editor.pxPerTick = 1; f.workspace.actions.setMarker(0);
+    const gestures = createTimelineGestures(f.editor);
+    try {
+      await f.workspace.flushSession();
+      const point = { x: 48, y: 10, button: 0, altKey: false, shiftKey: false, ctrlKey: false };
+      gestures.begin(point); gestures.move({ ...point, x: 120 });
+      expect(f.editor.previewTicks).not.toBeNull();
+      f.opened = { name: 'empty.wosdx', reference: null, bytes: encodeProject(createEmptyProject('replacement')) };
+      await f.workspace.openProject();
+      expect(f.editor.previewTicks).toBeNull();
+      gestures.end({ ...point, x: 120 });
+      expect(f.editor.document.projectId).toBe('replacement');
+      expect(f.editor.ticks).toEqual([]); expect(f.editor.canUndo).toBe(false);
+    } finally { gestures.dispose(); vi.useRealTimers(); }
+  });
+  it('refuses re-entrant detection and export while their busy flags hold', async () => {
+    const f = setup(); await f.workspace.loadAudio(audioFile());
+    f.workspace.actions.setMarker(12);
+    let complete: (() => void) | undefined; let started = 0;
+    f.platform.exportFiles = () => { started++; return new Promise(resolve => { complete = () => resolve(1); }); };
+    const exporting = f.workspace.exportAll();
+    expect(f.editor.exportLock).toBe(true);
+    await f.workspace.exportAll(); // re-entry is a no-op while the first export holds
+    expect(started).toBe(1);
+    if (!complete) throw new Error('Expected a pending export');
+    complete(); await exporting;
+    expect(f.editor.exportLock).toBe(false);
+  });
+  it('measures bounded undo history over a large marker set', () => {
+    const f = setup();
+    const markers = Array.from({ length: 2000 }, (_, index) => index * 20 + 1);
+    f.editor.setTicks(markers);
+    const started = performance.now();
+    for (let step = 0; step < 200; step++) f.editor.setDocumentOptions({ bpm: 120 + (step % 10) });
+    const historyMs = performance.now() - started;
+    expect(f.editor.canUndo).toBe(true); expect(f.editor.canRedo).toBe(false);
+    const redoStarted = performance.now();
+    for (let step = 0; step < 200; step++) f.workspace.actions.undo();
+    const undoMs = performance.now() - redoStarted;
+    expect(f.editor.canRedo).toBe(true); expect(f.editor.doc.bpm).toBe(120);
+    // Informational budget for the approved immutable-snapshot model: guard
+    // against order-of-magnitude regressions rather than machine speed.
+    expect(historyMs).toBeLessThan(20000);
+    expect(undoMs).toBeLessThan(20000);
   });
   it.each([false, true])('cancels a paint draft before a real keyboard command (undo=%s)', async ctrlKey => {
     const f = setup(); f.editor.pxPerTick = 1; f.workspace.actions.setMarker(0);
@@ -165,7 +232,7 @@ describe('workspace and editor business operations', () => {
     await f.workspace.restoreSession();
     expect(f.editor.doc).toEqual({ bpm: 145, shift: 2, fadeoutMs: 20, noisegateDb: -52 });
     expect(f.editor.document.output).toEqual({ baseName: 'legacy', clipStartNumber: 16, useFfNumbering: true });
-    expect(f.editor.noisegateEnabled).toBe(false); expect(f.editor.volume).toBe(.2);
+    expect(f.editor.noisegateEnabled).toBe(false); expect(f.editor.volume).toBeCloseTo(.2, 12);
     expect(f.editor.ticks).toEqual([12, 36]); expect(f.editor.canUndo).toBe(false);
     expect(reopen).not.toHaveBeenCalled(); expect(f.editor.document.media).toEqual([]);
   });
@@ -219,9 +286,9 @@ describe('workspace and editor business operations', () => {
     expect(restored.editor.source).toBeNull(); expect(restored.editor.canUndo).toBe(false);
     expect(restored.editor.selectedTicks).toEqual([12]); expect(restored.editor.cursorTick).toBe(12);
     expect(restored.editor.scrollTick).toBe(4); expect(restored.editor.rmsVisible).toBe(true);
-    expect(restored.editor.volume).toBe(.2); expect(restored.editor.playbackRate).toBe(.5);
+    expect(restored.editor.volume).toBeCloseTo(.2, 12); expect(restored.editor.playbackRate).toBe(.5);
     restored.editor.setDocumentOptions({ bpm: 180 }); restored.workspace.actions.undo();
-    expect(restored.editor.document).toEqual(snapshot.project); expect(restored.editor.volume).toBe(.2);
+    expect(restored.editor.document).toEqual(snapshot.project); expect(restored.editor.volume).toBeCloseTo(.2, 12);
   });
   it('does not let a late decode resurrect audio after reset', async () => {
     let complete: ((result: DecodedAudio) => void) | undefined;
@@ -308,7 +375,7 @@ describe('workspace and editor business operations', () => {
     expect(f.editor.doc).toEqual({ bpm: 145, shift: 2, fadeoutMs: 20, noisegateDb: -52 });
     expect(f.editor.document.output).toEqual({ baseName: 'legacy', clipStartNumber: 1, useFfNumbering: false });
     expect(f.editor.ticks).toEqual([12, 36]); expect(f.editor.canUndo).toBe(false);
-    expect(f.editor.volume).toBe(.2); expect(reopen).not.toHaveBeenCalled();
+    expect(f.editor.volume).toBeCloseTo(.2, 12); expect(reopen).not.toHaveBeenCalled();
     await f.workspace.flushSession();
     const archived = parseEditorSession(f.session);
     expect(archived?.lastFile).toBeNull();

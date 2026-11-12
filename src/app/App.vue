@@ -23,6 +23,7 @@ import AboutDialog from './components/AboutDialog.vue';
 const platform = getPlatform();
 const editor = useEditorStore(pinia);
 const bmhelper = useBmhelperStore(pinia);
+bmhelper.bindEditor(editor);
 const workspace = createWorkspace({ platform, editor, confirmDiscardRecovery, confirmRelinkDifference, confirmLegacyImport });
 const playback = createPlayback(editor);
 provideWorkspace(workspace); providePlayback(playback);

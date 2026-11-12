@@ -1,8 +1,12 @@
 import { createPinia, disposePinia } from 'pinia';
 import { describe, expect, it } from 'vitest';
 import { useBmhelperStore } from '../../src/bmhelper/store';
+import { useEditorStore } from '../../src/slicing/editor-store';
+import { createEmptyProject } from '../../src/project/codec';
 import { defaultDivisionSetting } from '../../src/core/bmhelper';
 import { readSmfSequence, writeSmfSequence } from '../../src/core/smf';
+import { vi } from 'vitest';
+import { nextTick } from 'vue';
 const midi = writeSmfSequence({ quantize: 480, notes: [{ position: 0, nn: 60, vel: 100, gate: 120 }, { position: 480, nn: 64, vel: 90, gate: 240 }], pitches: [], controls: [] });
 
 describe('BMHelper project state', () => {
@@ -47,6 +51,46 @@ describe('BMHelper project state', () => {
     store.deleteDivision(-1); store.selectDivision(100);
     expect(store.selectedIndex).toBe(0);
     expect(() => store.setStart(Number.NaN)).toThrow('invalid-start');
+    disposePinia(pinia);
+  });
+});
+
+describe('BMHelper project integration', () => {
+  const trackOf = (store: ReturnType<typeof useBmhelperStore>): number => store.inspectMidi(midi).tracks.find(value => value.noteCount > 0)?.index ?? 0;
+  it('commits edits into the bound project document as undoable transactions and reloads on a switch', async () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    expect(editor.document.bmhelper).not.toBeNull();
+    const afterImport = editor.document.bmhelper;
+    expect(editor.isDirty).toBe(true);
+    store.addDivision(defaultDivisionSetting('first', 480));
+    expect(editor.document.bmhelper).not.toEqual(afterImport);
+    expect(editor.canUndo).toBe(true);
+    editor.undo();
+    expect(editor.document.bmhelper).toEqual(afterImport);
+    expect(store.selectedDivision?.name).toBe('first'); // the working copy keeps its state
+    editor.replaceDocument(createEmptyProject('other'));
+    await nextTick();
+    expect(store.project).toBeNull(); expect(store.dirty).toBe(false);
+    disposePinia(pinia);
+  });
+  it('keeps newer edits dirty when a save completes after them', async () => {
+    const pinia = createPinia();
+    const store = useBmhelperStore(pinia);
+    const editor = useEditorStore(pinia);
+    store.bindEditor(editor);
+    store.importMidi(midi, 'source.mid', trackOf(store), new Set([0]));
+    store.addDivision(defaultDivisionSetting('first', 480));
+    let release: (() => void) | undefined;
+    const saving = store.saveBmhProject(async () => new Promise(resolve => { release = () => resolve(true); }));
+    store.transpose(1); // a real edit lands while the save is still in flight
+    if (!release) throw new Error('Expected a pending save');
+    release();
+    expect(await saving).toBe(true);
+    expect(store.dirty).toBe(true);
     disposePinia(pinia);
   });
 });

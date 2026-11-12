@@ -151,14 +151,18 @@ export function createPlayback(editor: EditorStore): Playback {
       }
       editor.setPlayheadSample(0);
     }, { immediate: true, flush: 'sync' });
-    watch(() => editor.volume, value => { master.gain.value = value; }, { immediate: true, flush: 'sync' });
+    watch(() => editor.masterAmp, value => { master.gain.value = value; }, { immediate: true, flush: 'sync' });
     watch(() => editor.cueVolume, value => cue.setVolume(value), { immediate: true, flush: 'sync' });
     watch(() => editor.playbackRate, value => {
       anchorSample = currentSample(); anchorTime = context.currentTime;
       activeRate = value;
       if (track) track.playbackRate.value = value;
     }, { flush: 'sync' });
-    watch(() => editor.docRevision, () => { lastCueTick = sampleToTick(currentSample()); lastCueIndex = -1; });
+    // Only marker and time base changes invalidate cue crossings; unrelated
+    // document edits must not drop or re-fire cues around the playhead.
+    watch(() => `${editor.doc.bpm}|${editor.doc.shift}|${editor.ticks.join(',')}`, () => {
+      lastCueTick = sampleToTick(currentSample()); lastCueIndex = -1;
+    });
   });
   return {
     play, pause, stop, seekSample, currentSample, setRate, previewSlice,

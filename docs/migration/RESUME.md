@@ -7,6 +7,10 @@
 
 - 2026-11-10 本轮：**W1 恢复写可靠性已完成。** W1a `618d445`（写 ACK/失败可见/重试/dispose 上抛）、W1b `5a40e7b`（恢复结果区分 absent/restored/invalid/future/read-failed，坏/future/read-failed 原输入保留，恢复写暂停，打开内容需显式确认丢弃，`reset` 显式清档）。
 - 2026-11-10 续做：**W2a.2 受限打开与保全保存已完成（`5375e68`）**：复杂布局只读打开、editor 层单点拦截、保存原字节、恢复还原保持只读且保存明确不可用。
+- 2026-11-10 W5 起步：**G10 部分完成（本次提交）**：`menuCommandEnabled` 成为菜单禁用与命令执行的同一规则函数（穷举 switch），规则表测试 33 例覆盖全部 18 个菜单命令的状态矩阵（空/带源/受限/带历史）；`MENU_COMMANDS` 导出供测试。W5 剩余：模态/busy 绕过核对、手势跨入口验证、生命周期释放清单、undo 容量测量。
+- 2026-11-10 W4 起步：**G08 已完成（本次提交，W4 收官）**：BMHelper store `bindEditor` 后每次编辑以一个事务写通 `bmhelper` payload（undo/dirty 参与、上限预检）；projectId 切换经 watcher 自动重载/清空工作副本；`saveBmhProject` 版本守卫使保存期新编辑保持 dirty；面板改用注入 workspace（platform 稳定），面板测试迁移到 provide。已知边界：同一 projectId 的重恢复不会触发重载（已记录接受）。
+- 2026-11-10 W4 起步：**G07 已完成（本次提交）**：volume/cue/rate/cueMode/rms/bands 从 session ref 改为 document.global 可写投影（一次意图一次事务、参与 undo/dirty、limited 下只读静默）；`masterAmp` 路由 = global master 增益（masterMuted 置 0；track 投影为 schema 预留，非中性 track 仍判受限）；视图有效值 = track.views 覆盖 ?? global；会话快照不再携带已迁移键，旧归档 options 迁移进 global；音量滑杆改 change 提交（一次拖动一个事务）。旧断言「监控不入文档历史」按获批模型反转。
+- 2026-11-10 W4 起步：**G11 已完成（`de46b1f`）**：cue 交叉重置监听从整个 docRevision 收窄到 markers/bpm/shift 值键；无关文档编辑（输出配方/噪声门）不再吞掉越过的 cue；时间基准变化仍恰好重锚一次；行为由 `timeline-playback.test.ts` 的 AudioContext 假体证明（含 flush 时序注意：编辑后需微任务 flush 才能观察 watch）。
 - 2026-11-10 W3 起步：**G12 已完成（`9e4e9fc`）**：reader 改为按独立 transfer ID（新增 `begin_read` 命令；grant/reopen 不再插 reader；chunk/close 按 transfer 定位），同一引用双读取拥有独立句柄与 seek 位，先结束的 transfer 不再影响后者；16 MiB 检查移到开 reader 之前；grant 生命周期有测试（同路径复用引用、1024 上限拒绝新 grant 且既有可 reopen）。Rust fmt/test(12)/clippy -D warnings 全过；前端 adapter mock 已迁移并全绿。
 - 2026-11-10 W3 起步：**G09 已完成（本次提交）**：`Platform.importLegacySession` 进入契约（browser/tauri 各自接线）；`convertLegacySession` 纯转换信封（`{version,session}` 内层走既有 legacy 解析）；`importLegacyRecovery` 命令+菜单项：读取→摘要预览（名称/BPM/偏移/切点数）→App 对话框确认→整体替换并恢复；legacy `lastFile.path` 仅 hint，归档 lastFile 为 null，reopen 不触发；拒绝/非 legacy 文件不动工作区。
 - 2026-11-10 W3 起步：**G06 已完成（`6828d6f`）**：relink 不匹配改为可选采纳——`confirmRelinkDifference` 回调（App.vue 对话框，4 语言），确认后以一次可撤销事务更新媒体元数据（名称/格式/字节/采样率/声道/帧数/完整性）与 clip 帧数，mediaId 稳定；拒绝或未接线保持硬拒绝且不改动；对话框期间并发编辑经 revision 守卫作废。
@@ -15,7 +19,7 @@
 - 工作分支：`feature/tauri`。本轮起点 HEAD `777cf0e`；W2a.1 检查点提交位于其后（用 `git log --oneline -3` 定位）。
 - 恢复时先核对 HEAD/diff；本文记录的是上述检查点，不覆盖后来已经完成的工作。
 - 本轮改动归属：codec/schema、project 测试及三份迁移/格式文档，全部属于 W2a.1；无用户遗留修改。提交后核对工作树干净。
-- **W3 绑定与恢复身份四项（G05/G06/G09/G12）已全部完成**；下一包 **W4 项目属性与 BMHelper（G07/G08/G11）**。不要先回去美化原生菜单、重构旧打包工具或实现多轨混音。
+- **W2–W5 全部完成**（含 WSL 本机 Tauri 策略入档）；下一包 **W6 产品入口与常规构建（G14）**。不要先回去美化原生菜单、重构旧打包工具或实现多轨混音。
 
 阅读顺序：本文件 → [实施计划](IMPLEMENTATION.md) → [项目格式](../PROJECT_FORMAT.md)。
 追溯原话时读 [决策时序](THIRD_SESSION_EVIDENCE.md) 和 [获批原文](THIRD_SESSION_APPROVED_PLAN.md)。
@@ -31,23 +35,24 @@
 6. Project / Session / Config / Runtime / Host binding 分清；恢复失败保留输入，保存错误可见、可重试；关闭不被迟到写复活。
 7. 正式构建最终切换常规 Vite/Tauri；旧打包轮子退出，不能为保持它们而漂移。原生/归档尚未验收。
 8. 离线运行、严格类型、许可证、root version、真实测试声明遵循 AGENTS.md。清理移动不删除，定期本地 commit，不 push/tag/release/deploy。
+9. 本机 WSL 已可运行 Tauri：仅限本机、必须**显式调用**（不写入默认脚本、不在他机隐式启动 WSL）；CI 的 Linux 验证交给真实 Ubuntu runner，不用 WSL；WSL 证据标注为"本机验证"。详见 IMPLEMENTATION 第 6 节。
 
-## 3. W3 的直接起手步骤
+## 3. W6 的直接起手步骤
 
-先读 `src/workspace/session.ts`（lastFile 捕获与恢复）、`src/workspace/project-media.ts`（relink 硬拒绝）、`src/platform/` 契约与 `src-tauri/src/` reader（transfer/grant），及对应测试 `tests/app/workspace.test.ts`、`tests/app/project-files.test.ts`、`tests/app/platform.test.ts`。
-编辑前加载当前工具可用的 TypeScript/Vue skill；G12 涉及 Rust 时再读 Rust skill。
+先读 `package.json` scripts、`vite.config.mts`、`src-tauri/tauri.conf.json`、`scripts/test-ui.js`/`playwright.app.config.mts`、`.github/workflows/`（release.yml 的发布耦合盘点后单独评估），及 docs/CI.md。
+Rust/打包改动加载 Rust skill；跑 Cargo 前先 `node scripts/tauri-build-info.mjs`。
 
-当前现状：G05 lastFile 从 decoded source 捕获、reopen 走 loadAudio；G06 relink 不匹配当前硬拒绝；G09 `platform.importLegacySession` 只有选择/读取；G12 不同引用并行已测、同一引用双读取 transfer 隔离与 grant 回收未验证。
+当前现状：Vue/Tauri 应用代码可构建可测（`:app` 系列为过渡入口）；默认 build/CI/打包仍是旧 Electron 链；bundle.active=false；native Tauri 双 profile、各目标平台包/归档、离线 WebView2 方案未做。本机 WSL 可显式跑 Tauri 冒烟（仅本机、显式调用；CI 用真实 Ubuntu，见第 4/6 节）。
 
 先加有意义的失败场景，再用最小设计修复（First Make it Work → Make it Right → Follow Practice）：
 
-1. ~~G05~~ 已完成（7c4a975）。
-2. ~~G06~~ 已完成（6828d6f）。
-3. ~~G09~~ 已完成（import-legacy 菜单项，确认对话框 `confirmLegacyImport`）。
-4. ~~G12~~ 已完成（9e4e9fc）。
+1. 盘点 release.yml 的发布/部署耦合，写清 disposition（不触发、不加 CD），再做有依据的本地调整。
+2. dev/build/test/package 主入口切换到 Vue/Tauri：typecheck/test/build 默认跑新链，旧链保留命名或退场（移动至 .pending-delete 的规则不变）。
+3. Tauri 常规目标产物（本机平台先做），bundle 配置按 D10 裁剪；产物做归档校验。
+4. CI：Node24 + npm ci + Rust locked + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action；工作流先在分支 push 上验证，不加 CD。
+5. native UI 双 profile（1280×720/DPR1、1920×1080/DPR2）用 Tauri 驱动验证；本机 WSL 路径可作为中间证据（标注"本机 WSL"），标准验收以真实平台包为准。
 
-可按 G05→G06→G09→G12 拆成小步提交。每个提交记下测试结果和剩余项。
-W3 完成后按 IMPLEMENTATION 的 W4→W5→W6→W7 继续；依赖关系可拆分，但状态台账必须同步。
+W6 完成后进入 W7（历史 smell findings 处置、许可证、README×4、changelog×2）。
 
 ## 4. 进入环境：先观察，后修改
 
@@ -165,6 +170,13 @@ Android 明确不在本期验证范围；旧 Electron 默认构建/CI 仍在，�
 本轮文档验证（2026-11-10 JST）：7 份文档的本地 Markdown 链接与代码围栏检查通过；获批计划正文与原提取逐字一致并记录 SHA-256；`git diff --check` 通过。没有重跑应用测试。
 W1 轮代码验证（同日）：`test:components` 17 files / 144 passed；`typecheck:app` 通过；`build:app` 通过。本轮未重跑 `test:app-ui`（App.vue 新增的确认对话框仅有逻辑级覆盖）、旧 lane `npm test`（改动不触及旧 lane，`src/renderer/session.ts` 为独立实现）与 Cargo（无 Rust 改动）；这些列入后续验收。
 W2a.2 轮代码验证（同日）：`test:components` 17 files / 150 passed；`typecheck:app` 通过；`build:app` 通过。未重跑 `test:app-ui`、旧 lane `npm test`（不触及）与 Cargo（无 Rust 改动）。
+W5 收官（同日）：typecheck:app、build:app 通过；无手柄运行时（grep gamepad 无命中）；未跑 UI profiles/旧 lane（本轮改动不触及，如实跳过）。
+W5 第三批（同日）：项目替换打断活动手势（revision 守卫取消）与 exportLock/bandBusy 重入护栏有测试；时间轴 pointer capture/lostcapture/unmount 清理经代码核对确认（VueUse scope 管理 observer）。
+W5 第二批（同日）：对话框 [role=dialog] 期间快捷键失效有确定性测试；200 项 × 2000 切点的 undo/redo 成本测量通过（不可变快照模型预算护栏）；ElMessageBox role=dialog 已核实。
+G10 轮（同日）：`test:components` 18 files / 198 passed。
+G08 轮（同日）：`test:components` 17 files / 165 passed；typecheck:app、build:app 通过。
+G07 轮（同日）：`test:components` 17 files / 163 passed；typecheck:app、build:app 通过。dB 往返断言改 toBeCloseTo；注意 muted track/gain≠0 的工程仍属受限（capability），track 路由投影未激活。
+G11 轮（同日）：`test:components` 17 files / 161 passed。`de46b1f`。
 G12 轮（同日）：cargo fmt/test --locked --offline（12 passed）/clippy all-targets all-features -D warnings 通过；`test:components` 17 files / 160 passed；typecheck:app 通过。`9e4e9fc`。注意：Cargo 前需先 `node scripts/tauri-build-info.mjs`（build.rs 会因过期 identity 拒绝构建）。
 G09 轮（同日）：`test:components` 17 files / 160 passed；typecheck:app、build:app 通过。
 G06 轮（同日）：`test:components` 17 files / 158 passed；typecheck:app、build:app 通过。`6828d6f`。

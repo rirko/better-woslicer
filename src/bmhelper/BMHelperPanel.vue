@@ -2,16 +2,20 @@
 import { computed, reactive, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElAlert, ElButton, ElCheckbox, ElCheckboxGroup, ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElOption, ElSelect } from 'element-plus';
-import type { OpenedFile, Platform } from '../platform/contracts';
+import type { OpenedFile } from '../platform/contracts';
+import { useWorkspace } from '../workspace/workspace';
 import { bmsSequenceClipboard, cutPositionsClipboard, defaultDivisionSetting, wavDefinitionText, zzToString, type SortType } from '../core/bmhelper';
 import type { SmfTrackInfo } from '../core/smf';
 import { useBmhelperStore } from './store';
 import PianoRoll from './PianoRoll.vue';
 
-const props = withDefaults(defineProps<{ platform: Platform; bpm?: number }>(), { bpm: 120 });
+const props = withDefaults(defineProps<{ bpm?: number }>(), { bpm: 120 });
 const emit = defineEmits<{ applyCuts: [value: { bpm: number; ticks: number[] }] }>();
 const { t } = useI18n();
 const store = useBmhelperStore();
+// The workspace service is injected once by the app shell and stays stable
+// across panel remounts, so in-flight dialog actions keep one platform identity.
+const platform = useWorkspace().platform;
 const busy = ref(false);
 const error = ref('');
 const settingsOpen = ref(false);
@@ -44,7 +48,7 @@ function resetSettings(): void {
 }
 async function openMidi(): Promise<void> {
   await run(async () => {
-    const file = await props.platform.openFile('midi');
+    const file = await platform.openFile('midi');
     if (!file) return;
     const inspection = store.inspectMidi(file.bytes);
     pending.value = file;
@@ -71,15 +75,20 @@ async function create(): Promise<void> {
     settingsOpen.value = false; pending.value = null;
   });
 }
-async function openProject(): Promise<void> { await run(async () => { const file = await props.platform.openFile('bmh'); if (file) store.openProject(file.bytes, file.name); }); }
-async function saveProject(): Promise<void> { await run(async () => { if (await props.platform.saveFile('bmh', `${store.name || 'project'}.bmh`, store.saveProjectBytes())) store.dirty = false; }); }
-async function exportMidi(): Promise<void> { await run(async () => { await props.platform.saveFile('midi', `${store.selectedDivision?.name ?? 'recording'}.mid`, store.exportMidiBytes()); }); }
+async function openProject(): Promise<void> { await run(async () => { const file = await platform.openFile('bmh'); if (file) store.openProject(file.bytes, file.name); }); }
+async function saveProject(): Promise<void> {
+    await run(async () => {
+      const saved = await store.saveBmhProject(bytes => platform.saveFile('bmh', `${store.name || 'project'}.bmh`, bytes));
+      if (!saved) store.dirty = true;
+    });
+  }
+async function exportMidi(): Promise<void> { await run(async () => { await platform.saveFile('midi', `${store.selectedDivision?.name ?? 'recording'}.mid`, store.exportMidiBytes()); }); }
 async function copy(kind: 'cuts' | 'bms' | 'definitions'): Promise<void> {
   await run(async () => {
     const division = store.selectedDivision;
     const source = store.project?.source;
     if (!division || !source) return;
-    await props.platform.writeClipboard(kind === 'cuts' ? cutPositionsClipboard(division) : kind === 'bms' ? bmsSequenceClipboard(division, source) : definitionText.value);
+    await platform.writeClipboard(kind === 'cuts' ? cutPositionsClipboard(division) : kind === 'bms' ? bmsSequenceClipboard(division, source) : definitionText.value);
   });
 }
 function showDefinitions(): void { filename.value = store.name; definitionsOpen.value = true; }

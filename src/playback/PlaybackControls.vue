@@ -30,7 +30,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
   <div class="playback-controls" role="group" :aria-label="t('chrome.titlePlay')">
     <ElButton :disabled="disabled" :type="editor.playing ? 'primary' : 'default'" :aria-pressed="editor.playing" :title="t('chrome.titlePlay')" @click="playback.togglePlayPause()">{{ t('chrome.play') }}</ElButton>
     <ElButton :disabled="disabled" @click="playback.stop()">{{ t('chrome.stop') }}</ElButton>
-    <ElSlider class="volume-slider" :model-value="volume" :format-tooltip="formatVolume" :aria-label="t('chrome.titleVolume')" :title="t('chrome.titleVolume')" @update:model-value="setVolume" />
+    <ElSlider class="volume-slider" :model-value="volume" :format-tooltip="formatVolume" :aria-label="t('chrome.titleVolume')" :title="t('chrome.titleVolume')" @change="setVolume" />
     <label class="control-label">{{ t('chrome.rateLabel') }}
       <ElSelect class="rate-select" :model-value="editor.playbackRate" :aria-label="t('chrome.titleRate')" @update:model-value="setRate">
         <ElOption v-for="rate in PLAYBACK_RATES" :key="rate" :value="rate" :label="formatRate(rate)" />
@@ -41,7 +41,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
         <ElOption v-for="cue in cues" :key="cue.value" :value="cue.value" :label="t(cue.label)" />
       </ElSelect>
     </label>
-    <ElSlider class="volume-slider" :model-value="cueVolume" :format-tooltip="formatVolume" :aria-label="t('chrome.titleCueVolume')" :title="t('chrome.titleCueVolume')" @update:model-value="setCueVolume" />
+    <ElSlider class="volume-slider" :model-value="cueVolume" :format-tooltip="formatVolume" :aria-label="t('chrome.titleCueVolume')" :title="t('chrome.titleCueVolume')" @change="setCueVolume" />
     <ElCheckbox v-model="editor.followPlayhead" :title="t('chrome.titleFollow')">{{ t('chrome.follow') }}</ElCheckbox>
   </div>
 </template>

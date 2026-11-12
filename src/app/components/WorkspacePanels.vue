@@ -31,7 +31,7 @@ function applyCuts(payload: { bpm: number; ticks: number[] }): void {
       <ElTabPane name="cuts" :label="t('chrome.tabCuts')"><MarkerList v-if="activeTab === 'cuts'" /></ElTabPane>
       <ElTabPane name="detect" :label="t('chrome.bandDetect')"><DetectionPanel v-if="activeTab === 'detect'" /></ElTabPane>
       <ElTabPane name="output" :label="t('chrome.tabOutput')"><OutputPanel v-if="activeTab === 'output'" /></ElTabPane>
-      <ElTabPane name="bmhelper" :label="t('chrome.tabBmhelper')"><BMHelperPanel v-if="activeTab === 'bmhelper'" :platform="platform" :bpm="bpm" @apply-cuts="applyCuts" /></ElTabPane>
+      <ElTabPane name="bmhelper" :label="t('chrome.tabBmhelper')"><BMHelperPanel v-if="activeTab === 'bmhelper'" :bpm="bpm" @apply-cuts="applyCuts" /></ElTabPane>
     </ElTabs>
   </aside>
 </template>

@@ -17,7 +17,7 @@ export type MenuCommand = Extract<AppCommand,
   | 'select-all' | 'clear-markers' | 'zoom-in' | 'zoom-out' | 'about'
 >;
 
-const MENU_COMMANDS: readonly MenuCommand[] = [
+export const MENU_COMMANDS: readonly MenuCommand[] = [
   'open-project', 'save-project', 'relink-audio',
   'open-audio', 'new-project-wos', 'import-wos', 'import-legacy', 'export-wos', 'close-project', 'export-slice', 'export-all',
   'undo', 'redo', 'select-copy', 'select-cut', 'select-paste', 'select-all', 'clear-markers',

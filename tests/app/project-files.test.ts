@@ -3,6 +3,7 @@ import { audioFile, fixture, processorEngine } from './workspace-fixture';
 import { createEmptyProject, decodeProject, encodeProject } from '../../src/project/codec';
 import type { DecodedAudio } from '../../src/audio/audio-jobs';
 import { captureEditorSession } from '../../src/workspace/session';
+import { ampToDb } from '../../src/core/volume';
 import { projectToWos } from '../../src/project/codec';
 import { writeWos } from '../../src/core/wos';
 
@@ -90,6 +91,26 @@ describe('portable project workflow', () => {
     expect(f.editor.canUndo).toBe(false);
     expect(() => f.editor.setTicks([12])).toThrow();
     expect(f.workspace.actions.undo()).toBe(false);
+  });
+  it('persists playback properties in the saved project and restores them', async () => {
+    const f = setup(); await f.workspace.loadAudio(audioFile());
+    f.editor.setVolume(.25); f.editor.setCueVolume(.5); f.editor.setPlaybackRate(.75); f.editor.cueMode = 'triangle'; f.editor.rmsVisible = true;
+    await f.workspace.saveProject();
+    const saved = f.saved[0]; if (!saved) throw new Error('Missing output');
+    const parsed = decodeProject(saved.bytes);
+    if (parsed.kind !== 'supported') throw new Error('Unsupported save');
+    expect(parsed.project.global.masterGainDb).toBeCloseTo(ampToDb(.25), 10);
+    expect(parsed.project.global.cueGainDb).toBeCloseTo(ampToDb(.5), 10);
+    expect(parsed.project.global.playbackRate).toBe(.75);
+    expect(parsed.project.global.cueMode).toBe('triangle');
+    expect(parsed.project.global.views.rms).toBe(true);
+    const restored = setup(); restored.opened = { ...saved, reference: null };
+    await restored.workspace.openProject();
+    expect(restored.editor.volume).toBeCloseTo(.25, 12);
+    expect(restored.editor.cueVolume).toBeCloseTo(.5, 12);
+    expect(restored.editor.playbackRate).toBe(.75);
+    expect(restored.editor.cueMode).toBe('triangle');
+    expect(restored.editor.rmsVisible).toBe(true);
   });
   it('discloses unrecognized fields on editable projects and normalizes them on save', async () => {
     const f = setup(); const project = createEmptyProject('odd', 'Odd');

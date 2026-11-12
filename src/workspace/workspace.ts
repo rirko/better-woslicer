@@ -331,7 +331,7 @@ export function createWorkspace(options: WorkspaceOptions) {
     return resetPending;
   }
   async function dispose(): Promise<void> { if (disposed) return; disposed = true; invalidate(); await persistence.dispose(); }
-  return { editor, actions, openAudio, openProject, saveProject, relinkAudio, openDroppedFile, loadAudio, reopen, importWosSettings, newProjectFromWos, importLegacyRecovery, saveWos, reset, restoreSession, dispose, flushSession: persistence.flush, ...exporter, ...detection, bmseIn, bmseOut };
+  return { editor, platform, actions, openAudio, openProject, saveProject, relinkAudio, openDroppedFile, loadAudio, reopen, importWosSettings, newProjectFromWos, importLegacyRecovery, saveWos, reset, restoreSession, dispose, flushSession: persistence.flush, ...exporter, ...detection, bmseIn, bmseOut };
 }
 export type Workspace = ReturnType<typeof createWorkspace>;
 export const workspaceKey: InjectionKey<Workspace> = Symbol('workspace');
