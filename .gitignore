@@ -8,3 +8,6 @@ test-artifacts/
 test-results/
 playwright-report/
 .zcode/
+src-tauri/target/
+src-tauri/generated/
+.pending-delete/

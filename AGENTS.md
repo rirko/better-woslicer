@@ -2,6 +2,21 @@
 
 These rules apply to all work in this repository. Keep this file in English.
 
+## Ensemble coordination
+
+- For substantial tasks, follow [the ensemble behavior standard](docs/ENSEMBLE.md). The primary agent owns architecture, shared contracts, decomposition, integration, and final verification.
+- Delegate bounded, independently verifiable work when useful, using logical responsibility and state ownership as boundaries. Keep trivial fixes and tightly coupled critical-path work local; delegation is not mandatory.
+- Define each subagent's scope, writable files, constraints, dependencies, and acceptance criteria. Avoid overlapping writers and conflicting build/test resources; settle shared contracts before parallel implementation.
+- Require reports of changed files, key decisions, actual test results, and unresolved issues. Review diffs and verify integration before declaring completion. Escalate unexpected architectural changes and infrastructure failures instead of repeatedly retrying.
+- Optimize for maintainable, human-readable design, not agent utilization. Preserve enough task and checkpoint context for another tool or a human to resume.
+
+## Migration continuity
+
+- When continuing the Vue/Tauri migration, read [the recovery checkpoint](docs/migration/RESUME.md) first, then [the implementation plan](docs/migration/IMPLEMENTATION.md). Check the current Git state before relying on a recorded checkpoint.
+- Preserve the approved decisions and distinguish requirements, current implementation, and unverified behavior. Update the checkpoint and relevant work-package status after each completed step so another tool or chat can resume without private session logs.
+- For cleanup during this migration, move obsolete files or directories into `.pending-delete/<timestamp>/` instead of running filesystem deletion commands. Verify resolved source and destination paths remain inside the repository before a recursive move.
+- The user has authorized frequent local checkpoint commits. Keep them focused and validated; this does not authorize pushing, tagging, publishing, or deployment.
+
 ## Product security
 
 - This is an offline desktop audio editor. Do not add application features or runtime dependencies that access the public Internet or other external networks, including telemetry, crash uploads, update checks, cloud services, remote assets, or links that launch an external browser.

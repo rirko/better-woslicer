@@ -11,5 +11,5 @@
     "declaration": false
   },
   "include": ["src/core/**/*.ts", "src/main/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["tests/web"]
+  "exclude": ["tests/web", "tests/components", "tests/app"]
 }
