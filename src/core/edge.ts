@@ -7,8 +7,8 @@
  * top of sample positions from the export time base.
  */
 
-import { MAX_TICKS, TimeBase, tickToSampleExport } from "./timebase.js";
-import { SourceAudio } from "./slicer.js";
+import { MAX_TICKS, TimeBase, tickToSampleExport } from './timebase.js';
+import { SourceAudio } from './slicer.js';
 
 /** Original GetRMS: sqrt(sum(v*v/1000) / count) with integer v*v/1000 terms. */
 export function getRms(src: SourceAudio, channel: number, from: number, to: number): number {
@@ -29,9 +29,9 @@ export function getRms(src: SourceAudio, channel: number, from: number, to: numb
  * Returns sorted tick positions where a marker should be placed.
  */
 export function detectEdges(src: SourceAudio, base: TimeBase, gridTicks: number): number[] {
-  if (gridTicks <= 0) throw new RangeError("gridTicks must be positive");
+  if (gridTicks <= 0) throw new RangeError('gridTicks must be positive');
   const step = tickToSampleExport(gridTicks, base) - tickToSampleExport(0, base);
-  if (step <= 0) throw new RangeError("grid step resolves to zero samples");
+  if (step <= 0) throw new RangeError('grid step resolves to zero samples');
 
   const result: number[] = [];
   for (let tick = gridTicks; tick < MAX_TICKS; tick += gridTicks) {

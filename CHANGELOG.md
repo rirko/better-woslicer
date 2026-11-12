@@ -2,83 +2,96 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
+## 1.0.0 — 2026-11-13
+
+### Added
+
+- A visible banner shows the current stage while restoring a session or loading audio.
+- DX projects preserve Unicode BMHelper division names and ZZ/FF numbering mode. BMH export follows the original character substitutions and warns when names change.
+- Save and reopen `.wosdx` projects with cuts, settings and BMHelper work. Moved audio files can be linked again.
+- Open multi-track projects for viewing and save the original file unchanged.
+- Import `.wos` timing and cuts into the current project or use them to start a new one.
+- Import saved sessions from older versions, with a preview before replacing your work.
+
+### Fixed
+
+- BMH files now open and save in the original BMHelper beta 4′ format, including Japanese division names.
+- Desktop projects save absolute audio paths and reconnect available media when opened. Relinking a moved file updates its saved path.
+- Projects can save BMHelper work above the previous 16 MiB limit. Large MIDI note lists no longer fail with a stack overflow during saving.
+- BMHelper follows project undo, redo and reopening, so its panel and exports use the current project contents.
+
+- 32-bit WAV files now show their original bit depth and format. Processing and output remain 16-bit.
+- The app keeps damaged recovery files until you agree to discard them. Failed recovery saves show a warning and keep your work ready to retry.
+
 ## 0.3.0 — 2026-11-08
 
 ### Added
 
-- Color themes: Light, Dark and System, next to the language selector. The System choice follows the operating system live.
-- The interface language can follow the system language automatically — the language selector gains an Auto choice.
-- The session is restored on launch: window size and position, your options, the selected tab, the markers you were cutting with and the last opened file. A file that has gone missing is reported in the status bar.
-- A Close button next to Open: after a confirmation it clears the opened file and all unsaved work, including the session archive.
-- The waveform is drawn in two tones — a light peak envelope with a darker RMS band inside — and stays detailed at every zoom, down to the individual samples: a connected curve at mid zooms and one stem per sample at the deepest zoom.
-- An RMS layer toggle (left of the Bands button, off by default); turning Bands on turns the RMS layer off and locks its toggle while the band overlay is shown.
-- Band overlay lines are smoother.
-- Monitor playback defaults to −10 dB and the cue to −6 dB.
+- Light, dark and system themes. Interface language can also follow the system.
+- Restore the previous session on launch, including audio, cuts and settings.
+- Close the current audio and clear unsaved work after confirmation.
+- Inspect individual samples when zooming in, and toggle the RMS waveform overlay.
 
 ### Fixed
 
-- Dense audio no longer renders as a solid block: the waveform is drawn per device pixel on high-DPI screens and stays sharp at mid-range zooms instead of blurring.
+- Dense waveforms stay readable when zooming and on high-resolution screens.
 
 ## 0.2.1 — 2026-11-07
 
 ### Added
 
-- A monitor volume slider (left of the Bands toggle) for playback and slice previews; every volume slider now shows its level in dB in the status bar while dragging.
+- Adjust playback and slice-preview volume, with levels shown in dB.
 
 ### Fixed
 
-- Cuts at the edge of the audio: cuts beyond the end are rejected, a cut exactly at the end exports a valid zero-duration WAV instead of a garbage stub, slice tails no longer fabricate a reversed echo at the end of the file, and the region beyond the audio is hatched with a marked boundary line.
-- The "cut already exists" message now names the measure and states that nothing was changed.
+- Cuts at the audio's end export correctly. Slice tails no longer produce a reversed echo there.
 
 ## 0.2.0 — 2026-11-07
 
 ### Added
 
-- Built-in BMHelper: import a key-sound MIDI part, divide it into a recording sequence with WAVE definitions, apply its cut positions to the timeline, and export the recording MIDI, cut positions, BMS sequence and WAV definition list. Based on exclusion's BMHelper (https://excln.github.io/bmhelper.html).
+- Built-in BMHelper turns key-sound MIDI into recording sequences and cuts, with MIDI and BMS export.
 
 ## 0.1.3 — 2026-11-06
 
 ### Added
 
-- A browser version of the app is available as [woslicer-dx app](https://woslicer-dx.pages.dev/) — no installation needed.
+- Use the [browser version](https://woslicer-dx.pages.dev/) without installing the app.
 
 ### Fixed
 
-- The Japanese interface now uses the original woslicerIII terminology, such as 切断位置 for cut markers and 出力 for export.
+- Japanese interface terms match the original woslicerIII.
 
 ## 0.1.2 — 2026-11-05
 
 ### Added
 
-- The product is renamed to **woslicer-dx**; the executable, folders, archives and window title follow.
-- Downloads and installs are much smaller.
-- The whole interface is translated in English, Chinese, Japanese and Korean, including status messages, file-dialog titles and file-type filters; the language selector shows each language's name in its own script and font.
-- Japanese and Korean READMEs.
+- Renamed the app to **woslicer-dx**.
+- English, Chinese, Japanese and Korean interface options.
 
 ### Fixed
 
-- Arrow Left now steps the cursor left, and the cursor line stays visible and follows the view while you scroll or zoom.
-- Previewing a slice again replays it from the start instead of layering a second copy on top.
-- Markers placed before loading audio are now visible on the timeline.
-- Cycling the grid with Q/W keeps the Grid selector in step.
-- Markers that are deleted no longer stay selected, so copy, cut and quantize keep working on markers that still exist.
+- The left arrow moves the cursor left. Scrolling and zooming keep the cursor visible.
+- Replaying a slice starts it again without overlapping the previous playback.
+- Cuts placed before loading audio appear on the timeline.
+- Q/W grid changes update the grid selector.
+- Deleted cuts no longer interfere with copying, cutting or quantizing the selection.
 
 ## 0.1.1 — 2026-11-04
 
 ### Added
 
-- About now shows the version, commit and build date to help identify your copy when reporting an issue.
-- Portable packages include the complete OGG decoder, with no separate installation required.
-- Download formats: `.7z` for Windows, `.tar.xz` for Linux, and `.zip` for macOS.
-- Simplify the English and Chinese guides for installation and everyday use.
+- About shows version and build details for reporting problems.
+- Portable packages play OGG files without an extra installation.
 
 ## 0.1.0 — 2026-11-02
 
 ### Added
 
-- Introduce WAV/OGG import, timeline editing, WAV slice export, `.wos` projects and BMSE clipboard support.
+- Import WAV/OGG, edit cuts on the timeline and export WAV slices.
+- Import/export `.wos` settings and copy cuts to BMSE.
+- Tap calibration, frequency-band display and automatic cut detection.
 
-## Fixed
+### Fixed
 
-- Fix grid spacing so the displayed lines, snapping and keyboard movement agree. Add Japanese and Korean interface and menu translations.
-- Add English/Chinese interface options, tap calibration, frequency-band display and automatic cut detection.
+- Grid lines, snapping and keyboard movement agree.

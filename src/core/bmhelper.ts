@@ -17,23 +17,27 @@
  *    Format", positions in 48-per-quarter units, decimal fields).
  */
 
-import type { MidiNoteEvent, MidiSequence } from "./smf.js";
+import { BMSE_CLIPBOARD_FORMAT_NAME } from './bmse.js';
+import type { MidiNoteEvent, MidiSequence } from './smf.js';
 
-export const BMSE_CLIPBOARD_HEADER = "BMSE ClipBoard Object Data Format";
+// One source of truth for the BMSE clipboard header: cutPositionsClipboard's
+// output is the exact input of the BMSE clipboard reader, so the write side
+// re-exports the reader's constant instead of holding its own copy.
+export const BMSE_CLIPBOARD_HEADER = BMSE_CLIPBOARD_FORMAT_NAME;
 /** Clipboard positions per quarter note: 192 ticks per 4/4 measure = 48/beat. */
 const BEAT_UNITS_PER_QUARTER = 48;
 const ZZ_RADIX = 36;
 const ZZ_MAX = ZZ_RADIX * ZZ_RADIX - 1; // "ZZ"
-const ZZ_DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ZZ_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 export type SortType =
-  | "none"
-  | "nn_gate_vel"
-  | "nn_vel_gate"
-  | "gate_nn_vel"
-  | "gate_vel_nn"
-  | "vel_nn_gate"
-  | "vel_gate_nn";
+  | 'none'
+  | 'nn_gate_vel'
+  | 'nn_vel_gate'
+  | 'gate_nn_vel'
+  | 'gate_vel_nn'
+  | 'vel_nn_gate'
+  | 'vel_gate_nn';
 
 export interface DivisionSetting {
   name: string;
@@ -87,9 +91,8 @@ export interface Division {
   /** Definition index per source note (source notes in position order). */
   src2def: number[];
   /**
-   * Session-only flag of the id mode used at creation (drives the `<`/`>`/始番号
-   * wrap boundary). Not serialized — the original loses it on reload the same
-   * way; reopened projects default to the ZZ mode.
+   * Numbering mode used by transpose/start-number actions. DX projects preserve
+   * this flag. Original BMH files omit it and reopen in ZZ mode.
    */
   zzDefinition: boolean;
 }
@@ -101,7 +104,7 @@ export function defaultDivisionSetting(name: string, quantize: number): Division
     srcCopy: false,
     headMargin: 0,
     minInterval: quantize,
-    sortType: "nn_gate_vel",
+    sortType: 'nn_gate_vel',
     gateThreshold: Math.trunc(quantize / 8),
     velocityThreshold: 5,
     zzDefinition: true,
@@ -165,7 +168,7 @@ function unify(src: MidiNoteEvent[], setting: DivisionSetting): number[][] {
           (j) =>
             src[j].nn === note.nn &&
             Math.abs(src[j].gate - note.gate) <= setting.gateThreshold &&
-            Math.abs(src[j].vel - note.vel) <= setting.velocityThreshold
+            Math.abs(src[j].vel - note.vel) <= setting.velocityThreshold,
         )
       ) {
         cluster.push(i);
@@ -187,7 +190,11 @@ function bandOf(value: number, min: number, range: number, bands: number): numbe
 }
 
 /** Splits one cluster into a gate×velocity grid of averaged div notes. */
-function splitCluster(members: number[], src: MidiNoteEvent[], setting: DivisionSetting): WorkNote[] {
+function splitCluster(
+  members: number[],
+  src: MidiNoteEvent[],
+  setting: DivisionSetting,
+): WorkNote[] {
   const minGate = Math.min(...members.map((i) => src[i].gate));
   const maxGate = Math.max(...members.map((i) => src[i].gate));
   const minVel = Math.min(...members.map((i) => src[i].vel));
@@ -216,7 +223,7 @@ function splitCluster(members: number[], src: MidiNoteEvent[], setting: Division
   return out;
 }
 
-const SORT_CHAINS: Record<Exclude<SortType, "none">, (a: WorkNote, b: WorkNote) => number> = {
+const SORT_CHAINS: Record<Exclude<SortType, 'none'>, (a: WorkNote, b: WorkNote) => number> = {
   nn_gate_vel: (a, b) => a.nn - b.nn || b.gate - a.gate || b.vel - a.vel,
   nn_vel_gate: (a, b) => a.nn - b.nn || b.vel - a.vel || b.gate - a.gate,
   gate_nn_vel: (a, b) => b.gate - a.gate || a.nn - b.nn || b.vel - a.vel,
@@ -254,10 +261,16 @@ export function createDivision(source: MidiSequence, setting: DivisionSetting): 
   let work: WorkNote[];
   if (setting.srcCopy) {
     // Identity mapping: no rearrangement, only the head margin shift.
-    work = src.map((note, i) => ({ nn: note.nn, gate: note.gate, vel: note.vel, recPos: 0, referrers: [i] }));
+    work = src.map((note, i) => ({
+      nn: note.nn,
+      gate: note.gate,
+      vel: note.vel,
+      recPos: 0,
+      referrers: [i],
+    }));
   } else {
     work = unify(src, setting).flatMap((cluster) => splitCluster(cluster, src, setting));
-    if (setting.sortType !== "none") work.sort(SORT_CHAINS[setting.sortType]);
+    if (setting.sortType !== 'none') work.sort(SORT_CHAINS[setting.sortType]);
   }
 
   // Recording layout: first note at the head margin, then note-off → next
@@ -303,7 +316,12 @@ export function createDivision(source: MidiSequence, setting: DivisionSetting): 
     name: setting.name,
     quantize: source.quantize,
     notes: work,
-    recording: work.map((note) => ({ position: note.recPos, gate: note.gate, nn: note.nn, vel: note.vel })),
+    recording: work.map((note) => ({
+      position: note.recPos,
+      gate: note.gate,
+      nn: note.nn,
+      vel: note.vel,
+    })),
     definitions,
     src2def,
     zzDefinition: setting.zzDefinition,
@@ -330,7 +348,7 @@ export function setStartDefinition(division: Division, start: number, ffMode: bo
   }
   const offset = start - division.definitions[0].zz;
   for (const definition of division.definitions) {
-    definition.zz = ((definition.zz + offset) % (ZZ_MAX + 1) + ZZ_MAX + 1) % (ZZ_MAX + 1);
+    definition.zz = (((definition.zz + offset) % (ZZ_MAX + 1)) + ZZ_MAX + 1) % (ZZ_MAX + 1);
   }
 }
 
@@ -342,9 +360,9 @@ export function setStartDefinition(division: Division, start: number, ffMode: bo
 export function cutPositionsClipboard(division: Division): string {
   const lines = division.recording.map((note) => {
     const position = Math.trunc((note.position * BEAT_UNITS_PER_QUARTER) / division.quantize);
-    return "011" + String(position).padStart(8, "0") + "1";
+    return '011' + String(position).padStart(8, '0') + '1';
   });
-  return BMSE_CLIPBOARD_HEADER + "\r\n" + lines.join("\r\n") + "\r\n";
+  return BMSE_CLIPBOARD_HEADER + '\r\n' + lines.join('\r\n') + '\r\n';
 }
 
 /**
@@ -362,9 +380,11 @@ export function bmsSequenceClipboard(division: Division, source: MidiSequence): 
     lane = position === lastPosition ? lane + 1 : 1;
     lastPosition = position;
     const zz = division.definitions[division.src2def[i]].zz;
-    lines.push("1" + String(lane).padStart(2, "0") + String(position).padStart(8, "0") + String(zz));
+    lines.push(
+      '1' + String(lane).padStart(2, '0') + String(position).padStart(8, '0') + String(zz),
+    );
   });
-  return BMSE_CLIPBOARD_HEADER + "\r\n" + lines.join("\r\n") + "\r\n";
+  return BMSE_CLIPBOARD_HEADER + '\r\n' + lines.join('\r\n') + '\r\n';
 }
 
 /**
@@ -375,7 +395,14 @@ export function bmsSequenceClipboard(division: Division, source: MidiSequence): 
  */
 export function wavDefinitionText(division: Division, fileName: string): string {
   const lines = division.definitions.map(
-    (definition) => "#WAV" + zzToString(definition.zz) + " " + fileName + "_" + String(definition.div).padStart(3, "0") + ".wav"
+    (definition) =>
+      '#WAV' +
+      zzToString(definition.zz) +
+      ' ' +
+      fileName +
+      '_' +
+      String(definition.div).padStart(3, '0') +
+      '.wav',
   );
-  return lines.join("\r\n") + "\r\n";
+  return lines.join('\r\n') + '\r\n';
 }

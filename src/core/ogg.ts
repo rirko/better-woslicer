@@ -9,7 +9,7 @@
  * instead of crashing the app.
  */
 
-import { DecodedWav } from "./wav.js";
+import { DecodedWav, floatToInternal } from './wav.js';
 
 interface VorbisDecodeResult {
   channelData: Float32Array[];
@@ -24,27 +24,19 @@ interface DecoderFactory {
   };
 }
 
-/** Converts float PCM [-1, 1) to the internal int16 scale (round, clamp). */
-function floatToInternal(x: number): number {
-  let v = Math.round(x * 32768);
-  if (v < -32768) v = -32768;
-  if (v > 32767) v = 32767;
-  return v;
-}
-
 /** Decodes an OGG Vorbis file buffer into the shared DecodedWav shape. */
 export async function decodeOgg(buffer: Uint8Array): Promise<DecodedWav> {
   let factory: DecoderFactory;
   try {
-    // Dynamic require keeps the dependency optional at runtime.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = await import("@wasm-audio-decoders/ogg-vorbis");
+    // Dynamic import keeps the dependency optional at runtime.
+    const mod = await import('@wasm-audio-decoders/ogg-vorbis');
     factory = (mod as { OggVorbisDecoder: DecoderFactory }).OggVorbisDecoder;
   } catch (cause) {
     throw new Error(
-      "OGG support requires the @wasm-audio-decoders/ogg-vorbis package " +
-        "(run npm install). Original error: " +
-        (cause instanceof Error ? cause.message : String(cause))
+      'OGG support requires the @wasm-audio-decoders/ogg-vorbis package ' +
+        '(run npm install). Original error: ' +
+        (cause instanceof Error ? cause.message : String(cause)),
+      { cause },
     );
   }
 
@@ -67,5 +59,11 @@ export async function decodeOgg(buffer: Uint8Array): Promise<DecodedWav> {
     for (let i = 0; i < length; i++) out[i] = floatToInternal(ch[i]);
     return out;
   });
-  return { sampleRate: result.sampleRate, channels, length, data, wasFloat: false };
+  return {
+    sampleRate: result.sampleRate,
+    channels,
+    length,
+    data,
+    sourceFormat: { kind: 'vorbis' },
+  };
 }

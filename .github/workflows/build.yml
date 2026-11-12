@@ -2,208 +2,133 @@ name: Build and test
 
 on:
   push:
-    branches:
-      - main
-      - dev
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      optional_platforms:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
+env:
+  WOSLICER_BUILD_PROFILE: release
+
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Distinct from release.yml: a called workflow must not cancel its caller.
+  group: build-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
-  bundle:
-    name: precompile-payload
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    # The platform matrix is decided here (official dynamic-matrix pattern):
-    # only pushes to main get the full platform set; dev pushes, pull requests
-    # and manual dispatches build Windows x64 alone.
-    outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-          cache: npm
-      - name: Install locked dependencies
-        run: npm ci
-      - name: Decide the platform matrix (full only on main)
-        id: matrix
-        run: |
-          # The matrix bodies live in the JSON files next to this workflow and
-          # are edited as ordinary JSON; multi-line output needs the heredoc
-          # form so fromJSON sees the file verbatim.
-          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            chosen=".github/workflows/matrix-full.json"
-          else
-            chosen=".github/workflows/matrix-windows.json"
-          fi
-          {
-            echo "matrix<<EOF"
-            cat "$chosen"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Build (tsc + build metadata)
-        run: npm run build
-      - name: Precompile minified payload and source maps
-        run: npm run bundle
-      - name: Upload precompiled payload
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          # Deliberately not prefixed "woslicer-": the release workflow
-          # downloads artifacts matching woslicer-*-<sha> as release assets.
-          name: app-payload-${{ github.sha }}
-          path: dist/pack/**
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
-      - name: Upload debug source maps
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: woslicer-maps-${{ github.sha }}
-          path: |
-            release/*-maps.tar.xz
-            release/*-maps.tar.xz.sha256
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
-      - name: Upload offline web build
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: woslicer-web-any-${{ github.sha }}
-          path: |
-            release/*-web-any.7z
-            release/*-web-any.7z.sha256
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
-
-  # Required on every run: the offline web build is platform-independent and
-  # ships from this workflow, so its suite gates all triggers. It tests the
-  # actual web-any artifact, not a fresh rebuild.
   web:
-    name: web (chromium + firefox)
-    needs: bundle
+    name: Web (required)
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version-file: .node-version
           cache: npm
-      - name: Install locked dependencies
-        run: npm ci
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox
-      - name: Download the offline web build
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - name: Use the source commit time for all build identities
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run check:quality
+      - run: npm test
+      - run: npm run build
+      - run: npm exec --no -- playwright install chromium --with-deps
+      - name: Test the production web output (isolated 30-second profiles)
+        run: npm run test:app-ui
+      - name: Archive and validate the tested web output
+        run: bash .github/scripts/package-web.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: woslicer-web-any-${{ github.sha }}
-          path: web-package
-      - name: Unpack the web payload
-        run: |
-          path7za="$(node -p "require('7zip-bin').path7za")"
-          chmod +x "$path7za"
-          "$path7za" x -y "web-package/*-web-any.7z"
-          mkdir -p dist
-          mv web dist/web
-      - name: Browser tests (Chromium + Firefox)
-        run: npm run test:web
+          name: woslicer-web-${{ github.sha }}
+          path: release/web/*
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 14
+      - name: Upload web diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnostics-web-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            test-artifacts/
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
 
-  build:
-    name: ${{ matrix.label }}
-    needs: bundle
+  windows-x64:
+    name: Windows x64 (required)
+    needs: web
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-desktop
+        with:
+          platform: windows-x64
+          target: x86_64-pc-windows-msvc
+
+  optional-desktop:
+    name: ${{ matrix.platform }} (optional)
+    needs: web
+    if: inputs.optional_platforms || github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.required == false }}
-    timeout-minutes: 20
+    timeout-minutes: 60
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.bundle.outputs.matrix) }}
+        include:
+          - platform: windows-arm64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          - platform: linux-x64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: deb,appimage
+          - platform: macos-arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - platform: macos-x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: ./.github/actions/build-desktop
         with:
-          node-version: '24'
-          cache: npm
-      - name: Install locked dependencies
-        run: npm ci
-      - name: Install Electron runtime
-        run: node node_modules/electron/install.js
-      - name: Download precompiled payload
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: app-payload-${{ github.sha }}
-          path: payload
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Build
-        run: npm run build
-      - name: Unit tests
-        run: npm test
-      - name: UI process isolation tests
-        run: npm run test:ui:harness
-      - name: Release preparation tests
-        run: npm run test:release-prep
-      - name: Prepare Linux display and audio
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          # Ubuntu 24.04 hosted runners already include Xvfb, D-Bus and xz-utils.
-          sudo apt-get install -y pulseaudio
-          pulseaudio --start --exit-idle-time=-1
-          pactl load-module module-null-sink sink_name=ci
-          pactl set-default-sink ci
-          # Allow Chromium's user-namespace sandbox on this disposable hosted VM.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Windows UI tests (30 seconds per display profile)
-        if: runner.os == 'Windows'
-        run: npm run test:ui
-      - name: Linux UI tests (30 seconds per display profile)
-        if: runner.os == 'Linux'
+          platform: ${{ matrix.platform }}
+          target: ${{ matrix.target }}
+          bundles: ${{ matrix.bundles || '' }}
+
+  required:
+    name: Required release checks
+    if: always()
+    needs: [web, windows-x64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require both release targets to succeed
         env:
-          LIBGL_ALWAYS_SOFTWARE: '1'
-        run: dbus-run-session -- xvfb-run -a -s '-screen 0 4096x2304x24' npm run test:ui
-      - name: Package native application
-        run: node scripts/package-app.js --bundle payload
-      - name: Windows packaged-app UI tests
-        if: runner.os == 'Windows'
-        run: npm run test:ui:packaged
-      - name: Linux packaged-app UI tests
-        if: runner.os == 'Linux'
-        env:
-          LIBGL_ALWAYS_SOFTWARE: '1'
-        run: dbus-run-session -- xvfb-run -a -s '-screen 0 4096x2304x24' npm run test:ui:packaged
-      - name: Upload application archives
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: woslicer-${{ matrix.label }}-${{ github.sha }}
-          path: |
-            release/*.7z
-            release/*.tar.xz
-            release/*.zip
-            release/*.sha256
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
-      - name: Upload UI diagnostics
-        if: always() && runner.os != 'macOS'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: ui-diagnostics-${{ matrix.label }}-${{ github.sha }}
-          path: test-artifacts/
-          if-no-files-found: ignore
-          retention-days: 7
+          WEB_RESULT: ${{ needs.web.result }}
+          WINDOWS_RESULT: ${{ needs.windows-x64.result }}
+        run: test "$WEB_RESULT" = success && test "$WINDOWS_RESULT" = success

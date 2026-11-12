@@ -1,10 +1,21 @@
+# Dependencies and build output
 node_modules/
-dist/
-release/
-src/i18n/generated.ts
-tmp-smoke.wos
+/dist/
+/release/
+/src/i18n/generated.ts
+# Tauri build and generated files are covered by src-tauri/.gitignore.
+
+# Test reports and local compatibility fixtures
+/test-artifacts/
+/test-results/
+/playwright-report/
+/woslicerIII/
+/tmp-smoke.wos
 *.log
-test-artifacts/
-test-results/
-playwright-report/
-.zcode/
+
+# Local tooling and cleanup
+/.smell-check/
+/.zcode/
+/.pending-delete/
+.DS_Store
+Thumbs.db

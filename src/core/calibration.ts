@@ -9,6 +9,13 @@
 
 export const DEFAULT_CALIBRATION_BEATS = 16;
 
+/**
+ * Reference tempo for the single-beat fallback match: a tap counts when it
+ * lands within half a 120 BPM quarter note (250 ms) of the reference beat.
+ * Deliberately loose — with one anchor beat there is no interval to trust.
+ */
+export const REFERENCE_TAP_BPM = 120;
+
 /** Quarter-note interval in milliseconds for the given BPM. */
 export function beatIntervalMs(bpm: number): number {
   if (!Number.isFinite(bpm) || bpm <= 0) throw new RangeError(`bpm must be positive (got ${bpm})`);
@@ -42,7 +49,6 @@ export interface CalibrationResult {
 export function analyzeTaps(
   tapTimesMs: readonly number[],
   beatsMs: readonly number[],
-  beats = DEFAULT_CALIBRATION_BEATS
 ): CalibrationResult {
   const offsets: number[] = [];
   if (beatsMs.length > 1) {
@@ -59,10 +65,9 @@ export function analyzeTaps(
   } else if (beatsMs.length === 1) {
     for (const tap of tapTimesMs) {
       const delta = tap - beatsMs[0];
-      if (Math.abs(delta) <= beatIntervalMs(120) / 2) offsets.push(delta);
+      if (Math.abs(delta) <= beatIntervalMs(REFERENCE_TAP_BPM) / 2) offsets.push(delta);
     }
   }
-  void beats;
 
   const sorted = [...offsets].sort((a, b) => a - b);
   const median = sorted.length

@@ -1,34 +1,124 @@
-# Build and CI
+# CI and release workflows
 
-Use Node.js 24 and npm. From a clean checkout:
+See the [development guide](DEVELOPMENT.md) for local commands and test profiles.
 
-```sh
-npm ci
-node node_modules/electron/install.js
-npm run typecheck
-npm run build
-npm test
-npm run test:ui
-npm run package
-npm run test:ui:packaged
-```
+## Build workflow
 
-`npm run test:ui` runs low (1280×720, DPR 1) and high (1920×1080, DPR 2; 3840×2160 backing pixels) profiles sequentially. Each profile has an independent 30-second hard timeout. The later resize checks also exercise fractional DPR comparisons. Logs and failure screenshots go to `test-artifacts/`. The packaged variant runs the same tests against the native portable executable. On Linux, run UI commands under `dbus-run-session -- xvfb-run`; CI installs PulseAudio and creates a null sink. The Ubuntu 24.04 hosted image already provides Xvfb, D-Bus and xz-utils and enables unprivileged user namespaces on its disposable VM so Electron keeps its sandbox enabled.
+`.github/workflows/build.yml` runs on pushes to `main` and `dev` and on pull
+requests targeting any branch. It also supports manual runs.
+The tag-based release workflow calls it separately.
 
-`.github/workflows/build.yml` runs on pushes to `main` and `dev`, on pull requests, and on manual dispatch. Full-platform builds run only for `main`: every other case (dev pushes, pull requests, manual dispatches) builds Windows x64 alone. The `precompile-payload` job decides the platform matrix through the official dynamic-matrix pattern; the matrix bodies are ordinary JSON files next to the workflow (`matrix-full.json`, `matrix-windows.json`) and are edited there. The job builds the minified payload once per commit (`npm run build && npm run bundle`) and uploads it as the `app-payload-<sha>` artifact together with the `<name>-<version>-maps.tar.xz` source-map archive (`woslicer-maps-<sha>`) and the platform-independent offline web build (`<name>-<version>-web-any.7z`, artifact `woslicer-web-any-<sha>`) — the pure static site (page, one script, one stylesheet), served over any static http server; see the README. A required `web` job runs for every trigger: it unpacks the uploaded offline web build and exercises that exact artifact with Playwright on Chromium and Firefox over a loopback server; its failure fails the workflow. Every platform job downloads that payload and packages it verbatim (`node scripts/package-app.js --bundle payload`), so all archives share byte-identical application code and one map archive serves every platform. Windows x64 is required and always runs. Linux x64, Windows ARM64, Linux ARM64, macOS Intel, and macOS ARM64 are optional full-build matrix jobs; their failures do not fail the workflow. On `vMAJOR.MINOR.PATCH` tag pushes, the separate Release workflow looks up a successful branch-push or manually dispatched CI run by the tag commit SHA. If that run is still queued or running, it waits; it then downloads artifacts from that exact run and creates a draft GitHub Release without rebuilding. Windows x64 and its checksum are mandatory; the offline web build and the source-map archive are also mandatory; successful optional builds are attached and unavailable platforms are listed in the draft notes. After the draft is created, a second job publishes the offline web build to Cloudflare Pages (`wrangler pages deploy`), provided the repository has configured the `CLOUDFLARE_PROJECT_NAME` variable together with the `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` secrets; without that configuration the job skips itself and nothing is deployed. Windows/Linux jobs run UI tests before and after packaging; macOS jobs run type checks and unit tests before packaging. Missing original oracle fixtures are reported as skipped, not passed.
+| Target | Runner | Packages | Gate |
+| --- | --- | --- | --- |
+| Web | ubuntu-24.04 | Static site ZIP | Required |
+| Windows x64 | windows-2025 | Portable ZIP | Required |
+| Windows ARM64 | windows-11-arm | Portable ZIP | Optional |
+| Linux x64 | ubuntu-24.04 | deb + AppImage | Optional |
+| Linux ARM64 | ubuntu-24.04-arm | deb + AppImage | Optional |
+| macOS Apple Silicon | macos-15 | DMG | Optional |
+| macOS Intel | macos-15-intel | DMG | Optional |
 
-The native platform determines the package format:
+CI sets `WOSLICER_BUILD_PROFILE=release`. It does not build or test a debug
+profile. All Node setup steps use Node 26.x.
 
-- Windows x64: `release/*.7z` (portable application folder).
-- Linux x64: `release/*.tar.xz` (portable executable and runtime libraries).
-- macOS Intel/ARM64: `release/*.zip`, containing the application folder and `.app` bundle. Bundles have a local ad-hoc signature only, without Developer ID signing or notarization; these are CI builds, not notarized public releases.
+Web runs lint, format checks, typecheck, both test suites, release build,
+both UI profiles, and ZIP integrity validation. Desktop jobs run after web succeeds. The shared desktop action runs these steps:
 
-Archives include `.sha256` checksums and are uploaded as Actions artifacts for 14 days. The source-map archive is attached to the release draft as a debugging aid: unpack it next to `resources/app` (its folders mirror the payload) and DevTools symbolicates minified stacks again. UI diagnostics are retained for 7 days even on failure. GitHub may wrap these files in its own artifact download archive. The Release workflow creates a draft GitHub Release with the repository `GITHUB_TOKEN`; maintainers review and publish the draft manually. No deployment or external publishing credentials are configured. Release tags should point to commits already on the default branch after workflow changes are merged. The Release lookup waits up to 90 minutes for CI and briefly allows a newly triggered run to appear. If CI artifacts have expired, manually run the build workflow for the tagged commit before retrying the tag workflow.
+1. Install system dependencies and the pinned Rust toolchain.
+2. Generate frontend build identity before Cargo.
+3. Run rustfmt.
+4. Run locked tests and Clippy with `--release --all-features`.
+5. Build release Tauri bundles.
+6. Check native package metadata.
 
-Packaging consumes the esbuild-precompiled payload from `npm run bundle` (`dist/pack`: one minified main-process file, one self-contained preload, one renderer ESM bundle, `index.html`, `styles.css`, `build-info.json`). Source maps are generated with embedded sources, split out of the payload and archived as the `.tar.xz` symbol package; the payload itself ships no `.map` files. The packager copies the platform's Electron runtime (installed before testing), prunes `locales/*.pak` down to the `chromiumLocales` declared in `src/i18n/languages.json` (the app's language manifest), then fills `resources/app` with the payload, `LICENSE`, `NOTICE`, and the installed production dependency tree without its documentation, type-declaration and source-map files. The decoder dependency stays unpacked because `@eshaz/web-worker` spawns its worker threads from real files. Windows compression uses the locked `7zip-bin` dependency, so it does not depend on PowerShell Archive modules. Linux uses `tar`/`xz`; macOS uses `ditto`, `plutil` and ad-hoc `codesign`. The symbol package is built with the system `tar` plus 7za for the xz layer.
+Swatinem/rust-cache caches Cargo registry and target dependencies per
+OS/target. Tests, Clippy and packaging share the release profile to avoid
+separate debug and release cache trees. The cache does not replace checks.
+Every desktop job can restore a compatible cache. Only successful `main` jobs
+save new Rust cache entries. PR, `dev` and tag builds only read Rust caches.
+Compatible build and release jobs use the same cache key for each target.
+GitHub scopes cache entries by ref, including PR merge refs.
 
-Build-time downloads and CI uploads are allowed; the shipped app remains offline. See `AGENTS.md` for AI contribution rules.
+### Rust cache scope and invalidation
 
-Versioning follows [VERSIONING.md](VERSIONING.md); the build/package commands verify the lockfile and both changelogs before producing artifacts.
+The desktop action pins Rust in `CI_RUST_VERSION`. Update this value explicitly
+when adopting a new compiler. A moving `stable` channel can invalidate caches
+between two runs of the same PR.
 
-Each UI profile starts Electron with its own native device scale, a fresh temporary user/session data directory, and an OS-assigned DevTools port (`--remote-debugging-port=0`). The harness discovers the endpoint only from that child’s stderr. Native scale is checked before viewport emulation; native window diagnostics are retained in the test artifacts. All Electron processes are terminated and awaited before the next profile, including failures/timeouts. No user preferences or audio fixtures are shared between profiles. Linux Xvfb uses a 4096×2304 display to accommodate the high-resolution window.
+The pinned [rust-cache source](https://github.com/Swatinem/rust-cache/blob/d1527c8f67ef9af357290475d4af4b0fab8f12e0/src/config.ts)
+constructs the key from these inputs:
+
+- The shared key, runner OS and CPU architecture.
+- The Rust compiler version and relevant environment variables.
+- Cargo manifests, lockfiles and Rust configuration files.
+
+`shared-key` replaces the job-specific part. It does not remove GitHub's ref scope.
+The action can restore an older dependency cache when the manifest hash changes.
+A compiler or environment change also changes the restore prefix.
+Keep platform and compiler distinctions: their compiled dependencies are not interchangeable.
+
+[GitHub's cache scope rules](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)
+allow runs to restore caches from the current ref and the default branch.
+PR runs can also restore caches from their base branch.
+A cache written under `refs/pull/<number>/merge` is available only to that PR's later runs.
+It is not available to `dev`, `main`, another PR or a release tag.
+Default-branch caches can serve all these consumers. Cache keys cannot grant broader access.
+This repository uses `main` as its default branch and sole Rust cache writer.
+Update the save condition if the default branch changes.
+
+After this configuration reaches `main`, its first successful build creates shared caches for all desktop targets.
+That first build may be cold. New compiler versions or evicted entries also require a cold build.
+To populate or refresh missing entries, select **Build and test** in Actions.
+Select **Run workflow**, choose `main`, and start the run.
+Manual runs validate and archive builds. They do not publish a release or deploy Pages.
+Existing PR-scoped caches can remain until GitHub expires them. They do not become shared caches.
+
+The action's `cache-hit` output reports an exact match only.
+`Restored from cache key` confirms restoration, including a partial match.
+`No cache found.` means a cold build, even when the cache step succeeds.
+The post-job step can save a cache for later runs.
+GitHub caches are immutable and can expire, so a cache hit is never guaranteed.
+
+### Workflow implementation
+
+Actions use fixed SHAs. The workflows define triggers, runners, permissions
+and artifact transfer. The scripts in [`.github/scripts/`](../.github/scripts/)
+validate and collect native packages, archive the Web build, and prepare or
+publish releases.
+
+The Required release checks job requires web and Windows x64 success.
+Optional platforms run on pushes to `main` and during tag-based release builds.
+Their failures do not block required targets.
+The workflow uploads successful packages and failure diagnostics as artifacts.
+
+Windows CI builds the release executable with Tauri's `--no-bundle` option and
+ships it with LICENSE and NOTICE in a portable ZIP. It compares each ZIP entry
+against its source by SHA-256. The ZIP requires an installed WebView2 runtime.
+The app stores settings and recovery data in its usual local app data directory.
+Local packaging still follows the Tauri configuration.
+
+macOS builds verify the app version, executable architecture and DMG integrity.
+The workflow does not use Developer ID signing or Apple notarization.
+
+## Release workflow
+
+.github/workflows/release.yml handles v* tags and calls the build workflow.
+The tag must match the root package version. The workflow collects only artifacts from that run.
+The Web ZIP and Windows x64 portable ZIP are mandatory. The release includes checksums. Optional packages ship when their jobs succeed.
+
+The workflow creates an immediately public **prerelease**, not a draft.
+Reruns update matching assets and convert an existing draft to a public
+prerelease. It does not mark the prerelease as the latest stable release.
+
+After publishing the release, the workflow deploys the tested web ZIP to the existing Cloudflare Pages Direct Upload project. Pages is not connected to the Git repository:
+GitHub Actions uploads the prebuilt files through Wrangler and the Cloudflare API.
+Configure the repository variable `CLOUDFLARE_PROJECT_NAME` and the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+The deployment job fails if any required value is missing. The workflow reads the project's existing
+`production_branch` from the API and passes it to Wrangler. This Pages deployment target is independent of the repository branch or release tag.
+The workflow does not change Pages settings or require Git integration. After upload, the
+job requires a production deployment and compares the deployed `build-info.json`
+with the tested archive's copy.
+If deployment fails, the prerelease remains published and the failed job can be
+rerun without rebuilding or changing the desktop release gate.
+
+Use a workflow run to verify hosted platforms.

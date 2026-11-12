@@ -35,7 +35,7 @@ export function stepPlaybackRate(current: number, direction: -1 | 1): RateStep {
 
 /** Human-readable rate label, e.g. "0.25x" / "1.0x" / "1.5x" (U+00D7 sign). */
 export function formatRate(rate: number): string {
-  return `${rate.toFixed(2).replace(/0$/, "")}\u00d7`;
+  return `${rate.toFixed(2).replace(/0$/, '')}\u00d7`;
 }
 
 /**
@@ -48,7 +48,7 @@ export function advanceSamples(
   startOffset: number,
   elapsedSeconds: number,
   rate: number,
-  sampleRate: number
+  sampleRate: number,
 ): number {
   return startOffset + elapsedSeconds * rate * sampleRate;
 }
@@ -62,7 +62,7 @@ export function reanchorSample(
   startOffset: number,
   elapsedSeconds: number,
   oldRate: number,
-  sampleRate: number
+  sampleRate: number,
 ): number {
   return advanceSamples(startOffset, elapsedSeconds, oldRate, sampleRate);
 }

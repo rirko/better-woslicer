@@ -1,13 +1,13 @@
 /**
- * Slice export pipeline shared by the Electron main process (which writes the
- * files to disk) and the browser host (which packs them into a ZIP): sorts the
- * marker ticks, checks the timeline bounds, renders every slice with the exact
- * export DSP and encodes it as a canonical 16-bit WAV file.
+ * Slice export pipeline shared by the workspace exporters (which write the
+ * files to disk) and the browser host (which packs them into a ZIP): sorts
+ * the marker ticks, checks the timeline bounds, renders every slice with the
+ * exact export DSP and encodes it as a canonical 16-bit WAV file.
  */
 
-import { renderSlice, type SourceAudio } from "./slicer.js";
-import { encodeWav16 } from "./wav.js";
-import { tickToSampleExport, type TimeBase } from "./timebase.js";
+import { renderSlice, type SourceAudio } from './slicer.js';
+import { encodeWav16 } from './wav.js';
+import { tickToSampleExport, type TimeBase } from './timebase.js';
 
 export interface SliceFileRequest {
   baseName: string;
@@ -46,7 +46,8 @@ export function renderSliceFiles(source: SourceAudio, request: SliceFileRequest)
       skipped += 1;
       continue;
     }
-    const endSample = i + 1 < sorted.length ? tickToSampleExport(sorted[i + 1], base) : source.length;
+    const endSample =
+      i + 1 < sorted.length ? tickToSampleExport(sorted[i + 1], base) : source.length;
     const rendered = renderSlice(source, {
       start: startSample,
       end: endSample,
@@ -54,7 +55,7 @@ export function renderSliceFiles(source: SourceAudio, request: SliceFileRequest)
       noisegateDb: request.noisegateDb,
     });
     files.push({
-      name: `${request.baseName}_${String(i).padStart(3, "0")}.wav`,
+      name: `${request.baseName}_${String(i).padStart(3, '0')}.wav`,
       data: encodeWav16(rendered.channelsData, rendered.sampleRate, rendered.length),
     });
   }

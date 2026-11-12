@@ -12,38 +12,38 @@
  * with end = source length.
  */
 
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import * as fs from "fs";
-import * as path from "path";
-import { parseWav } from "../src/core/wav.js";
-import { readWos, markerTicks } from "../src/core/wos.js";
-import { renderSlice } from "../src/core/slicer.js";
-import { tickToSampleExport } from "../src/core/timebase.js";
-import { encodeWav16 } from "../src/core/wav.js";
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'fs';
+import * as path from 'path';
+import { parseWav } from '../src/core/wav.js';
+import { readWos, markerTicks } from '../src/core/wos.js';
+import { renderSlice } from '../src/core/slicer.js';
+import { tickToSampleExport } from '../src/core/timebase.js';
+import { encodeWav16 } from '../src/core/wav.js';
 
-const repoRoot = path.resolve(__dirname, "..", "..", "..");
-const oracleDir = path.join(repoRoot, "woslicerIII");
-const oracleNew = path.join(oracleDir, "new");
-const sourceWav = path.join(oracleDir, "KEY.wav");
-const oracleWos = path.join(oracleNew, "KEY.wos");
+const repoRoot = path.resolve(__dirname, '..', '..', '..');
+const oracleDir = path.join(repoRoot, 'woslicerIII');
+const oracleNew = path.join(oracleDir, 'new');
+const sourceWav = path.join(oracleDir, 'KEY.wav');
+const oracleWos = path.join(oracleNew, 'KEY.wos');
 
 const hasOracle = fs.existsSync(sourceWav) && fs.existsSync(oracleWos);
 
 function loadSource() {
   const bytes = fs.readFileSync(sourceWav);
-  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   return parseWav(buffer);
 }
 
-test("oracle: KEY.wav parses with the expected format", { skip: !hasOracle }, () => {
+test('oracle: KEY.wav parses with the expected format', { skip: !hasOracle }, () => {
   const wav = loadSource();
   assert.equal(wav.sampleRate, 48000);
   assert.equal(wav.channels, 2);
   assert.equal(wav.length, 8718429);
 });
 
-test("oracle: KEY.wos parameters and marker count", { skip: !hasOracle }, () => {
+test('oracle: KEY.wos parameters and marker count', { skip: !hasOracle }, () => {
   const doc = readWos(fs.readFileSync(oracleWos));
   assert.equal(doc.bpm, 185);
   assert.equal(doc.shift, -1);
@@ -52,21 +52,25 @@ test("oracle: KEY.wos parameters and marker count", { skip: !hasOracle }, () => 
   assert.equal(markerTicks(doc.markers).length, 150); // saved after the export
 });
 
-test("oracle: every exported slice length matches end-start+16 (with Cut applied)", { skip: !hasOracle }, () => {
-  const files = fs
-    .readdirSync(oracleNew)
-    .filter((f) => /^KEY_\d{3}\.wav$/.test(f))
-    .sort();
-  assert.equal(files.length, 149);
-  for (const file of files) {
-    const bytes = fs.readFileSync(path.join(oracleNew, file));
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const dataSize = view.getUint32(40, true);
-    assert.equal(dataSize % 4, 0, `${file}: data not frame-aligned`);
-  }
-});
+test(
+  'oracle: every exported slice length matches end-start+16 (with Cut applied)',
+  { skip: !hasOracle },
+  () => {
+    const files = fs
+      .readdirSync(oracleNew)
+      .filter((f) => /^KEY_\d{3}\.wav$/.test(f))
+      .sort();
+    assert.equal(files.length, 149);
+    for (const file of files) {
+      const bytes = fs.readFileSync(path.join(oracleNew, file));
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const dataSize = view.getUint32(40, true);
+      assert.equal(dataSize % 4, 0, `${file}: data not frame-aligned`);
+    }
+  },
+);
 
-test("oracle: slices KEY_000..KEY_148 render byte-identical", { skip: !hasOracle }, () => {
+test('oracle: slices KEY_000..KEY_148 render byte-identical', { skip: !hasOracle }, () => {
   const wav = loadSource();
   const doc = readWos(fs.readFileSync(oracleWos));
   const ticks = markerTicks(doc.markers);
@@ -74,7 +78,7 @@ test("oracle: slices KEY_000..KEY_148 render byte-identical", { skip: !hasOracle
 
   let verified = 0;
   for (let index = 0; index < 149; index++) {
-    const file = `KEY_${String(index).padStart(3, "0")}.wav`;
+    const file = `KEY_${String(index).padStart(3, '0')}.wav`;
     const oraclePath = path.join(oracleNew, file);
     if (!fs.existsSync(oraclePath)) continue;
     const oracleBytes = fs.readFileSync(oraclePath);
@@ -83,19 +87,17 @@ test("oracle: slices KEY_000..KEY_148 render byte-identical", { skip: !hasOracle
     // slice 148 therefore ends at the source length.
     const isLastSliceOfExport = index === 148;
     const start = tickToSampleExport(ticks[index], base);
-    const end = isLastSliceOfExport
-      ? wav.length
-      : tickToSampleExport(ticks[index + 1], base);
+    const end = isLastSliceOfExport ? wav.length : tickToSampleExport(ticks[index + 1], base);
 
     const rendered = renderSlice(
       { sampleRate: wav.sampleRate, channels: wav.channels, length: wav.length, data: wav.data },
-      { start, end, fadeoutMs: doc.fadeoutMs, noisegateDb: doc.noisegateDb }
+      { start, end, fadeoutMs: doc.fadeoutMs, noisegateDb: doc.noisegateDb },
     );
     const bytes = encodeWav16(rendered.channelsData, rendered.sampleRate, rendered.length);
     assert.equal(
       bytes.byteLength,
       oracleBytes.byteLength,
-      `${file}: size mismatch (got ${bytes.byteLength}, want ${oracleBytes.byteLength})`
+      `${file}: size mismatch (got ${bytes.byteLength}, want ${oracleBytes.byteLength})`,
     );
     let firstDiff = -1;
     for (let i = 0; i < bytes.byteLength; i++) {

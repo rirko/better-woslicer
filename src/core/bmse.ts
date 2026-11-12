@@ -12,9 +12,9 @@
  * through the system clipboard.
  */
 
-import { MAX_TICKS } from "./timebase.js";
+import { MAX_TICKS } from './timebase.js';
 
-export const BMSE_CLIPBOARD_FORMAT_NAME = "BMSE ClipBoard Object Data Format";
+export const BMSE_CLIPBOARD_FORMAT_NAME = 'BMSE ClipBoard Object Data Format';
 
 export interface BmseExportOptions {
   /** First clip number written into the lines (original: A/S adjustable). */
@@ -38,12 +38,12 @@ export function applyFfSkip(n: number, useFf: boolean): number {
 export function buildBmseClipboard(ticks: readonly number[], options: BmseExportOptions): string {
   const sorted = [...ticks].sort((a, b) => a - b).filter((t) => t >= 0 && t < MAX_TICKS);
   let n = applyFfSkip(options.startNumber, options.useFfNumbering);
-  let out = BMSE_CLIPBOARD_FORMAT_NAME + "\r\n";
+  let out = BMSE_CLIPBOARD_FORMAT_NAME + '\r\n';
   for (const tick of sorted) {
-    out += "101" + String(tick).padStart(8, "0") + String(n) + "\r\n";
+    out += '101' + String(tick).padStart(8, '0') + String(n) + '\r\n';
     n = applyFfSkip(n + 1, options.useFfNumbering);
   }
-  out += "\0";
+  out += '\0';
   return out;
 }
 
@@ -74,8 +74,8 @@ export function bmseBufferToText(bytes: Uint8Array): string {
  * reported in `invalidLines` and skipped instead of aborting the import.
  */
 export function parseBmseClipboard(text: string): BmseParseResult {
-  const normalized = text.replace(/\r\n/g, "\n");
-  const lines = normalized.split("\n");
+  const normalized = text.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
   if (lines[0] !== BMSE_CLIPBOARD_FORMAT_NAME) {
     throw new Error('clipboard does not start with "BMSE ClipBoard Object Data Format"');
   }

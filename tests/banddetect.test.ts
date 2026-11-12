@@ -1,8 +1,8 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { analyzeBands, BandAnalysis } from "../src/core/bands.js";
-import { detectBandCuts, detectRiseOnsets } from "../src/core/banddetect.js";
-import { TimeBase } from "../src/core/timebase.js";
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { analyzeBands, BandAnalysis } from '../src/core/bands.js';
+import { detectBandCuts, detectRiseOnsets } from '../src/core/banddetect.js';
+import { TimeBase } from '../src/core/timebase.js';
 
 const SR = 48000;
 
@@ -27,27 +27,27 @@ const analysis: BandAnalysis = analyzeBands([burstSignal()], SR);
 // 120 BPM, shift 0: one tick = 48000 * 5 / (4 * 120) = 500 samples.
 const BASE: TimeBase = { bpm: 120, shift: 0, sampleRate: SR };
 
-test("detectRiseOnsets finds the burst edges in the mid band", () => {
+test('detectRiseOnsets finds the burst edges in the mid band', () => {
   const onsets = detectRiseOnsets(analysis.mid.rms[0], analysis.hopSamples, { thresholdDb: 6 });
-  assert.ok(onsets.length >= 3, `onsets=${onsets}`);
+  assert.ok(onsets.length >= 3, `onsets=${onsets.join(',')}`);
   // 0.5 s = sample 24000, 1.0 s = 48000, 1.5 s = 72000 (hop-rounded).
   for (const expected of [24000, 48000, 72000]) {
     assert.ok(
       onsets.some((s) => Math.abs(s - expected) <= analysis.hopSamples),
-      `expected an onset near ${expected}, got ${onsets}`
+      `expected an onset near ${expected}, got ${onsets.join(',')}`,
     );
   }
 });
 
-test("a threshold above the actual rise finds nothing", () => {
+test('a threshold above the actual rise finds nothing', () => {
   const onsets = detectRiseOnsets(analysis.mid.rms[0], analysis.hopSamples, { thresholdDb: 40 });
   assert.equal(onsets.length, 0);
 });
 
-test("detectBandCuts snaps every hit to the grid", () => {
+test('detectBandCuts snaps every hit to the grid', () => {
   const result = detectBandCuts({
     analysis,
-    bands: ["mid"],
+    bands: ['mid'],
     thresholdDb: 6,
     grid: 8,
     minGapTicks: 8,
@@ -56,16 +56,16 @@ test("detectBandCuts snaps every hit to the grid", () => {
     base: BASE,
     existing: new Set<number>(),
   });
-  assert.ok(result.ticks.length >= 3, `ticks=${result.ticks}`);
+  assert.ok(result.ticks.length >= 3, `ticks=${result.ticks.join(',')}`);
   for (const tick of result.ticks) assert.equal(tick % 8, 0, `tick ${tick} is off-grid`);
   // Bursts at 0.5/1.0/1.5 s land on ticks 48/96/144 (already 8-multiples).
   assert.deepEqual(result.ticks.slice(0, 3), [48, 96, 144]);
 });
 
-test("detectBandCuts skips ticks that already hold a marker", () => {
+test('detectBandCuts skips ticks that already hold a marker', () => {
   const first = detectBandCuts({
     analysis,
-    bands: ["mid"],
+    bands: ['mid'],
     thresholdDb: 6,
     grid: 8,
     minGapTicks: 8,
@@ -76,7 +76,7 @@ test("detectBandCuts skips ticks that already hold a marker", () => {
   });
   const result = detectBandCuts({
     analysis,
-    bands: ["mid"],
+    bands: ['mid'],
     thresholdDb: 6,
     grid: 8,
     minGapTicks: 8,
@@ -89,10 +89,10 @@ test("detectBandCuts skips ticks that already hold a marker", () => {
   assert.equal(result.existing, 1);
 });
 
-test("detectBandCuts honours the selection range", () => {
+test('detectBandCuts honours the selection range', () => {
   const result = detectBandCuts({
     analysis,
-    bands: ["mid"],
+    bands: ['mid'],
     thresholdDb: 6,
     grid: 8,
     minGapTicks: 8,
@@ -104,10 +104,10 @@ test("detectBandCuts honours the selection range", () => {
   assert.deepEqual(result.ticks, [96]);
 });
 
-test("min gap suppresses dense hits", () => {
+test('min gap suppresses dense hits', () => {
   const loose = detectBandCuts({
     analysis,
-    bands: ["mid"],
+    bands: ['mid'],
     thresholdDb: 6,
     grid: 8,
     minGapTicks: 8,
@@ -118,7 +118,7 @@ test("min gap suppresses dense hits", () => {
   });
   const strict = detectBandCuts({
     analysis,
-    bands: ["mid"],
+    bands: ['mid'],
     thresholdDb: 6,
     grid: 8,
     minGapTicks: 1000,
@@ -149,22 +149,25 @@ function shortHitSignal(): Int16Array {
   return out;
 }
 
-test("a short loud hit inside an already loud passage is detected", () => {
+test('a short loud hit inside an already loud passage is detected', () => {
   const hitAnalysis = analyzeBands([shortHitSignal()], SR);
-  const onsets = detectRiseOnsets(hitAnalysis.mid.rms[0], hitAnalysis.hopSamples, { thresholdDb: 5 });
+  const onsets = detectRiseOnsets(hitAnalysis.mid.rms[0], hitAnalysis.hopSamples, {
+    thresholdDb: 5,
+  });
   // The hit starts at t = 0.8 s = sample 38400.
   assert.ok(
     onsets.some((s) => Math.abs(s - 38400) <= hitAnalysis.hopSamples * 2),
-    `expected an onset near 38400, got ${onsets}`
+    `expected an onset near 38400, got ${onsets.join(',')}`,
   );
 });
 
-test("snap:false keeps the exact onset tick instead of the coarse grid", () => {  // Grid 4 = 48 ticks per cell (324 ms at 120 BPM): a hit at 0.5 s would be
+test('snap:false keeps the exact onset tick instead of the coarse grid', () => {
+  // Grid 4 = 48 ticks per cell (324 ms at 120 BPM): a hit at 0.5 s would be
   // snapped to tick 96 (0.65 s), which visually sits on the decay. With
   // snap:false the marker must stay at the real onset tick (~48).
   const request = {
     analysis,
-    bands: ["mid"] as const,
+    bands: ['mid'] as const,
     thresholdDb: 6,
     grid: 4,
     minGapTicks: 4,
@@ -173,22 +176,37 @@ test("snap:false keeps the exact onset tick instead of the coarse grid", () => {
     base: BASE,
     existing: new Set<number>(),
   };
-  const snapped = detectBandCuts({ ...request, bands: ["mid"], snap: true });
-  const exact = detectBandCuts({ ...request, bands: ["mid"], snap: false });
+  const snapped = detectBandCuts({ ...request, bands: ['mid'], snap: true });
+  const exact = detectBandCuts({ ...request, bands: ['mid'], snap: false });
   assert.ok(snapped.ticks.length >= 1 && exact.ticks.length >= 1);
   for (const tick of snapped.ticks) assert.equal(tick % 4, 0, `snapped tick ${tick}`);
   assert.ok(
     exact.ticks.some((t) => t % 4 !== 0 || Math.abs(t - 48) <= 2),
-    `exact ticks should follow the onset, got ${exact.ticks}`
+    `exact ticks should follow the onset, got ${exact.ticks.join(',')}`,
   );
   // The first burst (0.5 s = tick 48) is exactly on a cell boundary; the
   // second (1.0 s = tick 96) too — use a shifted-grid case to prove the
   // difference: grid 5 puts 48 between cells 45 and 50.
-  const snapped5 = detectBandCuts({ ...request, bands: ["mid"], grid: 5, minGapTicks: 5, snap: true });
-  const exact5 = detectBandCuts({ ...request, bands: ["mid"], grid: 5, minGapTicks: 5, snap: false });
+  const snapped5 = detectBandCuts({
+    ...request,
+    bands: ['mid'],
+    grid: 5,
+    minGapTicks: 5,
+    snap: true,
+  });
+  const exact5 = detectBandCuts({
+    ...request,
+    bands: ['mid'],
+    grid: 5,
+    minGapTicks: 5,
+    snap: false,
+  });
   assert.ok(snapped5.ticks.length >= 1 && exact5.ticks.length >= 1);
   for (const tick of snapped5.ticks) assert.equal(tick % 5, 0, `snapped tick ${tick}`);
-  assert.ok(exact5.ticks.some((t) => t % 5 !== 0), `exact ticks ${exact5.ticks} should not all be grid multiples`);
+  assert.ok(
+    exact5.ticks.some((t) => t % 5 !== 0),
+    `exact ticks ${exact5.ticks.join(',')} should not all be grid multiples`,
+  );
 });
 
 /**
@@ -208,15 +226,15 @@ function noiseSignal(amp: number, seconds = 1): Int16Array {
   return out;
 }
 
-test("a near-silent band produces no onsets from noise wiggles", () => {
+test('a near-silent band produces no onsets from noise wiggles', () => {
   const quiet = analyzeBands([noiseSignal(0.0005)], SR); // about -66 dBFS
-  for (const band of ["low", "mid", "high"] as const) {
+  for (const band of ['low', 'mid', 'high'] as const) {
     const onsets = detectRiseOnsets(quiet[band].rms[0], quiet.hopSamples, { thresholdDb: 12.5 });
     assert.equal(onsets.length, 0, `${band} produced ${onsets.length} onsets`);
   }
 });
 
-test("moderate noise does not trigger the 12.5 dB High-band setting", () => {
+test('moderate noise does not trigger the 12.5 dB High-band setting', () => {
   const noise = analyzeBands([noiseSignal(0.01)], SR); // about -40 dBFS
   const onsets = detectRiseOnsets(noise.high.rms[0], noise.hopSamples, { thresholdDb: 12.5 });
   assert.equal(onsets.length, 0, `high produced ${onsets.length} onsets`);
