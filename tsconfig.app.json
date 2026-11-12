@@ -10,15 +10,27 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": [
-    "src/app/**/*.ts", "src/app/**/*.vue",
-    "src/audio/**/*.ts", "src/timeline/**/*.ts", "src/timeline/**/*.vue",
-    "src/slicing/**/*.ts", "src/slicing/**/*.vue",
-    "src/playback/**/*.ts", "src/playback/**/*.vue",
-    "src/detection/**/*.ts", "src/detection/**/*.vue",
-    "src/calibration/**/*.ts", "src/calibration/**/*.vue",
-    "src/export/**/*.ts", "src/export/**/*.vue",
-    "src/bmhelper/**/*.ts", "src/bmhelper/**/*.vue",
-    "src/workspace/**/*.ts", "src/platform/**/*.ts",
-    "src/i18n/**/*.ts", "src/ui/**/*.ts", "src/ui/**/*.vue"
+    "src/app/**/*.ts",
+    "src/app/**/*.vue",
+    "src/audio/**/*.ts",
+    "src/timeline/**/*.ts",
+    "src/timeline/**/*.vue",
+    "src/slicing/**/*.ts",
+    "src/slicing/**/*.vue",
+    "src/playback/**/*.ts",
+    "src/playback/**/*.vue",
+    "src/detection/**/*.ts",
+    "src/detection/**/*.vue",
+    "src/calibration/**/*.ts",
+    "src/calibration/**/*.vue",
+    "src/export/**/*.ts",
+    "src/export/**/*.vue",
+    "src/bmhelper/**/*.ts",
+    "src/bmhelper/**/*.vue",
+    "src/workspace/**/*.ts",
+    "src/platform/**/*.ts",
+    "src/i18n/**/*.ts",
+    "src/ui/**/*.ts",
+    "src/ui/**/*.vue"
   ]
 }

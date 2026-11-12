@@ -15,7 +15,13 @@ export type AudioRequest =
   | { kind: 'detect'; id: number; params: DetectionParams }
   | { kind: 'slice'; id: number; params: SliceParams };
 export type AudioReply =
-  | { kind: 'decoded'; id: number; source: SourceAudio; floatData: Float32Array[]; peaks: PeakCache }
+  | {
+      kind: 'decoded';
+      id: number;
+      source: SourceAudio;
+      floatData: Float32Array[];
+      peaks: PeakCache;
+    }
   | { kind: 'bands'; id: number; analysis: BandAnalysis }
   | { kind: 'slice'; id: number; bytes: Uint8Array }
   | { kind: 'detected'; id: number; result: DetectResult }
@@ -34,13 +40,21 @@ export interface AudioEngine {
 export function createAudioProcessor(): (request: AudioRequest) => Promise<AudioReply> {
   let source: SourceAudio | null = null;
   let analysis: BandAnalysis | null = null;
-  return async request => {
+  return async (request) => {
     try {
       switch (request.kind) {
         case 'decode': {
           source = await decodeAudio(request.name, request.bytes);
           analysis = null;
-          return { kind: 'decoded', id: request.id, source, floatData: source.data.map(channel => Float32Array.from(channel, sample => sample / 32768)), peaks: buildPeakCache(source.data) };
+          return {
+            kind: 'decoded',
+            id: request.id,
+            source,
+            floatData: source.data.map((channel) =>
+              Float32Array.from(channel, (sample) => sample / 32768),
+            ),
+            peaks: buildPeakCache(source.data),
+          };
         }
         case 'bands': {
           if (!source) throw new Error('No source loaded');
@@ -54,13 +68,23 @@ export function createAudioProcessor(): (request: AudioRequest) => Promise<Audio
         case 'detect': {
           if (!source) throw new Error('No source loaded');
           analysis ??= analyzeBands(source.data, source.sampleRate);
-          return { kind: 'detected', id: request.id, result: detectBandCuts({ ...request.params, analysis }) };
+          return {
+            kind: 'detected',
+            id: request.id,
+            result: detectBandCuts({ ...request.params, analysis }),
+          };
         }
         case 'slice': {
           if (!source) throw new Error('No source loaded');
           return { kind: 'slice', id: request.id, bytes: renderSliceToWav(source, request.params) };
         }
       }
-    } catch (error) { return { kind: 'error', id: request.id, message: error instanceof Error ? error.message : String(error) }; }
+    } catch (error) {
+      return {
+        kind: 'error',
+        id: request.id,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   };
 }

@@ -9,7 +9,7 @@
  *   offset 24  6144 bytes  marker bitmap, 49152 bits, MSB-first per byte
  */
 
-import { BITMAP_BYTES, MAX_TICKS } from "./timebase.js";
+import { BITMAP_BYTES, MAX_TICKS } from './timebase.js';
 
 export const WOS_FILE_SIZE = 6168;
 export const WOS_HEADER_SIZE = 24;
@@ -32,7 +32,7 @@ export function assertIntegerNoisegate(db: number): void {
   if (!Number.isFinite(db) || !Number.isInteger(db)) {
     throw new WosFormatError(
       `noisegate must be an integer number of dB to save (got ${db}); ` +
-        "round the value explicitly before saving"
+        'round the value explicitly before saving',
     );
   }
 }
@@ -46,7 +46,7 @@ export function writeWos(doc: WosDoc): Uint8Array {
   if (!(doc.markers instanceof Uint8Array) || doc.markers.length !== MAX_TICKS) {
     throw new WosFormatError(
       `marker bitmap must be a Uint8Array with exactly ${MAX_TICKS} entries ` +
-        `(got ${doc.markers ? doc.markers.length : String(doc.markers)})`
+        `(got ${doc.markers ? doc.markers.length : String(doc.markers)})`,
     );
   }
   assertIntegerNoisegate(doc.noisegateDb);
@@ -85,7 +85,7 @@ export function writeWos(doc: WosDoc): Uint8Array {
 export function readWos(buffer: Uint8Array): WosDoc {
   if (buffer.byteLength < WOS_FILE_SIZE) {
     throw new WosFormatError(
-      `.wos file must be exactly ${WOS_FILE_SIZE} bytes (got ${buffer.byteLength})`
+      `.wos file must be exactly ${WOS_FILE_SIZE} bytes (got ${buffer.byteLength})`,
     );
   }
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);

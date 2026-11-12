@@ -1,14 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { WOS_FILE_SIZE, writeWos } from '../../src/core/wos';
-import { createSingleTrackProject, decodeProject, encodeProject, parseProject } from '../../src/project/codec';
+import {
+  createSingleTrackProject,
+  decodeProject,
+  encodeProject,
+  parseProject,
+} from '../../src/project/codec';
 import type { ProjectFileV1 } from '../../src/project/schema';
 
 function project(): ProjectFileV1 {
   return createSingleTrackProject({
-    projectId: 'project-1', name: 'Song', mediaId: 'media-1',
+    projectId: 'project-1',
+    name: 'Song',
+    mediaId: 'media-1',
     media: {
-      mediaId: 'media-1', name: 'audio.wav', format: 'wav', byteLength: 192044,
-      sampleRateHz: 48000, channels: 2, framesPerChannel: 48000, integrity: null,
+      mediaId: 'media-1',
+      name: 'audio.wav',
+      format: 'wav',
+      byteLength: 192044,
+      sampleRateHz: 48000,
+      channels: 2,
+      framesPerChannel: 48000,
+      integrity: null,
       originHint: { kind: 'desktop', pathHint: 'C:\\Audio\\audio.wav' },
     },
   });
@@ -17,7 +30,12 @@ function project(): ProjectFileV1 {
 describe('.wosdx project document', () => {
   it('reports unrecognized fields by path instead of dropping them silently', () => {
     const value = project();
-    const parsed = parseProject({ ...value, mystery: 1, timing: { ...value.timing, swing: 0.5 }, output: { ...value.output, gain: 2 } });
+    const parsed = parseProject({
+      ...value,
+      mystery: 1,
+      timing: { ...value.timing, swing: 0.5 },
+      output: { ...value.output, gain: 2 },
+    });
     expect(parsed.kind).toBe('supported');
     if (parsed.kind === 'supported') {
       expect(parsed.unknownFields).toEqual(['mystery', 'timing.swing', 'output.gain']);
@@ -32,7 +50,15 @@ describe('.wosdx project document', () => {
     expect(value.tracks[0]?.gainDb).toBe(0);
     expect(value.tracks[0]?.muted).toBe(false);
     expect(value.tracks[0]?.solo).toBe(false);
-    expect(value.tracks[0]?.clips).toEqual([{ clipId: expect.any(String), mediaId: 'media-1', timelineStartSeconds: 0, sourceOffsetFrames: 0, frameCount: 48000 }]);
+    expect(value.tracks[0]?.clips).toEqual([
+      {
+        clipId: expect.any(String),
+        mediaId: 'media-1',
+        timelineStartSeconds: 0,
+        sourceOffsetFrames: 0,
+        frameCount: 48000,
+      },
+    ]);
   });
 
   it('round-trips a reserved multi-track arrangement with independent clip positions and leading silence', () => {
@@ -42,31 +68,69 @@ describe('.wosdx project document', () => {
     first.views.rms = true;
     first.gainDb = -3;
     first.clips = [
-      { clipId: 'clip-a', mediaId: 'media-1', timelineStartSeconds: 2, sourceOffsetFrames: 100, frameCount: 1200 },
-      { clipId: 'clip-b', mediaId: 'media-1', timelineStartSeconds: 8, sourceOffsetFrames: 4000, frameCount: 2400 },
+      {
+        clipId: 'clip-a',
+        mediaId: 'media-1',
+        timelineStartSeconds: 2,
+        sourceOffsetFrames: 100,
+        frameCount: 1200,
+      },
+      {
+        clipId: 'clip-b',
+        mediaId: 'media-1',
+        timelineStartSeconds: 8,
+        sourceOffsetFrames: 4000,
+        frameCount: 2400,
+      },
     ];
     value.tracks.push({
-      trackId: 'track-b', name: 'Second', gainDb: 0, muted: false, solo: true,
+      trackId: 'track-b',
+      name: 'Second',
+      gainDb: 0,
+      muted: false,
+      solo: true,
       views: { rms: null, bands: false, spectrum: 'reserved' },
-      clips: [{ clipId: 'clip-c', mediaId: 'media-1', timelineStartSeconds: 0, sourceOffsetFrames: 8000, frameCount: 400 }],
+      clips: [
+        {
+          clipId: 'clip-c',
+          mediaId: 'media-1',
+          timelineStartSeconds: 0,
+          sourceOffsetFrames: 8000,
+          frameCount: 400,
+        },
+      ],
     });
     const decoded = decodeProject(encodeProject(value));
     expect(decoded.kind).toBe('supported');
     if (decoded.kind !== 'supported') throw new Error('Expected supported project');
     expect(decoded.project).toEqual(value);
-    expect(decoded.capability).toEqual({ kind: 'unsupported-arrangement', trackCount: 2, clipCount: 3 });
+    expect(decoded.capability).toEqual({
+      kind: 'unsupported-arrangement',
+      trackCount: 2,
+      clipCount: 3,
+    });
   });
 
   it('treats desktop and browser references as distinct non-interchangeable variants', () => {
     const value = project();
     const media = value.media[0];
     if (!media) throw new Error('Expected media metadata');
-    media.originHint = { kind: 'browser', name: 'audio.wav', relativePathHint: 'folder/audio.wav', lastModified: 1234 };
+    media.originHint = {
+      kind: 'browser',
+      name: 'audio.wav',
+      relativePathHint: 'folder/audio.wav',
+      lastModified: 1234,
+    };
     const parsed = parseProject(JSON.parse(new TextDecoder().decode(encodeProject(value))));
     expect(parsed.kind).toBe('supported');
     if (parsed.kind !== 'supported') throw new Error('Expected supported project');
     expect(parsed.project.media[0]?.originHint).toEqual(media.originHint);
-    expect(() => parseProject({ ...value, media: [{ ...media, originHint: { kind: 'browser', pathHint: 'C:\\Audio\\audio.wav' } }] })).toThrow();
+    expect(() =>
+      parseProject({
+        ...value,
+        media: [{ ...media, originHint: { kind: 'browser', pathHint: 'C:\\Audio\\audio.wav' } }],
+      }),
+    ).toThrow();
   });
 
   it('preserves the exact complex file alongside its normalized known fields', () => {
@@ -86,11 +150,20 @@ describe('.wosdx project document', () => {
       ],
     };
     // A BOM, CRLF, trailing whitespace and numeric spelling must also survive.
-    const text = '\uFEFF' + JSON.stringify(input, null, 2).replaceAll('\n', '\r\n').replace('"bpm": 120', '"bpm": 1.20e2') + '\r\n ';
+    const text =
+      '\uFEFF' +
+      JSON.stringify(input, null, 2)
+        .replaceAll('\n', '\r\n')
+        .replace('"bpm": 120', '"bpm": 1.20e2') +
+      '\r\n ';
     const bytes = new TextEncoder().encode(text);
     const decoded = decodeProject(bytes);
     if (decoded.kind !== 'supported') throw new Error('Expected supported schema');
-    expect(decoded.capability).toEqual({ kind: 'unsupported-arrangement', trackCount: 2, clipCount: 1 });
+    expect(decoded.capability).toEqual({
+      kind: 'unsupported-arrangement',
+      trackCount: 2,
+      clipCount: 1,
+    });
     expect(decoded.project.slicing.markers).toEqual([0, 24, 48]);
     expect(decoded.project.media[0]?.integrity?.digest).toBe('ab'.repeat(32));
     expect(decoded.project.tracks[0]?.views.spectrum).toBe('reserved');
@@ -108,13 +181,19 @@ describe('.wosdx project document', () => {
     input.fill(0);
     expect(decoded.sourceBytes).toEqual(bytes);
     decoded.sourceBytes.fill(1);
-    expect(input.every(byte => byte === 0)).toBe(true);
+    expect(input.every((byte) => byte === 0)).toBe(true);
   });
 
   it('preserves future file bytes without interpreting them as a v1 document', () => {
-    const bytes = new TextEncoder().encode('{ "format": "wosdx", "schemaVersion": 99, "future": [1, 2] }\n');
+    const bytes = new TextEncoder().encode(
+      '{ "format": "wosdx", "schemaVersion": 99, "future": [1, 2] }\n',
+    );
     const decoded = decodeProject(bytes);
-    expect(decoded).toMatchObject({ kind: 'unsupported-version', version: 99, raw: { future: [1, 2] } });
+    expect(decoded).toMatchObject({
+      kind: 'unsupported-version',
+      version: 99,
+      raw: { future: [1, 2] },
+    });
     expect(decoded).not.toHaveProperty('project');
     expect(decoded.sourceBytes).toEqual(bytes);
     bytes.fill(0);
@@ -123,18 +202,36 @@ describe('.wosdx project document', () => {
 
   it('rejects duplicate IDs, dangling media references and invalid numeric ranges', () => {
     const value = project();
-    expect(() => parseProject({ ...value, tracks: [value.tracks[0], value.tracks[0]] })).toThrow(/duplicate/i);
+    expect(() => parseProject({ ...value, tracks: [value.tracks[0], value.tracks[0]] })).toThrow(
+      /duplicate/i,
+    );
     const track = value.tracks[0];
     if (!track) throw new Error('Expected track');
-    expect(() => parseProject({ ...value, tracks: [{ ...track, clips: [{ ...track.clips[0]!, mediaId: 'missing' }] }] })).toThrow(/media/i);
+    expect(() =>
+      parseProject({
+        ...value,
+        tracks: [{ ...track, clips: [{ ...track.clips[0]!, mediaId: 'missing' }] }],
+      }),
+    ).toThrow(/media/i);
     expect(() => parseProject({ ...value, tracks: [{ ...track, gainDb: Number.NaN }] })).toThrow();
-    expect(() => parseProject({ ...value, tracks: [{ ...track, clips: [{ ...track.clips[0]!, sourceOffsetFrames: 48000, frameCount: 1 }] }] })).toThrow();
+    expect(() =>
+      parseProject({
+        ...value,
+        tracks: [
+          { ...track, clips: [{ ...track.clips[0]!, sourceOffsetFrames: 48000, frameCount: 1 }] },
+        ],
+      }),
+    ).toThrow();
   });
 
   it('distinguishes future schemas from invalid data and enforces a bounded input size', () => {
     const value = project();
     const future = parseProject({ ...value, schemaVersion: 99 });
-    expect(future).toMatchObject({ kind: 'unsupported-version', version: 99, raw: { schemaVersion: 99 } });
+    expect(future).toMatchObject({
+      kind: 'unsupported-version',
+      version: 99,
+      raw: { schemaVersion: 99 },
+    });
     expect(() => decodeProject(new Uint8Array(20 * 1024 * 1024))).toThrow(/16 MiB limit/i);
     expect(() => decodeProject(new TextEncoder().encode('{bad json'))).toThrow(/json/i);
   });
@@ -148,6 +245,16 @@ describe('.wosdx project document', () => {
 
   it('does not alter the locked legacy WOS byte layout', () => {
     const value = project();
-    expect(writeWos({ bpm: value.timing.bpm, shift: value.timing.shiftTicks, fadeoutMs: value.slicing.fadeoutMs, noisegateDb: value.slicing.noisegateDb, markers: Uint8Array.from({ length: 49152 }, (_, i) => Number(value.slicing.markers.includes(i))) })).toHaveLength(WOS_FILE_SIZE);
+    expect(
+      writeWos({
+        bpm: value.timing.bpm,
+        shift: value.timing.shiftTicks,
+        fadeoutMs: value.slicing.fadeoutMs,
+        noisegateDb: value.slicing.noisegateDb,
+        markers: Uint8Array.from({ length: 49152 }, (_, i) =>
+          Number(value.slicing.markers.includes(i)),
+        ),
+      }),
+    ).toHaveLength(WOS_FILE_SIZE);
   });
 });

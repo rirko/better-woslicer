@@ -22,8 +22,8 @@
  * s2df→dfnt mapping, exactly like the original reopens a project.
  */
 
-import type { MidiControlEvent, MidiNoteEvent, MidiParamEvent, MidiSequence } from "./smf.js";
-import type { BmhDefinition, Division, DivNote } from "./bmhelper.js";
+import type { MidiControlEvent, MidiNoteEvent, MidiParamEvent, MidiSequence } from './smf.js';
+import type { BmhDefinition, Division, DivNote } from './bmhelper.js';
 
 export interface BmhProject {
   source: MidiSequence;
@@ -48,7 +48,12 @@ class ByteWriter {
   }
 
   u32(value: number): this {
-    this.bytes.push((value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff);
+    this.bytes.push(
+      (value >>> 24) & 0xff,
+      (value >>> 16) & 0xff,
+      (value >>> 8) & 0xff,
+      value & 0xff,
+    );
     return this;
   }
 
@@ -72,15 +77,15 @@ class ByteReader {
   }
 
   ascii(length: number): string {
-    if (this.pos + length > this.bytes.length) throw new BmhFormatError("truncated chunk tag");
-    let text = "";
+    if (this.pos + length > this.bytes.length) throw new BmhFormatError('truncated chunk tag');
+    let text = '';
     for (let i = 0; i < length; i++) text += String.fromCharCode(this.bytes[this.pos + i]);
     this.pos += length;
     return text;
   }
 
   u32(): number {
-    if (this.pos + 4 > this.bytes.length) throw new BmhFormatError("truncated chunk size");
+    if (this.pos + 4 > this.bytes.length) throw new BmhFormatError('truncated chunk size');
     const value =
       this.bytes[this.pos] * 0x1000000 +
       (this.bytes[this.pos + 1] << 16) +
@@ -102,7 +107,7 @@ class ByteReader {
   }
 
   raw(length: number): Uint8Array {
-    if (this.pos + length > this.bytes.length) throw new BmhFormatError("truncated chunk payload");
+    if (this.pos + length > this.bytes.length) throw new BmhFormatError('truncated chunk payload');
     const out = this.bytes.subarray(this.pos, this.pos + length);
     this.pos += length;
     return out;
@@ -139,7 +144,7 @@ function childrenOf(chunk: Chunk): Chunk[] {
 
 function child(children: Chunk[], tag: string): Chunk {
   const found = children.find((c) => c.tag === tag);
-  if (!found) throw new BmhFormatError("missing chunk: " + tag);
+  if (!found) throw new BmhFormatError('missing chunk: ' + tag);
   return found;
 }
 
@@ -162,34 +167,38 @@ function serializeSequenceChildren(sequence: MidiSequence): Uint8Array[] {
   const controls: number[] = [];
   for (const event of sequence.controls) controls.push(event.position, event.value, event.cc);
   return [
-    chunk("qntz", i32LePayload([sequence.quantize])),
-    chunk("note", i32LePayload(notes)),
-    chunk("ptch", i32LePayload(pitches)),
-    chunk("cchg", i32LePayload(controls)),
+    chunk('qntz', i32LePayload([sequence.quantize])),
+    chunk('note', i32LePayload(notes)),
+    chunk('ptch', i32LePayload(pitches)),
+    chunk('cchg', i32LePayload(controls)),
   ];
 }
 
 function parseMidiChunk(chunk: Chunk): MidiSequence {
   const children = childrenOf(chunk);
-  const qntz = new ByteReader(child(children, "qntz").payload).i32();
-  const notePayload = child(children, "note").payload;
-  if (notePayload.length % 16 !== 0) throw new BmhFormatError("malformed note chunk");
+  const qntz = new ByteReader(child(children, 'qntz').payload).i32();
+  const notePayload = child(children, 'note').payload;
+  if (notePayload.length % 16 !== 0) throw new BmhFormatError('malformed note chunk');
   const reader = new ByteReader(notePayload);
   const notes: MidiNoteEvent[] = [];
   for (let i = 0; i < notePayload.length / 16; i++) {
     notes.push({ position: reader.i32(), gate: reader.i32(), nn: reader.i32(), vel: reader.i32() });
   }
-  const pitchPayload = child(children, "ptch").payload;
+  const pitchPayload = child(children, 'ptch').payload;
   const pitchReader = new ByteReader(pitchPayload);
   const pitches: MidiParamEvent[] = [];
   for (let i = 0; i + 8 <= pitchPayload.length; i += 8) {
     pitches.push({ position: pitchReader.i32(), value: pitchReader.i32() });
   }
-  const controlPayload = child(children, "cchg").payload;
+  const controlPayload = child(children, 'cchg').payload;
   const controlReader = new ByteReader(controlPayload);
   const controls: MidiControlEvent[] = [];
   for (let i = 0; i + 12 <= controlPayload.length; i += 12) {
-    controls.push({ position: controlReader.i32(), value: controlReader.i32(), cc: controlReader.i32() });
+    controls.push({
+      position: controlReader.i32(),
+      value: controlReader.i32(),
+      cc: controlReader.i32(),
+    });
   }
   return { quantize: qntz, notes, pitches, controls };
 }
@@ -203,12 +212,12 @@ function encodeName(name: string): Uint8Array {
 function decodeName(bytes: Uint8Array): string {
   // Original projects store ANSI/Shift-JIS names; ours write UTF-8.
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
     try {
-      return new TextDecoder("shift_jis").decode(bytes);
+      return new TextDecoder('shift_jis').decode(bytes);
     } catch {
-      return new TextDecoder("latin1").decode(bytes);
+      return new TextDecoder('latin1').decode(bytes);
     }
   }
 }
@@ -224,21 +233,29 @@ function serializeDivisionChunk(division: Division): Uint8Array {
     const low = zz % 36;
     dfntWriter.u32(low).u32(high).i32(definition.div);
   }
-  return containerChunk("Div ", [
-    containerChunk("Midi", serializeSequenceChildren({ quantize: division.quantize, notes: division.recording, pitches: [], controls: [] })),
-    chunk("name", encodeName(division.name)),
-    chunk("s2df", s2df),
-    chunk("dfnt", Uint8Array.from(dfntWriter.bytes)),
+  return containerChunk('Div ', [
+    containerChunk(
+      'Midi',
+      serializeSequenceChildren({
+        quantize: division.quantize,
+        notes: division.recording,
+        pitches: [],
+        controls: [],
+      }),
+    ),
+    chunk('name', encodeName(division.name)),
+    chunk('s2df', s2df),
+    chunk('dfnt', Uint8Array.from(dfntWriter.bytes)),
   ]);
 }
 
 function parseDivisionChunk(chunk: Chunk, sourceNoteCount: number): Division {
   const children = childrenOf(chunk);
-  const recording = parseMidiChunk(child(children, "Midi"));
-  const name = decodeName(child(children, "name").payload);
-  const s2df = new ByteReader(child(children, "s2df").payload).i32Array(sourceNoteCount);
-  const dfntPayload = child(children, "dfnt").payload;
-  if (dfntPayload.length % 12 !== 0) throw new BmhFormatError("malformed dfnt chunk");
+  const recording = parseMidiChunk(child(children, 'Midi'));
+  const name = decodeName(child(children, 'name').payload);
+  const s2df = new ByteReader(child(children, 's2df').payload).i32Array(sourceNoteCount);
+  const dfntPayload = child(children, 'dfnt').payload;
+  if (dfntPayload.length % 12 !== 0) throw new BmhFormatError('malformed dfnt chunk');
   const dfntReader = new ByteReader(dfntPayload);
   const definitions: BmhDefinition[] = [];
   for (let i = 0; i < dfntPayload.length / 12; i++) {
@@ -260,10 +277,11 @@ function parseDivisionChunk(chunk: Chunk, sourceNoteCount: number): Division {
   }));
   s2df.forEach((definitionIndex, sourceIndex) => {
     const definition = definitions[definitionIndex];
-    if (definition === undefined) throw new BmhFormatError("s2def references a missing definition");
+    if (definition === undefined) throw new BmhFormatError('s2def references a missing definition');
     notes[definition.div]?.referrers.push(sourceIndex);
   });
-  if (notes.length < divCount) throw new BmhFormatError("division list is inconsistent with the definitions");
+  if (notes.length < divCount)
+    throw new BmhFormatError('division list is inconsistent with the definitions');
   return {
     name,
     quantize: recording.quantize,
@@ -281,23 +299,23 @@ function parseDivisionChunk(chunk: Chunk, sourceNoteCount: number): Division {
 export function writeBmh(project: BmhProject): Uint8Array {
   // NB: the source sequence's qntz/note/ptch/cchg children sit DIRECTLY in
   // the Src container — the extra Midi wrapper only exists inside Div.
-  const children = [containerChunk("Src ", serializeSequenceChildren(project.source))];
+  const children = [containerChunk('Src ', serializeSequenceChildren(project.source))];
   for (const division of project.divisions) children.push(serializeDivisionChunk(division));
-  return containerChunk("BMHP", children);
+  return containerChunk('BMHP', children);
 }
 
 /** Parses an original or reimplementation .bmh project file. */
 export function readBmh(bytes: Uint8Array): BmhProject {
   const reader = new ByteReader(bytes);
   const tag = reader.ascii(4);
-  if (tag !== "BMHP") throw new BmhFormatError("not a BMHelper project (missing BMHP)");
+  if (tag !== 'BMHP') throw new BmhFormatError('not a BMHelper project (missing BMHP)');
   const size = reader.u32();
   const root = { tag, payload: reader.raw(size) };
   const children = childrenOf(root);
-  const source = parseMidiChunk(child(children, "Src "));
+  const source = parseMidiChunk(child(children, 'Src '));
   const divisions: Division[] = [];
   for (const entry of children) {
-    if (entry.tag === "Div ") divisions.push(parseDivisionChunk(entry, source.notes.length));
+    if (entry.tag === 'Div ') divisions.push(parseDivisionChunk(entry, source.notes.length));
   }
   return { source, divisions };
 }

@@ -16,7 +16,9 @@ export const useUiPreferencesStore = defineStore('ui-preferences', () => {
   const theme = ref<Theme>('dark');
   const language = ref<LanguageChoice>('auto');
   const locales = ref<readonly string[]>([]);
-  const resolvedLanguage = computed(() => language.value === 'auto' ? detectLanguage(locales.value) : language.value);
+  const resolvedLanguage = computed(() =>
+    language.value === 'auto' ? detectLanguage(locales.value) : language.value,
+  );
   let initialized = false;
   let storage: PreferenceOptions['storage'] = null;
   function persist(): void {
@@ -24,18 +26,37 @@ export const useUiPreferencesStore = defineStore('ui-preferences', () => {
       storage?.setItem('woslicer.theme', theme.value);
       if (language.value === 'auto') storage?.removeItem('woslicer.language');
       else storage?.setItem('woslicer.language', language.value);
-    } catch { /* Private browsing may deny persistence; in-memory choices still work. */ }
+    } catch {
+      /* Private browsing may deny persistence; in-memory choices still work. */
+    }
   }
-  watch([theme, language], () => { if (initialized) persist(); }, { flush: 'sync' });
+  watch(
+    [theme, language],
+    () => {
+      if (initialized) persist();
+    },
+    { flush: 'sync' },
+  );
   function initialize(options: PreferenceOptions = {}): void {
     if (initialized) return;
-    try { storage = options.storage === undefined ? globalThis.localStorage : options.storage; } catch { storage = null; }
-    locales.value = options.locales ?? (typeof navigator === 'undefined' ? [] : navigator.languages);
+    try {
+      storage = options.storage === undefined ? globalThis.localStorage : options.storage;
+    } catch {
+      storage = null;
+    }
+    locales.value =
+      options.locales ?? (typeof navigator === 'undefined' ? [] : navigator.languages);
     let savedTheme: string | null = null;
     let savedLanguage: string | null = null;
-    try { savedTheme = storage?.getItem('woslicer.theme') ?? null; savedLanguage = storage?.getItem('woslicer.language') ?? null; } catch { /* unavailable */ }
+    try {
+      savedTheme = storage?.getItem('woslicer.theme') ?? null;
+      savedLanguage = storage?.getItem('woslicer.language') ?? null;
+    } catch {
+      /* unavailable */
+    }
     const dark = options.prefersDark ?? (() => systemDark.value);
-    theme.value = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : dark() ? 'dark' : 'light';
+    theme.value =
+      savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : dark() ? 'dark' : 'light';
     language.value = isLanguage(savedLanguage) ? savedLanguage : 'auto';
     initialized = true;
     persist();

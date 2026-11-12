@@ -114,7 +114,12 @@ export type ProjectCapability =
   | { kind: 'unsupported-arrangement'; trackCount: number; clipCount: number };
 
 export type ProjectParseResult =
-  | { kind: 'supported'; project: ProjectFileV1; capability: ProjectCapability; unknownFields: readonly string[] }
+  | {
+      kind: 'supported';
+      project: ProjectFileV1;
+      capability: ProjectCapability;
+      unknownFields: readonly string[];
+    }
   | { kind: 'unsupported-version'; version: number; raw: unknown };
 
 /** File bytes are separate from the normalized document and never enter edit history. */
@@ -123,4 +128,11 @@ export type ProjectDecodeResult = ProjectParseResult & {
   readonly sourceBytes: Uint8Array;
 };
 
-export type ProjectOpenResult = ProjectParseResult | { kind: 'invalid-media-binding'; project: ProjectFileV1; capability: ProjectCapability; mediaIds: string[] };
+export type ProjectOpenResult =
+  | ProjectParseResult
+  | {
+      kind: 'invalid-media-binding';
+      project: ProjectFileV1;
+      capability: ProjectCapability;
+      mediaIds: string[];
+    };

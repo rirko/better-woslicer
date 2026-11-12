@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "singleAttributePerLine": true,
+  "endOfLine": "lf",
+  "htmlWhitespaceSensitivity": "css",
+  "sortImports": false,
+  "sortPackageJson": false,
+  "sortTailwindcss": false,
+  "ignorePatterns": [
+    "node_modules/",
+    "dist/",
+    "release/",
+    "src-tauri/target/",
+    "src-tauri/generated/",
+    "src/i18n/generated.ts",
+    ".pending-delete/",
+    ".smell-check/",
+    "test-artifacts/",
+    "test-results/",
+    "playwright-report/",
+    "screenshots/",
+    "package-lock.json"
+  ]
+}

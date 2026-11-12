@@ -1,7 +1,7 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { MarkerDoc, sliceIndexAtOrBefore, markerAtOrBefore } from "../src/core/markers.js";
-import { MAX_TICKS } from "../src/core/timebase.js";
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { MarkerDoc, sliceIndexAtOrBefore, markerAtOrBefore } from '../src/core/markers.js';
+import { MAX_TICKS } from '../src/core/timebase.js';
 
 function docWith(ticks: number[]): MarkerDoc {
   const doc = new MarkerDoc();
@@ -9,14 +9,14 @@ function docWith(ticks: number[]): MarkerDoc {
   return doc;
 }
 
-test("setting a marker twice is idempotent (Enter break-point de-duplication)", () => {
+test('setting a marker twice is idempotent (Enter break-point de-duplication)', () => {
   const doc = new MarkerDoc();
   assert.ok(doc.setMarker(384, true));
   assert.ok(!doc.setMarker(384, true)); // second Enter at the same position: no change
   assert.deepEqual(doc.ticks(), [384]);
 });
 
-test("toggleMarker places and removes a cut line (Z semantics)", () => {
+test('toggleMarker places and removes a cut line (Z semantics)', () => {
   const doc = new MarkerDoc();
   doc.toggleMarker(100);
   assert.deepEqual(doc.ticks(), [100]);
@@ -24,19 +24,19 @@ test("toggleMarker places and removes a cut line (Z semantics)", () => {
   assert.deepEqual(doc.ticks(), []);
 });
 
-test("box selection: markers inside the range are selected", () => {
+test('box selection: markers inside the range are selected', () => {
   const doc = docWith([100, 200, 300, 400]);
   const selected = doc.ticks().filter((t) => t >= 150 && t <= 350);
   assert.deepEqual(selected, [200, 300]);
 });
 
-test("moveSelection moves the selected group; unselected markers stay put", () => {
+test('moveSelection moves the selected group; unselected markers stay put', () => {
   const doc = docWith([100, 200, 300, 400]);
   doc.moveSelection([200, 300], 50);
   assert.deepEqual(doc.ticks(), [100, 250, 350, 400]);
 });
 
-test("quantizeSelection snaps ONLY the selected markers to the grid", () => {
+test('quantizeSelection snaps ONLY the selected markers to the grid', () => {
   const doc = docWith([10, 12, 26, 100]);
   assert.ok(doc.quantizeSelection([10, 12, 26], 8));
   // Math.round ties round up: 10->8, 12->16, 26->24. Tick 100 is NOT
@@ -44,41 +44,40 @@ test("quantizeSelection snaps ONLY the selected markers to the grid", () => {
   assert.deepEqual(doc.ticks(), [8, 16, 24, 100]);
 });
 
-test("quantizeSelection merges into non-selected markers (selected wins the tick)", () => {
+test('quantizeSelection merges into non-selected markers (selected wins the tick)', () => {
   const doc = docWith([6, 9, 200]);
   assert.ok(doc.quantizeSelection([6, 9], 8));
   assert.deepEqual(doc.ticks(), [8, 200]); // both selected markers snap to 8
 });
 
-test("quantizeSelection with no selection is a no-op", () => {
+test('quantizeSelection with no selection is a no-op', () => {
   const doc = docWith([7, 13]);
   assert.ok(!doc.quantizeSelection([], 8));
   assert.deepEqual(doc.ticks(), [7, 13]);
-  assert.ok(!doc.canUndo(), "no-op must not push an undo entry");
+  assert.ok(!doc.canUndo(), 'no-op must not push an undo entry');
 });
 
-test("quantizeSelection already-on-grid selection reports no change", () => {
+test('quantizeSelection already-on-grid selection reports no change', () => {
   const doc = docWith([0, 8, 16]);
   assert.ok(!doc.quantizeSelection([0, 8, 16], 8));
 });
 
-test("quantizeSelection ignores selected ticks that no longer hold a marker", () => {
+test('quantizeSelection ignores selected ticks that no longer hold a marker', () => {
   const doc = docWith([10, 100]);
   doc.markers[10] = 0; // stale selection: the marker was deleted, the tick is still listed
-  assert.ok(!doc.quantizeSelection([10], 8), "a stale tick must not resurrect a marker");
+  assert.ok(!doc.quantizeSelection([10], 8), 'a stale tick must not resurrect a marker');
   assert.deepEqual(doc.ticks(), [100]);
-  assert.ok(!doc.canUndo(), "the no-op must not push an undo entry");
+  assert.ok(!doc.canUndo(), 'the no-op must not push an undo entry');
 });
 
-test("quantizeSelection still snaps the surviving markers of a stale selection", () => {
+test('quantizeSelection still snaps the surviving markers of a stale selection', () => {
   const doc = docWith([10, 26]);
   doc.markers[26] = 0;
   assert.ok(doc.quantizeSelection([10, 26], 8));
   assert.deepEqual(doc.ticks(), [8]);
 });
 
-
-test("moveSelection clamps the WHOLE group preserving relative spacing", () => {
+test('moveSelection clamps the WHOLE group preserving relative spacing', () => {
   const doc = docWith([10, 20, 30]);
   // 1000 fits without hitting the boundary: applied as-is.
   assert.equal(doc.moveSelection([10, 20, 30], 1000), 1000);
@@ -90,25 +89,25 @@ test("moveSelection clamps the WHOLE group preserving relative spacing", () => {
   const applied = doc2.moveSelection([10, 20, 30], 999999);
   assert.equal(applied, MAX_TICKS - 1 - 30);
   const ticks = doc2.ticks();
-  assert.equal(ticks[1] - ticks[0], 10, "spacing preserved");
-  assert.equal(ticks[2] - ticks[1], 10, "spacing preserved");
+  assert.equal(ticks[1] - ticks[0], 10, 'spacing preserved');
+  assert.equal(ticks[2] - ticks[1], 10, 'spacing preserved');
 });
 
-test("moveSelection negative delta clamps at the timeline start", () => {
+test('moveSelection negative delta clamps at the timeline start', () => {
   const doc = docWith([100, 150]);
   const applied = doc.moveSelection([100, 150], -1000);
   assert.equal(applied, -100);
   assert.deepEqual(doc.ticks(), [0, 50]);
 });
 
-test("moveSelection with zero delta or empty selection is a no-op", () => {
+test('moveSelection with zero delta or empty selection is a no-op', () => {
   const doc = docWith([5]);
   assert.equal(doc.moveSelection([], 10), 0);
   assert.equal(doc.moveSelection([5], 0), 0);
   assert.deepEqual(doc.ticks(), [5]);
 });
 
-test("measure copy/paste round-trips 192 ticks (Ctrl+C / Ctrl+F)", () => {
+test('measure copy/paste round-trips 192 ticks (Ctrl+C / Ctrl+F)', () => {
   const doc = docWith([0, 100, 191, 192, 300]);
   const clip = doc.copyMeasure(0);
   assert.equal(clip.length, 192);
@@ -122,13 +121,13 @@ test("measure copy/paste round-trips 192 ticks (Ctrl+C / Ctrl+F)", () => {
   assert.deepEqual(doc2.ticks(), [192, 292, 383]);
 });
 
-test("measure cut clears the source range", () => {
+test('measure cut clears the source range', () => {
   const doc = docWith([10, 200]);
   doc.cutMeasure(0);
   assert.deepEqual(doc.ticks(), [200]);
 });
 
-test("undo/redo restores the bitmap step by step", () => {
+test('undo/redo restores the bitmap step by step', () => {
   const doc = new MarkerDoc();
   doc.setMarker(10, true);
   doc.setMarker(20, true);
@@ -145,7 +144,7 @@ test("undo/redo restores the bitmap step by step", () => {
   assert.ok(!doc.redo());
 });
 
-test("a new edit clears the redo stack", () => {
+test('a new edit clears the redo stack', () => {
   const doc = new MarkerDoc();
   doc.setMarker(1, true);
   doc.undo();
@@ -154,17 +153,17 @@ test("a new edit clears the redo stack", () => {
   assert.deepEqual(doc.ticks(), [2]);
 });
 
-test("addTicks batches into ONE undo step (paint / band detect)", () => {
+test('addTicks batches into ONE undo step (paint / band detect)', () => {
   const doc = new MarkerDoc();
   assert.equal(doc.addTicks([10, 20, 30]), 3);
   assert.deepEqual(doc.ticks(), [10, 20, 30]);
   assert.ok(doc.undo());
-  assert.deepEqual(doc.ticks(), [], "one undo removes the whole batch");
+  assert.deepEqual(doc.ticks(), [], 'one undo removes the whole batch');
   assert.ok(doc.redo());
   assert.deepEqual(doc.ticks(), [10, 20, 30]);
 });
 
-test("addTicks only counts newly set ticks and never pushes an empty undo", () => {
+test('addTicks only counts newly set ticks and never pushes an empty undo', () => {
   const doc = docWith([10]);
   assert.equal(doc.addTicks([10, 20]), 1);
   assert.equal(doc.addTicks([20]), 0);
@@ -173,7 +172,7 @@ test("addTicks only counts newly set ticks and never pushes an empty undo", () =
   assert.deepEqual(doc.ticks(), [10]);
 });
 
-test("removeTicks batches into ONE undo step (right-button erase)", () => {
+test('removeTicks batches into ONE undo step (right-button erase)', () => {
   const doc = docWith([5, 15, 25, 40]);
   assert.equal(doc.removeTicks([5, 15, 25]), 3);
   assert.deepEqual(doc.ticks(), [40]);
@@ -181,10 +180,10 @@ test("removeTicks batches into ONE undo step (right-button erase)", () => {
   assert.deepEqual(doc.ticks(), [5, 15, 25, 40]);
 });
 
-test("commitSnapshot pushes only when the bitmap actually changed", () => {
+test('commitSnapshot pushes only when the bitmap actually changed', () => {
   const doc = new MarkerDoc();
   const before = doc.snapshot();
-  assert.equal(doc.commitSnapshot(before), false, "no change -> no undo entry");
+  assert.equal(doc.commitSnapshot(before), false, 'no change -> no undo entry');
   assert.ok(!doc.canUndo());
 
   doc.markers[7] = 1;
@@ -194,17 +193,17 @@ test("commitSnapshot pushes only when the bitmap actually changed", () => {
   assert.deepEqual(doc.ticks(), []);
 });
 
-test("restoreSnapshot reverts a cancelled gesture without touching undo", () => {
+test('restoreSnapshot reverts a cancelled gesture without touching undo', () => {
   const doc = docWith([100]);
   const before = doc.snapshot();
   doc.markers[200] = 1;
   doc.markers[100] = 0;
   doc.restoreSnapshot(before);
   assert.deepEqual(doc.ticks(), [100]);
-  assert.ok(!doc.canUndo(), "cancelling a gesture must not add an undo step");
+  assert.ok(!doc.canUndo(), 'cancelling a gesture must not add an undo step');
 });
 
-test("shiftAll moves the whole map (7/8 semantics) and drops out-of-range markers", () => {
+test('shiftAll moves the whole map (7/8 semantics) and drops out-of-range markers', () => {
   const doc = docWith([0, 100, MAX_TICKS - 1]);
   doc.shiftAll(1);
   // Markers pushed past the last tick fall off (bitmap semantics).
@@ -213,7 +212,7 @@ test("shiftAll moves the whole map (7/8 semantics) and drops out-of-range marker
   assert.deepEqual(doc.ticks(), [99]);
 });
 
-test("sliceIndexAtOrBefore finds the slice under the cursor (P preview)", () => {
+test('sliceIndexAtOrBefore finds the slice under the cursor (P preview)', () => {
   const ticks = [384, 408, 7944];
   assert.equal(sliceIndexAtOrBefore(ticks, 500), 1);
   assert.equal(sliceIndexAtOrBefore(ticks, 384), 0);

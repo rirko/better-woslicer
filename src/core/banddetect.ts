@@ -16,8 +16,8 @@
  *  - detection only ever ADDS markers.
  */
 
-import { BandAnalysis, BandName, BAND_NAMES } from "./bands.js";
-import { MAX_TICKS, TimeBase, sampleToTickNearest } from "./timebase.js";
+import { BandAnalysis, BandName, BAND_NAMES } from './bands.js';
+import { MAX_TICKS, TimeBase, sampleToTickNearest } from './timebase.js';
 
 export interface RiseParams {
   thresholdDb: number;
@@ -50,7 +50,11 @@ function lowPercentile(values: Float32Array, from: number, to: number, fraction 
 }
 
 /** Upward-loudness onsets as sample positions. */
-export function detectRiseOnsets(rms: Float32Array, hopSamples: number, params: RiseParams): number[] {
+export function detectRiseOnsets(
+  rms: Float32Array,
+  hopSamples: number,
+  params: RiseParams,
+): number[] {
   const sustain = Math.max(1, Math.floor(params.sustainFrames ?? 2));
   const baselineFrames = Math.max(2, Math.floor(params.baselineFrames ?? 20));
   const absoluteFloorDb = params.absoluteFloorDb ?? DEFAULT_ABSOLUTE_FLOOR_DB;
@@ -147,7 +151,9 @@ export function detectBandCuts(req: DetectRequest): DetectResult {
     if (!BAND_NAMES.includes(band)) continue;
     const signal = req.analysis[band];
     for (const rms of signal.rms) {
-      for (const sample of detectRiseOnsets(rms, req.analysis.hopSamples, { thresholdDb: req.thresholdDb })) {
+      for (const sample of detectRiseOnsets(rms, req.analysis.hopSamples, {
+        thresholdDb: req.thresholdDb,
+      })) {
         samples.add(sample);
       }
     }
@@ -161,9 +167,10 @@ export function detectBandCuts(req: DetectRequest): DetectResult {
 
   for (const sample of sorted) {
     const rawTick = sampleToTickNearest(sample, req.base);
-    const snapped = req.snap === false
-      ? Math.max(0, Math.min(MAX_TICKS - 1, rawTick))
-      : Math.max(0, Math.min(MAX_TICKS - 1, Math.round(rawTick / grid) * grid));
+    const snapped =
+      req.snap === false
+        ? Math.max(0, Math.min(MAX_TICKS - 1, rawTick))
+        : Math.max(0, Math.min(MAX_TICKS - 1, Math.round(rawTick / grid) * grid));
     if (snapped < req.fromTick || snapped > req.toTick) continue;
     if (req.existing.has(snapped)) {
       existing++;

@@ -1,0 +1,135 @@
+name: Build and validate a Tauri desktop target
+description: Native Rust checks, cached dependencies and default Tauri bundles
+inputs:
+  platform:
+    required: true
+    description: Release platform label
+  target:
+    required: true
+    description: Native Rust target triple
+  bundles:
+    required: true
+    description: Comma-separated Tauri bundle formats
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: '24'
+        cache: npm
+    - name: Set reproducible build time
+      shell: bash
+      run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+    - name: Install locked frontend dependencies
+      shell: bash
+      run: npm ci
+    - name: Install Rust stable with native checks
+      shell: bash
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+      run: |
+        rustup toolchain install stable --profile minimal --component rustfmt,clippy
+        rustup default stable
+        rustup target add "$RUST_TARGET"
+    - name: Install Linux bundler dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2t64
+    - name: Cache Cargo registry and target dependencies
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        workspaces: src-tauri -> target
+        shared-key: tauri-${{ runner.os }}-${{ inputs.target }}
+        save-if: ${{ github.event_name != 'pull_request' }}
+    - name: Build desktop frontend and generate identity before Cargo
+      shell: bash
+      run: |
+        npm run check:version
+        npm run build:app:tauri
+    - name: Rust format, tests and Clippy
+      shell: bash
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+      run: |
+        cargo fmt --manifest-path src-tauri/Cargo.toml --check
+        cargo test --manifest-path src-tauri/Cargo.toml --locked --target "$RUST_TARGET"
+        cargo clippy --manifest-path src-tauri/Cargo.toml --locked --target "$RUST_TARGET" --all-targets --all-features -- -D warnings
+    - name: Build default Tauri installers
+      shell: bash
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+        TAURI_BUNDLES: ${{ inputs.bundles }}
+      run: npm run tauri -- build --ci --target "$RUST_TARGET" --bundles "$TAURI_BUNDLES" -- --locked
+    - name: Check Windows installer metadata
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+      run: |
+        $package = Get-Content package.json -Raw | ConvertFrom-Json
+        $bundle = "src-tauri/target/$env:RUST_TARGET/release/bundle"
+        $installers = @(Get-ChildItem "$bundle/msi/*.msi")
+        $setups = @(Get-ChildItem "$bundle/nsis/*-setup.exe")
+        if ($installers.Count -eq 0 -or $setups.Count -eq 0) { throw 'Missing MSI or NSIS installer' }
+        $windowsInstaller = New-Object -ComObject WindowsInstaller.Installer
+        foreach ($installer in $installers) {
+          $database = $windowsInstaller.OpenDatabase($installer.FullName, 0)
+          $view = $database.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'ProductVersion'")
+          $view.Execute()
+          if ($view.Fetch().StringData(1) -ne $package.version) { throw 'MSI version differs from package.json' }
+          $view.Close()
+        }
+        foreach ($installer in @($installers) + @($setups)) {
+          if ($installer.Length -eq 0) { throw "Empty installer: $($installer.Name)" }
+        }
+    - name: Inspect native Linux packages
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+      run: |
+        version="$(node -p 'require("./package.json").version')"
+        for file in src-tauri/target/"$RUST_TARGET"/release/bundle/deb/*.deb; do
+          test "$(dpkg-deb --field "$file" Version)" = "$version"
+          dpkg-deb --info "$file"
+          dpkg-deb --contents "$file"
+        done
+        for file in src-tauri/target/"$RUST_TARGET"/release/bundle/appimage/*.AppImage; do
+          chmod +x "$file"
+          "$file" --appimage-version
+        done
+    - name: Collect native bundles without repacking them
+      shell: bash
+      env:
+        RELEASE_PLATFORM: ${{ inputs.platform }}
+        RUST_TARGET: ${{ inputs.target }}
+      run: |
+        bundle="src-tauri/target/$RUST_TARGET/release/bundle"
+        destination="release/$RELEASE_PLATFORM"
+        mkdir -p "$destination"
+        if [[ "$RUNNER_OS" == Windows ]]; then
+          cp "$bundle"/msi/*.msi "$bundle"/nsis/*-setup.exe "$destination/"
+        else
+          cp "$bundle"/deb/*.deb "$bundle"/appimage/*.AppImage "$destination/"
+        fi
+    - name: Upload complete platform artifacts
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: woslicer-${{ inputs.platform }}-${{ github.sha }}
+        path: release/${{ inputs.platform }}/*
+        if-no-files-found: error
+        compression-level: 0
+        overwrite: true
+        retention-days: 14
+    - name: Upload desktop diagnostics
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: diagnostics-${{ inputs.platform }}-${{ github.sha }}-${{ github.run_attempt }}
+        path: |
+          test-artifacts/
+          src-tauri/generated/build-info.json
+        if-no-files-found: ignore
+        retention-days: 7

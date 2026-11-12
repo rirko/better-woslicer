@@ -17,15 +17,15 @@
 
 ## 运行
 
-从仓库 Actions 的构建附件下载对应平台的压缩包，解压后运行：
+从 Releases（预发布）或 Actions 附件下载对应系统的软件包：
 
-| 平台 | 格式 | 程序 |
+| 平台 | 格式 | 使用方式 |
 | --- | --- | --- |
-| Windows | `.7z` | `woslicer-dx.exe` |
-| Linux | `.tar.xz` | `woslicer-dx` |
-| macOS | `.zip` | `woslicer-dx.app` |
+| Windows | .msi / -setup.exe | 运行安装程序 |
+| Linux | .deb / .AppImage | 安装 deb 或运行 AppImage |
+| Web | .zip | 解压后作为静态网站托管 |
 
-macOS CI 构建未公证。应用在本地处理文件，运行时无需联网。
+Windows x64 为主要桌面版本；其他架构和 Linux 包在可用时提供。应用在本地处理文件，运行时无需联网。
 
 网页版在浏览器中直接运行：[woslicer-dx app](https://woslicer-dx.pages.dev/) ，无需安装。
 
@@ -33,7 +33,7 @@ macOS CI 构建未公证。应用在本地处理文件，运行时无需联网�
 
 ```sh
 npm ci
-npm start
+npm run dev
 ```
 
 ## 操作

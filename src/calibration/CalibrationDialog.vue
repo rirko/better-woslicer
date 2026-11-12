@@ -5,7 +5,12 @@ import { ElAlert, ElButton, ElDialog } from 'element-plus';
 import type { CalibrationResult } from '../core/calibration';
 import { TapCalibrator } from './TapCalibrator';
 
-const props = defineProps<{ modelValue: boolean; audioContext: AudioContext | null; offsetMs: number; bpm: number }>();
+const props = defineProps<{
+  modelValue: boolean;
+  audioContext: AudioContext | null;
+  offsetMs: number;
+  bpm: number;
+}>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; apply: [offsetMs: number] }>();
 const { t } = useI18n();
 const active = ref(false);
@@ -20,7 +25,13 @@ const summary = computed(() => {
   const value = result.value;
   if (!value) return '';
   if (!value.matched) return t('chrome.noTapsMatched', { total: value.total });
-  return t(active.value ? 'chrome.tapsLive' : 'chrome.tapsFinal', { matched: value.matched, total: value.total, median: value.medianMs.toFixed(1), mean: value.meanMs.toFixed(1), spread: value.stdMs.toFixed(1) });
+  return t(active.value ? 'chrome.tapsLive' : 'chrome.tapsFinal', {
+    matched: value.matched,
+    total: value.total,
+    median: value.medianMs.toFixed(1),
+    mean: value.meanMs.toFixed(1),
+    spread: value.stdMs.toFixed(1),
+  });
 });
 function stop(): void {
   generation++;
@@ -38,7 +49,10 @@ function update(): void {
   elapsed.value = calibrator.elapsedBeats();
 }
 async function start(): Promise<void> {
-  stop(); result.value = null; elapsed.value = 0; error.value = '';
+  stop();
+  result.value = null;
+  elapsed.value = 0;
+  error.value = '';
   const context = props.audioContext;
   if (!context || !props.modelValue) return;
   const token = generation;
@@ -52,14 +66,22 @@ async function start(): Promise<void> {
     update();
     timer = setInterval(update, 50);
   } catch (cause: unknown) {
-    if (token === generation) { stop(); error.value = cause instanceof Error ? cause.message : String(cause); }
-  } finally { if (token === generation) starting.value = false; }
+    if (token === generation) {
+      stop();
+      error.value = cause instanceof Error ? cause.message : String(cause);
+    }
+  } finally {
+    if (token === generation) starting.value = false;
+  }
 }
 function finish(): void {
   if (calibrator) result.value = calibrator.finish();
   stop();
 }
-function close(): void { stop(); emit('update:modelValue', false); }
+function close(): void {
+  stop();
+  emit('update:modelValue', false);
+}
 function apply(): void {
   if (!result.value?.matched) return;
   emit('apply', Math.round(result.value.medianMs));
@@ -67,32 +89,93 @@ function apply(): void {
 }
 function keydown(event: KeyboardEvent): void {
   if (!props.modelValue) return;
-  if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); close(); return; }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    close();
+    return;
+  }
   if (!['Enter', ',', '.'].includes(event.key)) return;
   // The modal owns tap keys even after Finish: never leak a timeline marker.
-  event.preventDefault(); event.stopImmediatePropagation();
-  if (event.repeat || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || !active.value) return;
-  calibrator?.tap(); update();
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (
+    event.repeat ||
+    event.isComposing ||
+    event.ctrlKey ||
+    event.altKey ||
+    event.metaKey ||
+    !active.value
+  )
+    return;
+  calibrator?.tap();
+  update();
 }
-watch(() => [props.modelValue, props.audioContext] as const, ([open]) => {
+watch(
+  () => [props.modelValue, props.audioContext] as const,
+  ([open]) => {
+    window.removeEventListener('keydown', keydown, true);
+    if (open) {
+      window.addEventListener('keydown', keydown, true);
+      void start();
+    } else stop();
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => {
   window.removeEventListener('keydown', keydown, true);
-  if (open) { window.addEventListener('keydown', keydown, true); void start(); }
-  else stop();
-}, { immediate: true });
-onBeforeUnmount(() => { window.removeEventListener('keydown', keydown, true); stop(); });
+  stop();
+});
 </script>
 <template>
-  <ElDialog :model-value="modelValue" :title="t('chrome.calibrationTitle')" width="min(620px, 95vw)" :close-on-click-modal="false" :close-on-press-escape="false" append-to-body destroy-on-close @update:model-value="close">
+  <ElDialog
+    :model-value="modelValue"
+    :title="t('chrome.calibrationTitle')"
+    width="min(620px, 95vw)"
+    :close-on-click-modal="false"
+    :close-on-press-escape="false"
+    append-to-body
+    destroy-on-close
+    @update:model-value="close"
+  >
     <p>{{ t('chrome.calibrationHintPrefix') }} {{ bpm }} {{ t('chrome.calibrationHintBody') }}</p>
     <p>{{ t('chrome.offsetDisplay', { ms: offsetMs }) }}</p>
     <p>{{ t('chrome.beat') }} {{ elapsed }} · {{ t('chrome.taps') }} {{ result?.total ?? 0 }}</p>
-    <p role="status" aria-live="polite">{{ summary }}</p>
-    <ElAlert v-if="!audioContext" :title="t('status.calibrationNeedsSource')" type="warning" :closable="false" />
-    <ElAlert v-if="error" :title="error" type="error" :closable="false" />
+    <p
+      role="status"
+      aria-live="polite"
+    >
+      {{ summary }}
+    </p>
+    <ElAlert
+      v-if="!audioContext"
+      :title="t('status.calibrationNeedsSource')"
+      type="warning"
+      :closable="false"
+    />
+    <ElAlert
+      v-if="error"
+      :title="error"
+      type="error"
+      :closable="false"
+    />
     <template #footer>
-      <ElButton :disabled="!audioContext || starting" @click="start">{{ t('chrome.restart') }}</ElButton>
-      <ElButton :disabled="!active" @click="finish">{{ t('chrome.finish') }}</ElButton>
-      <ElButton :disabled="!result?.matched" type="primary" @click="apply">{{ t('chrome.apply') }}</ElButton>
+      <ElButton
+        :disabled="!audioContext || starting"
+        @click="start"
+        >{{ t('chrome.restart') }}</ElButton
+      >
+      <ElButton
+        :disabled="!active"
+        @click="finish"
+        >{{ t('chrome.finish') }}</ElButton
+      >
+      <ElButton
+        :disabled="!result?.matched"
+        type="primary"
+        @click="apply"
+        >{{ t('chrome.apply') }}</ElButton
+      >
       <ElButton @click="close">{{ t('chrome.close') }}</ElButton>
     </template>
   </ElDialog>

@@ -1,7 +1,7 @@
 /** Deterministic audio/fixture builders shared by the test suites. */
 
-import { parseWav, DecodedWav } from "../src/core/wav.js";
-import { MAX_TICKS } from "../src/core/timebase.js";
+import { parseWav, DecodedWav } from '../src/core/wav.js';
+import { MAX_TICKS } from '../src/core/timebase.js';
 
 /** Deterministic linear congruential generator (reproducible "noise"). */
 export function makeRng(seed: number): () => number {
@@ -22,10 +22,10 @@ export function wavBytes16(channelsData: Int16Array[], sampleRate: number): Uint
   const ascii = (off: number, s: string): void => {
     for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
   };
-  ascii(0, "RIFF");
+  ascii(0, 'RIFF');
   view.setUint32(4, dataSize + 36, true);
-  ascii(8, "WAVE");
-  ascii(12, "fmt ");
+  ascii(8, 'WAVE');
+  ascii(12, 'fmt ');
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
   view.setUint16(22, channels, true);
@@ -33,7 +33,7 @@ export function wavBytes16(channelsData: Int16Array[], sampleRate: number): Uint
   view.setUint32(28, sampleRate * channels * 2, true);
   view.setUint16(32, channels * 2, true);
   view.setUint16(34, 16, true);
-  ascii(36, "data");
+  ascii(36, 'data');
   view.setUint32(40, dataSize, true);
   let p = 44;
   for (let f = 0; f < length; f++) {
@@ -50,7 +50,7 @@ export function wavBytes16(channelsData: Int16Array[], sampleRate: number): Uint
 export function wavBytesDepth(
   samples: number[],
   sampleRate: number,
-  bits: 8 | 16 | 24 | 32
+  bits: 8 | 16 | 24 | 32,
 ): Uint8Array {
   const bytesPer = bits >> 3;
   const dataSize = samples.length * bytesPer;
@@ -59,10 +59,10 @@ export function wavBytesDepth(
   const ascii = (off: number, s: string): void => {
     for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
   };
-  ascii(0, "RIFF");
+  ascii(0, 'RIFF');
   view.setUint32(4, dataSize + 36, true);
-  ascii(8, "WAVE");
-  ascii(12, "fmt ");
+  ascii(8, 'WAVE');
+  ascii(12, 'fmt ');
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
   view.setUint16(22, 1, true);
@@ -70,7 +70,7 @@ export function wavBytesDepth(
   view.setUint32(28, sampleRate * bytesPer, true);
   view.setUint16(32, bytesPer, true);
   view.setUint16(34, bits, true);
-  ascii(36, "data");
+  ascii(36, 'data');
   view.setUint32(40, dataSize, true);
   let p = 44;
   for (const s of samples) {
@@ -96,19 +96,28 @@ export function wavBytesDepth(
 }
 
 /** Wraps arbitrary extra RIFF chunks (as raw bytes) before the data chunk. */
-export function wavWithExtraChunks(extraChunks: Array<{ id: string; body: Uint8Array }>, pcm: Uint8Array, bits = 16, channels = 1, sampleRate = 48000): Uint8Array {
+export function wavWithExtraChunks(
+  extraChunks: Array<{ id: string; body: Uint8Array }>,
+  pcm: Uint8Array,
+  bits = 16,
+  channels = 1,
+  sampleRate = 48000,
+): Uint8Array {
   const bytesPer = bits >> 3;
   const dataSize = pcm.length;
-  const extraSize = extraChunks.reduce((acc, c) => acc + 8 + c.body.length + (c.body.length & 1), 0);
+  const extraSize = extraChunks.reduce(
+    (acc, c) => acc + 8 + c.body.length + (c.body.length & 1),
+    0,
+  );
   const total = 12 + extraSize + 24 + 8 + dataSize;
   const buf = new ArrayBuffer(total);
   const view = new DataView(buf);
   const ascii = (off: number, s: string): void => {
     for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
   };
-  ascii(0, "RIFF");
+  ascii(0, 'RIFF');
   view.setUint32(4, total - 8, true);
-  ascii(8, "WAVE");
+  ascii(8, 'WAVE');
   let p = 12;
   for (const chunk of extraChunks) {
     ascii(p, chunk.id);
@@ -116,7 +125,7 @@ export function wavWithExtraChunks(extraChunks: Array<{ id: string; body: Uint8A
     new Uint8Array(buf).set(chunk.body, p + 8);
     p += 8 + chunk.body.length + (chunk.body.length & 1);
   }
-  ascii(p, "fmt ");
+  ascii(p, 'fmt ');
   view.setUint32(p + 4, 16, true);
   view.setUint16(p + 8, 1, true);
   view.setUint16(p + 10, channels, true);
@@ -125,7 +134,7 @@ export function wavWithExtraChunks(extraChunks: Array<{ id: string; body: Uint8A
   view.setUint16(p + 20, channels * bytesPer, true);
   view.setUint16(p + 22, bits, true);
   p += 24;
-  ascii(p, "data");
+  ascii(p, 'data');
   view.setUint32(p + 4, dataSize, true);
   new Uint8Array(buf).set(pcm, p + 8);
   return new Uint8Array(buf);

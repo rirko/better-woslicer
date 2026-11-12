@@ -13,12 +13,14 @@
  * They never share state.
  */
 
-import { MAX_TICKS, MEASURE_TICKS } from "./timebase.js";
-import { markerTicks } from "./wos.js";
+import { MAX_TICKS, MEASURE_TICKS } from './timebase.js';
+import { markerTicks } from './wos.js';
 
 /** Normalizes a selection: deduplicated, sorted ascending, in-range ticks. */
 export function normalizeSelection(ticks: readonly number[]): number[] {
-  return [...new Set(ticks)].filter((t) => Number.isInteger(t) && t >= 0 && t < MAX_TICKS).sort((a, b) => a - b);
+  return [...new Set(ticks)]
+    .filter((t) => Number.isInteger(t) && t >= 0 && t < MAX_TICKS)
+    .sort((a, b) => a - b);
 }
 
 /** Relative offsets of `ticks` from their minimum (origin becomes 0). */
@@ -46,9 +48,7 @@ export function clampGroupDelta(ticks: readonly number[], delta: number): number
   return Math.max(-min, Math.min(MAX_TICKS - 1 - max, delta));
 }
 
-export type PasteCheck =
-  | { ok: true; ticks: number[] }
-  | { ok: false; reason: string };
+export type PasteCheck = { ok: true; ticks: number[] } | { ok: false; reason: string };
 
 /**
  * Pure paste resolution: computes target ticks and validates the WHOLE group.
@@ -60,14 +60,18 @@ export function resolvePaste(
   offsets: readonly number[],
   targetTick: number,
   occupied: ReadonlySet<number>,
-  selfTicks: ReadonlySet<number>
+  selfTicks: ReadonlySet<number>,
 ): PasteCheck {
-  if (!offsets.length) return { ok: false, reason: "clipboard is empty" };
-  if (!Number.isInteger(targetTick)) return { ok: false, reason: "paste position must be an integer tick" };
+  if (!offsets.length) return { ok: false, reason: 'clipboard is empty' };
+  if (!Number.isInteger(targetTick))
+    return { ok: false, reason: 'paste position must be an integer tick' };
   const targets = offsetsToTargets(offsets, targetTick);
   for (const t of targets) {
     if (t < 0 || t >= MAX_TICKS) {
-      return { ok: false, reason: `paste rejected: marker would land at tick ${t}, outside the timeline` };
+      return {
+        ok: false,
+        reason: `paste rejected: marker would land at tick ${t}, outside the timeline`,
+      };
     }
     if (occupied.has(t) && !selfTicks.has(t)) {
       return { ok: false, reason: `paste rejected: tick ${t} already has a marker` };
@@ -86,12 +90,7 @@ export class MarkerDoc {
   private undoStack: Uint8Array[] = [];
   private redoStack: Uint8Array[] = [];
 
-  constructor(
-    bpm = 120,
-    shift = 0,
-    fadeoutMs = 0,
-    noisegateDb = -48
-  ) {
+  constructor(bpm = 120, shift = 0, fadeoutMs = 0, noisegateDb = -48) {
     this.markers = new Uint8Array(MAX_TICKS);
     this.bpm = bpm;
     this.shift = shift;
@@ -198,13 +197,15 @@ export class MarkerDoc {
   }
 
   restoreSnapshot(snapshot: Uint8Array): void {
-    if (snapshot.length !== MAX_TICKS) throw new RangeError(`snapshot must have ${MAX_TICKS} entries`);
+    if (snapshot.length !== MAX_TICKS)
+      throw new RangeError(`snapshot must have ${MAX_TICKS} entries`);
     this.markers = snapshot.slice();
   }
 
   /** Commits `before` as a single undo entry when the bitmap actually changed. */
   commitSnapshot(before: Uint8Array): boolean {
-    if (before.length !== MAX_TICKS) throw new RangeError(`snapshot must have ${MAX_TICKS} entries`);
+    if (before.length !== MAX_TICKS)
+      throw new RangeError(`snapshot must have ${MAX_TICKS} entries`);
     let changed = false;
     for (let i = 0; i < MAX_TICKS; i++) {
       if (this.markers[i] !== before[i]) {
@@ -266,7 +267,7 @@ export class MarkerDoc {
   /** Pastes a measure clipboard at `measure`. */
   pasteMeasure(measure: number, clip: Uint8Array): boolean {
     if (clip.length !== MEASURE_TICKS) {
-      throw new RangeError("measure clipboard must have 192 entries");
+      throw new RangeError('measure clipboard must have 192 entries');
     }
     const base = this.measureBase(measure);
     this.pushUndo();
@@ -323,7 +324,12 @@ export class MarkerDoc {
   canPasteAt(targetTick: number): boolean {
     if (!this.selectionClipboard) return false;
     const occupied = new Set(this.ticks());
-    return resolvePaste(this.selectionClipboard, targetTick, occupied, this.selfTicksFor(targetTick)).ok;
+    return resolvePaste(
+      this.selectionClipboard,
+      targetTick,
+      occupied,
+      this.selfTicksFor(targetTick),
+    ).ok;
   }
 
   /**
@@ -346,10 +352,10 @@ export class MarkerDoc {
   /** The reason a paste at `targetTick` would be rejected (for status text). */
   pasteRejectReason(targetTick: number): string {
     const offsets = this.selectionClipboard;
-    if (!offsets) return "selection clipboard is empty";
+    if (!offsets) return 'selection clipboard is empty';
     const occupied = new Set(this.ticks());
     const check = resolvePaste(offsets, targetTick, occupied, this.selfTicksFor(targetTick));
-    return check.ok ? "" : check.reason;
+    return check.ok ? '' : check.reason;
   }
 
   /* ------------------------------------------------------------------ */

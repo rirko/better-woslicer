@@ -9,12 +9,12 @@
  * (Butterworth Q), so the whole module is deterministic and unit-testable.
  */
 
-import { buildPeakCache, PeakCache } from "./peaks.js";
+import { buildPeakCache, PeakCache } from './peaks.js';
 
-export type BandName = "low" | "mid" | "high";
+export type BandName = 'low' | 'mid' | 'high';
 
 export const BAND_CROSSOVERS = { lowMid: 250, midHigh: 4000 } as const;
-export const BAND_NAMES: readonly BandName[] = ["low", "mid", "high"] as const;
+export const BAND_NAMES: readonly BandName[] = ['low', 'mid', 'high'] as const;
 
 /**
  * Peak-cache bucket for the band OVERLAY drawing (64 frames ≈ 1.5 ms at
@@ -44,9 +44,9 @@ export function lowpassCoeffs(sampleRate: number, cutoff: number, q = Q_BUTTERWO
   const alpha = Math.sin(w0) / (2 * q);
   const a0 = 1 + alpha;
   return {
-    b0: ((1 - cos) / 2) / a0,
+    b0: (1 - cos) / 2 / a0,
     b1: (1 - cos) / a0,
-    b2: ((1 - cos) / 2) / a0,
+    b2: (1 - cos) / 2 / a0,
     a1: (-2 * cos) / a0,
     a2: (1 - alpha) / a0,
   };
@@ -58,9 +58,9 @@ export function highpassCoeffs(sampleRate: number, cutoff: number, q = Q_BUTTERW
   const alpha = Math.sin(w0) / (2 * q);
   const a0 = 1 + alpha;
   return {
-    b0: ((1 + cos) / 2) / a0,
-    b1: (-(1 + cos)) / a0,
-    b2: ((1 + cos) / 2) / a0,
+    b0: (1 + cos) / 2 / a0,
+    b1: -(1 + cos) / a0,
+    b2: (1 + cos) / 2 / a0,
     a1: (-2 * cos) / a0,
     a2: (1 - alpha) / a0,
   };
@@ -82,13 +82,17 @@ export function applyBiquad(input: Float32Array, c: Biquad): Float32Array {
 }
 
 /** Splits one channel (normalized float samples) into the requested band. */
-export function filterBand(samples: Float32Array, sampleRate: number, band: BandName): Float32Array {
+export function filterBand(
+  samples: Float32Array,
+  sampleRate: number,
+  band: BandName,
+): Float32Array {
   switch (band) {
-    case "low":
+    case 'low':
       return applyBiquad(samples, lowpassCoeffs(sampleRate, BAND_CROSSOVERS.lowMid));
-    case "high":
+    case 'high':
       return applyBiquad(samples, highpassCoeffs(sampleRate, BAND_CROSSOVERS.midHigh));
-    case "mid": {
+    case 'mid': {
       const hp = applyBiquad(samples, highpassCoeffs(sampleRate, BAND_CROSSOVERS.lowMid));
       return applyBiquad(hp, lowpassCoeffs(sampleRate, BAND_CROSSOVERS.midHigh));
     }
@@ -97,7 +101,7 @@ export function filterBand(samples: Float32Array, sampleRate: number, band: Band
 
 /** RMS per hop window (linear, 0..1). Last partial hop is included. */
 export function rmsEnvelope(samples: Float32Array, hopSamples: number): Float32Array {
-  if (hopSamples < 1) throw new RangeError("hopSamples must be >= 1");
+  if (hopSamples < 1) throw new RangeError('hopSamples must be >= 1');
   const frames = Math.ceil(samples.length / hopSamples);
   const out = new Float32Array(Math.max(1, frames));
   for (let f = 0; f < out.length; f++) {
@@ -153,5 +157,5 @@ export function analyzeBands(channels: Int16Array[], sampleRate: number, hopMs =
     }
     return { peaks, rms };
   };
-  return { sampleRate, hopSamples, low: build("low"), mid: build("mid"), high: build("high") };
+  return { sampleRate, hopSamples, low: build('low'), mid: build('mid'), high: build('high') };
 }

@@ -42,7 +42,7 @@ export interface CalibrationResult {
 export function analyzeTaps(
   tapTimesMs: readonly number[],
   beatsMs: readonly number[],
-  beats = DEFAULT_CALIBRATION_BEATS
+  beats = DEFAULT_CALIBRATION_BEATS,
 ): CalibrationResult {
   const offsets: number[] = [];
   if (beatsMs.length > 1) {

@@ -11,8 +11,8 @@
  * and the current-language state.
  */
 
-import { DATA } from "../i18n/generated.js";
-import type { Language } from "./language.js";
+import { DATA } from '../i18n/generated.js';
+import type { Language } from './language.js';
 
 /** Static chrome strings (labels, buttons, titles), keyed by stable id. */
 export type ChromeKey = keyof typeof DATA.en.chrome;

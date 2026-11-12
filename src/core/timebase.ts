@@ -10,7 +10,7 @@
  * Both are provided here; do not interchange them.
  */
 
-import { f32, toInt32 } from "./float32.js";
+import { f32, toInt32 } from './float32.js';
 
 export const MEASURE_TICKS = 192;
 export const MAX_TICKS = 49152;
@@ -29,7 +29,7 @@ export interface TimeBase {
  * Operation order matches the original IL exactly.
  */
 export function tickToSampleExport(tick: number, base: TimeBase): number {
-  return toInt32(((tick + base.shift) * base.sampleRate) / base.bpm * 5.0 / 4.0);
+  return toInt32(((((tick + base.shift) * base.sampleRate) / base.bpm) * 5.0) / 4.0);
 }
 
 /**
@@ -86,7 +86,7 @@ export function resolveBreakpointTick(
   tick: number,
   snap: boolean,
   grid: number,
-  bypass: boolean
+  bypass: boolean,
 ): number {
   const snapUsable = snap && !bypass && Number.isInteger(grid) && grid > 0;
   if (!snapUsable) return Math.max(0, Math.min(MAX_TICKS - 1, Math.round(tick)));
@@ -101,7 +101,7 @@ export function sliceEndSample(
   markers: readonly number[],
   index: number,
   sourceLength: number,
-  base: TimeBase
+  base: TimeBase,
 ): number {
   const next = index + 1 < markers.length ? markers[index + 1] : -1;
   if (next < 0) return sourceLength;

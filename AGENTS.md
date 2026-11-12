@@ -19,7 +19,8 @@ These rules apply to all work in this repository. Keep this file in English.
 
 ## Product security
 
-- This is an offline desktop audio editor. Do not add application features or runtime dependencies that access the public Internet or other external networks, including telemetry, crash uploads, update checks, cloud services, remote assets, or links that launch an external browser.
+- This is an offline desktop audio editor. Do not add application-initiated network behavior, including telemetry, crash uploads, update checks, cloud services, remote assets, or links that launch an external browser.
+- The offline boundary applies to the app itself. External tools, installers, dependencies, and system runtimes may use the network independently; their behavior is outside this app's responsibility. Keep Tauri's default WebView installation behavior. Do not bundle WebView runtimes, prohibit their downloads, or add support for systems without a WebView engine.
 - Keep user audio, projects, preferences, and other user data local. Preserve the Tauri isolation boundary (no shell/open, no broad IPC) and the restrictive Content Security Policy of both release variants.
 - Build-time downloads, CI artifact uploads, and test-only loopback connections are allowed; they must not become application runtime behavior. Test DevTools must bind to loopback.
 - If a request conflicts with this policy, explain the conflict and suggest an offline alternative.

@@ -1,5 +1,9 @@
 # Vue / Tauri 实施计划与差异台账
 
+2026-11-11 恢复批次（覆盖下文旧 CI/离线安装要求）：设计书先独立提交为 `a6728d4`。迁移后 CI 恢复 Web 与 Windows x64 必过、Windows ARM64/Linux x64/ARM64 可选；Rust cache 固定官方 v2.9.3 SHA；tag 直接公开 prerelease，按配置恢复 Pages。详见 [CI.md](../CI.md)。托管首跑与 native UI 双 profile 仍待验证，未执行 push/tag/发布。
+
+用户明确：只有应用内部要离线；外部、安装器、依赖和系统运行时独立联网不属于应用责任。保持 Tauri 默认 WebView 安装行为，不捆绑运行时、不禁止下载、不支持缺少 WebView 引擎的系统。离线 WebView 分发不再是验收项。
+
 状态核对基准：`feature/tauri`，**W2–W5 已完成；W6 主切换已落地**（W2：`6c57457`/`5375e68`/`fa1b652`/`53a5f57`；W3：`7c4a975`/`6828d6f`/`b6bad62`/`9e4e9fc`；W4：`de46b1f`/`9b81076`/BMH 提交），2026-11-10 JST。
 此文描述目标和尚需实施的工作，不表示功能已全部实现。下一次工作从 [RESUME.md](RESUME.md) 开始。
 证据见 [时序](THIRD_SESSION_EVIDENCE.md) 和 [最终批准原文](THIRD_SESSION_APPROVED_PLAN.md)。
@@ -92,7 +96,7 @@
 | G11 | **已完成**（de46b1f）：cue 交叉重置仅随 markers/bpm/shift 值键；播放行为测试证明无关编辑不吞 crossing | 无未决项 |
 | G12 | Tauri bounded chunk/final close 已有；reader 按 reference/grant 区分 | 不同引用并行已测，同一引用双读取仍需独立 transfer ID；grant 生命周期上限/取消清理需验证 |
 | G13 | **已完成**（fa1b652）：拆为 `importWosSettings`（原地单事务导入时序/切点，保留 projectId/media/output，一步可撤销，无音频时不虚构媒体）与 `newProjectFromWos`（整体替换为新工程，走替换确认，清空 source）；`savedWos` 文案明确仅时序与切点 | 无未决项；BMSE/MIDI 互通验收仍属 W5 |
-| G14 | 版本/标识符（2026-11-11 用户决定）：root version **1.0.0**（npm version 流程 + 双语 changelog 1.0.0 段，仅 UX 断言；Fixed 两项以旧 lane 静默吞错源码为据）；identifier **io.github.rirko.woslicer-dx**（应用数据目录随之更换，旧目录数据已迁移本机；tauri-ipc-probe 同步更新）。主入口已切（886e388）：`dev`/`build`/`package`/`typecheck`/`test` 跑 Vue/Tauri 链（typecheck/test 双链覆盖）；旧 Electron lane 改显式 `:*electron` 名；`tauri.conf.json` bundle.active=true（msi/nsis/deb/appimage + 图标集）；**真实 Windows 产物本地实测**（woslicer-dx_0.3.0_x64_en-US.msi + -setup.exe）；tauri npm 包对齐 crate minor（2.11）；build.yml 重写（真实 Ubuntu verify + windows/linux 打包 job，Rust 用 runner rustup，无 WSL）；release.yml/旧矩阵退场至 .pending-delete；docs/CI.md 重写 | native UI 双 profile、离线 WebView2 验证、CI 真实跑通（未 push，待分支验证）、Rust cache action（需固定 SHA，暂缓） |
+| G14 | 版本/标识符（2026-11-11 用户决定）：root version **1.0.0**（npm version 流程 + 双语 changelog 1.0.0 段，仅 UX 断言；Fixed 两项以旧 lane 静默吞错源码为据）；identifier **io.github.rirko.woslicer-dx**（应用数据目录随之更换，旧目录数据已迁移本机；tauri-ipc-probe 同步更新）。主入口已切（886e388）：`dev`/`build`/`package`/`typecheck`/`test` 跑 Vue/Tauri 链（typecheck/test 双链覆盖）；旧 Electron lane 改显式 `:*electron` 名；`tauri.conf.json` bundle.active=true（msi/nsis/deb/appimage + 图标集）；**真实 Windows 产物本地实测**（woslicer-dx_0.3.0_x64_en-US.msi + -setup.exe）；tauri npm 包对齐 crate minor（2.11）；build.yml 重写（真实 Ubuntu verify + windows/linux 打包 job，Rust 用 runner rustup，无 WSL）；release.yml/旧矩阵退场至 .pending-delete；docs/CI.md 重写 | native UI 双 profile、恢复后 CI 真实跑通（未 push）；Rust cache 已配置 |
 
 保留旧 i18n key 以让旧测试通过是临时回归桥梁，不意味着以后继续维护旧菜单或旧 DOM 翻译体系。
 对未知版本/扩展字段，“JSON 重新编码”不等于原始字节无损；详见 [格式文档](../PROJECT_FORMAT.md)。
@@ -108,10 +112,14 @@
 | W3 绑定与恢复身份 | C/D | G05/G06/G09/G12；session、project-media、platform/Rust reader | 绑定独立、恢复不重建身份、不丢 dirty；relink 差异确认；legacy 预览；transfer 隔离/回收。依赖 W1 的恢复结果模型 |
 | W4 项目属性与 BMHelper | B/D | G07/G08/G11 | **已完成**（de46b1f + 9b81076 + BMH 提交，2026-11-10）：单轨 dB/mute/solo/视图投影可验证；cue 独立不漏事件；BMH 随项目开存/undo、切换重载、保存期守卫。下一包从 W5 开始 |
 | W5 输入与业务生命周期验收 | B/D | G02/G10；commands/menu/actions/gestures/worker/export | 完成逐项操作清单和按钮↔键盘↔鼠标等价测试；modal/busy/取消一致；释放 AudioContext/Worker/RAF/observer/pointer capture；不加手柄运行时 |
-| W6 产品入口与常规构建 | E | G14；package scripts、Vite、Tauri config、CI/version docs | 新 Web/Tauri 是正式入口；旧工具按引用清理退出；真实产物测试、平台前置依赖、Rust 缓存和离线 WebView2 方案；依赖前述业务可验收 |
+| W6 产品入口与常规构建 | E | G14；package scripts、Vite、Tauri config、CI/version docs | 新 Web/Tauri 是正式入口；旧工具按引用清理退出；真实产物测试、平台前置依赖、Rust 缓存与默认 Tauri 分发；依赖前述业务可验收 |
 | W7 最终审查与交付文档 | F | 历史 smell findings、许可证、README×4、changelog×2 | 每个 finding 有 disposition；只写实际 UX；真实验收矩阵，未测/fixture unavailable 保持明确；无未授权发布 |
 
 W2 的具体起手用例及命令见 [恢复指南](RESUME.md)。每包可以拆成更小可提交单元，不把整包堆到限额末尾。
+
+2026-11-11 用户新增界面可读性规划：W7 的 smell 处置输入更新为 HEAD `44a8192` 对应的 `.smell-check/20261110-180802Z`（57 active / 5 dismissed）。[界面等价重构方案](../refactoring/UI_READABILITY_PLAN.md) 已完成编写，R0–R10 均待实施；先处理模板/样式映射与局部重复协议，其余 findings 显式延后复核。本次仅制定方案，不改变 W6 未验收状态，也不把后续队列记为已修复。
+
+同日追加 [lint/fmt 与 commit hook 工作包 T0–T3](../refactoring/LINT_FORMAT_PLAN.md)：先用 Oxfmt 建立统一格式基线，ESLint flat config 覆盖 TS 类型规则和 Vue 模板，再启用 Husky/lint-staged pre-commit 只读检查与 CI 全量门禁。替代 R1 的纯手工排版工作；开发工具依赖/config/hook/CI 由协调者统一所有。状态均为待实施。
 除非新证据或用户改变优先级，下一次恢复不要重新从菜单样式、旧 packaging 优化或新多轨功能开始。
 
 ## 6. 构建替换与验收门槛
@@ -120,14 +128,14 @@ W2 的具体起手用例及命令见 [恢复指南](RESUME.md)。每包可以拆
 - Web 使用 Vite 生产目录在 Chromium + Firefox 验证。旧 `test:web` 面向旧 renderer，不能当 Vue Firefox 的证据。
 - Tauri 用 CLI/bundler 标准目标产物；不保留手工 archive 重写、locale 裁剪、符号包、三文件 Web 等旧合同。minify/source map 不是本轮优先事项。
 - 按实际支持的 OS/arch 建 CI：Node24 + npm ci + Rust locked toolchain/deps + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action。缓存不替代 fmt/clippy/test。
-- Windows WebView2 分发必须满足离线产品约束并实际验包；不能靠首次运行联网下载，也不预先承诺包更小。
+- Windows WebView 安装按 Tauri 默认行为，外部依赖联网允许，不捆绑运行时。
 - root package.json version 是唯一可编辑版本；构建期 commit/dirty/固定 UTC 时间；按现有 VERSIONING 规则检查。
-- 盘点现存 `release.yml` 的发布/部署耦合，再做有依据的本地调整；不触发或新加发布/CD。源码退出通过移动归档实现，不因旧工作流仍存在就盲目 push/tag。
+- 按用户要求恢复 tag 发布与可配置 Pages，详见 docs/CI.md；本地不执行 push/tag/发布。
 - Native UI 独立 low 1280×720/DPR1、high 1920×1080/DPR2，真实缩放/菜单可见、隔离用户数据、每 profile 独立 30 秒硬超时、完整清理本次进程树、动态 loopback DevTools 端口。浏览器模拟 DPR 不能代替原生。
 - **双发行约束（2026-11-11 用户决定）**：web（浏览器版）与 desktop（Tauri 版）同为发行目标。平台通信改动只允许落在 `platform/tauri.ts` 与 Tauri 前端变体，web 变体保持最严 CSP；每次发行需两版各自验证（web：`test:app-ui` 双 profile；desktop：`test:tauri-ipc` 传输探针 + native 冒烟）。
 - **新架构画面测试（2026-11-11 用户要求）**：`test:app-ui`（Playwright，Chromium 1280×720/DPR1 与 1920×1080/DPR2，dist/app 生产目录）为 web 版画面基线；`test:tauri-ipc`（scripts/tauri-ipc-probe.mjs，CDP 直连产物 WebView2）为桌面 IPC 传输健康测试；native 窗口级画面测试待 tauri-driver 工具链（W6 剩余）。
 - Rust MSRV 政策（2026-11-11 用户决定）：`rust-version` 跟随最新 stable 工具链（当前 1.99），tauri 家族随 minor 最新对齐（crate 2.12.5 ↔ npm api/cli 2.12）；升 minor 时同步抬 MSRV 并双端（Windows/WSL Linux）实测。
-- Rust cache action 暂缓：仓库内没有可核验的固定 SHA（不凭记忆写第三方 action 指向）；首次引入时以发布页 SHA 落笔。缓存不是验收必需（fmt/clippy/test 照跑）。
+- Rust cache 已固定官方 v2.9.3 SHA，按 OS/target 分离；fmt/clippy/test 照跑。
 - 本机 WSL 已可运行 Tauri（WSLg）：native Tauri 冒烟可作为**本机的显式验证路径**——仅限本机、必须显式调用；不得写进默认脚本，不得在其他人的机器上隐式启动 WSL。CI 的 Linux 目标一律交给真实 Ubuntu runner，不接受 WSL 代替；WSL 产生的证据标注为"本机验证"，不等同标准目标平台验收（后者仍属 W6 常规打包）。
 - 完整构建报告必须含类型检查、业务/组件测试、UI profiles、归档检查；必需步骤失败先诊断，不继续打包。只对实际测过的平台作声明。
 

@@ -17,15 +17,15 @@ wosderge の woslicerIII をベースにした、BMS 向けのオフライン音
 
 ## 実行
 
-リポジトリの Actions にあるビルド成果物をダウンロードして展開します。
+Releases（プレリリース）または Actions の成果物から、ご利用のシステム向けパッケージをダウンロードします。
 
-| プラットフォーム | 形式 | アプリ |
+| プラットフォーム | 形式 | 使い方 |
 | --- | --- | --- |
-| Windows | `.7z` | `woslicer-dx.exe` |
-| Linux | `.tar.xz` | `woslicer-dx` |
-| macOS | `.zip` | `woslicer-dx.app` |
+| Windows | .msi / -setup.exe | インストーラーを実行 |
+| Linux | .deb / .AppImage | deb をインストール、または AppImage を実行 |
+| Web | .zip | 展開して静的サイトとして配信 |
 
-macOS の CI ビルドは公証されていません。本アプリはファイルをローカルで処理し、実行時にネットワーク接続は不要です。
+Windows x64 が主要なデスクトップ版です。ほかのアーキテクチャや Linux パッケージは利用可能な場合に提供します。本アプリはファイルをローカルで処理し、オフラインで動作します。
 
 Web 版はブラウザーで直接動作します：[woslicer-dx app](https://woslicer-dx.pages.dev/) （インストール不要）。
 
@@ -33,7 +33,7 @@ Web 版はブラウザーで直接動作します：[woslicer-dx app](https://wo
 
 ```sh
 npm ci
-npm start
+npm run dev
 ```
 
 ## 操作

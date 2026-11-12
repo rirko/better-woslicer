@@ -23,7 +23,9 @@ export default defineConfig({
   plugins: [
     vue(),
     VueI18n({
-      include: ['en', 'zh', 'ja', 'ko'].map(language => resolve(root, `src/i18n/${language}.json`)),
+      include: ['en', 'zh', 'ja', 'ko'].map((language) =>
+        resolve(root, `src/i18n/${language}.json`),
+      ),
       runtimeOnly: true,
       compositionOnly: true,
       dropMessageCompiler: true,

@@ -8,11 +8,7 @@
  * playing). Finish simply stops the clicks and freezes the current result.
  */
 
-import {
-  analyzeTaps,
-  beatIntervalMs,
-  CalibrationResult,
-} from "../core/calibration.js";
+import { analyzeTaps, beatIntervalMs, CalibrationResult } from '../core/calibration.js';
 
 export class TapCalibrator {
   private active = false;
@@ -107,14 +103,18 @@ export class TapCalibrator {
   private click(when: number, accent: boolean): void {
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.type = "square";
+    osc.type = 'square';
     osc.frequency.value = accent ? 1760 : 1320;
     gain.gain.setValueAtTime(0.0001, when);
     gain.gain.exponentialRampToValueAtTime(0.45, when + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
-    osc.onended = () => { osc.disconnect(); gain.disconnect(); osc.onended = null; };
+    osc.onended = () => {
+      osc.disconnect();
+      gain.disconnect();
+      osc.onended = null;
+    };
     osc.start(when);
     osc.stop(when + 0.06);
     this.nodes.push({ node: osc, gain, stopAt: when + 0.06 });

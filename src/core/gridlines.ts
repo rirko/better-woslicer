@@ -17,7 +17,7 @@
  * draw a cell every N ticks — 96 lines per measure instead of 2 at density 2.
  */
 
-import { MAX_TICKS, MEASURE_TICKS } from "./timebase.js";
+import { MAX_TICKS, MEASURE_TICKS } from './timebase.js';
 
 /** Minimum pixel width at which grid subdivision lines are still drawn. */
 export const GRID_LINE_MIN_PX = 2;
@@ -43,7 +43,7 @@ export function gridLineTicks(
   fromTick: number,
   toTick: number,
   grid: number,
-  pxPerTick: number
+  pxPerTick: number,
 ): GridLineTick[] {
   const lines: GridLineTick[] = [];
   const gridUsable = Number.isInteger(grid) && grid > 0 && pxPerTick > 0;

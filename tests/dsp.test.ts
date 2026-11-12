@@ -1,9 +1,9 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { applyCut, renderSlice, safeGet, SourceAudio } from "../src/core/slicer.js";
-import { encodeWav16, parseWav } from "../src/core/wav.js";
-import { makeTestSource, wavBytes16, makeRng } from "./fixtures.js";
-import { tickToSampleExport } from "../src/core/timebase.js";
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { applyCut, renderSlice, safeGet, SourceAudio } from '../src/core/slicer.js';
+import { encodeWav16, parseWav } from '../src/core/wav.js';
+import { makeTestSource, wavBytes16, makeRng } from './fixtures.js';
+import { tickToSampleExport } from '../src/core/timebase.js';
 
 const BASE_185 = { bpm: 185, shift: -1, sampleRate: 48000 };
 
@@ -15,20 +15,20 @@ function toneSource(length: number, sampleRate = 48000): SourceAudio {
   return { sampleRate, channels: 1, length, data: [data] };
 }
 
-test("safeGet returns 0 for reads at or beyond the end (contract: safe OOB read)", () => {
+test('safeGet returns 0 for reads at or beyond the end (contract: safe OOB read)', () => {
   const src = toneSource(10);
   assert.equal(safeGet(src, 0, 9), src.data[0][9]);
   assert.equal(safeGet(src, 0, 10), 0);
   assert.equal(safeGet(src, 0, 100000), 0);
 });
 
-test("safeGet returns 0 for negative indices (never undefined)", () => {
+test('safeGet returns 0 for negative indices (never undefined)', () => {
   const src = toneSource(10);
   assert.equal(safeGet(src, 0, -1), 0);
   assert.equal(safeGet(src, 0, -100000), 0);
 });
 
-test("fadeout 0: length = end - start + 16 with a 16-frame zero pad", () => {
+test('fadeout 0: length = end - start + 16 with a 16-frame zero pad', () => {
   const src = toneSource(200000);
   const start = tickToSampleExport(384, BASE_185);
   const end = tickToSampleExport(408, BASE_185);
@@ -45,7 +45,7 @@ test("fadeout 0: length = end - start + 16 with a 16-frame zero pad", () => {
   assert.equal(ch[rendered.length - 17], src.data[0][end - 1]);
 });
 
-test("fade-in region: first (48000/525)=91 frames use the integer-degree sine envelope", () => {
+test('fade-in region: first (48000/525)=91 frames use the integer-degree sine envelope', () => {
   const src = toneSource(48000);
   const start = 0;
   const end = 4000;
@@ -64,7 +64,7 @@ test("fade-in region: first (48000/525)=91 frames use the integer-degree sine en
   assert.equal(ch[200], src.data[0][200]);
 });
 
-test("noisegate dB=0 truncates the slice at its last non-zero sample", () => {
+test('noisegate dB=0 truncates the slice at its last non-zero sample', () => {
   const src = toneSource(2000);
   const rendered = renderSlice(src, { start: 0, end: 2000, fadeoutMs: 0, noisegateDb: 0 });
   // Original: length = min(length, lastLoud + msec) with msec forced to 0.
@@ -72,7 +72,7 @@ test("noisegate dB=0 truncates the slice at its last non-zero sample", () => {
   assert.equal(rendered.length, 1999);
 });
 
-test("noisegate dB=0 on silence-padded content collapses trailing zeros", () => {
+test('noisegate dB=0 on silence-padded content collapses trailing zeros', () => {
   const data = new Int16Array(100);
   data[50] = 500; // single loud frame mid-buffer
   const src: SourceAudio = { sampleRate: 48000, channels: 1, length: 100, data: [data] };
@@ -83,7 +83,7 @@ test("noisegate dB=0 on silence-padded content collapses trailing zeros", () => 
   assert.equal(rendered.channelsData[0][49], 0);
 });
 
-test("noisegate -48 dB: threshold 128, cos decay over 11025, truncation to lastLoud+11025", () => {
+test('noisegate -48 dB: threshold 128, cos decay over 11025, truncation to lastLoud+11025', () => {
   // Build: loud region, then quiet noise below 128 lasting longer than 11025.
   const length = 30000;
   const data = new Int16Array(length);
@@ -103,17 +103,24 @@ test("noisegate -48 dB: threshold 128, cos decay over 11025, truncation to lastL
   assert.equal(rendered.channelsData[0][4999], data[4999]);
   // j=11025/2 -> cos(45deg) ~ 0.7071 applied to the (quiet) source value.
   const j = 5512;
-  const expected = Math.trunc(data[4999 + j] * Math.cos((j * 90.0 / 11025) * 0.017453332742055256));
+  const expected = Math.trunc(
+    data[4999 + j] * Math.cos(((j * 90.0) / 11025) * 0.017453332742055256),
+  );
   assert.equal(rendered.channelsData[0][4999 + j], expected);
 });
 
-test("fully silent slice with gate collapses to 4 frames (original NULL behaviour)", () => {
-  const src: SourceAudio = { sampleRate: 48000, channels: 1, length: 1000, data: [new Int16Array(1000)] };
+test('fully silent slice with gate collapses to 4 frames (original NULL behaviour)', () => {
+  const src: SourceAudio = {
+    sampleRate: 48000,
+    channels: 1,
+    length: 1000,
+    data: [new Int16Array(1000)],
+  };
   const rendered = renderSlice(src, { start: 0, end: 1000, fadeoutMs: 0, noisegateDb: -48 });
   assert.equal(rendered.length, 4);
 });
 
-test("gate is skipped when the tail after the last loud frame is short", () => {
+test('gate is skipped when the tail after the last loud frame is short', () => {
   // Loud till the end minus a few frames: length - lastLoud <= 11025 -> untouched.
   const length = 200;
   const data = new Int16Array(length);
@@ -125,7 +132,7 @@ test("gate is skipped when the tail after the last loud frame is short", () => {
   assert.equal(rendered.channelsData[0][100], 1000);
 });
 
-test("fadeout > 0 appends a decaying sustain tail read past the cut", () => {
+test('fadeout > 0 appends a decaying sustain tail read past the cut', () => {
   // Constant source: no zero crossings, so the tail simply reads forward with
   // the decaying sin envelope. Gain at tail frame j is
   //   sin((int)((T - j) * 90 / T) degrees)  (integer division!)
@@ -145,7 +152,7 @@ test("fadeout > 0 appends a decaying sustain tail read past the cut", () => {
   // Tail frame 5: (11040-5)*90/11040 = 89 (integer division).
   assert.equal(
     ch[end - start + 5],
-    Math.trunc(value * Math.sin(Math.trunc(((T - 5) * 90) / T) * 0.017453333362936974))
+    Math.trunc(value * Math.sin(Math.trunc(((T - 5) * 90) / T) * 0.017453333362936974)),
   );
   // The final tail frames quantize to zero via integer division (gain 0);
   // the trailing zeros are exactly what Cut(dB=0) then leaves in place.
@@ -153,7 +160,7 @@ test("fadeout > 0 appends a decaying sustain tail read past the cut", () => {
   assert.equal(ch[end - start + T - 100], 0);
 });
 
-test("a cut at the end of the source renders an empty (zero-duration) slice", () => {
+test('a cut at the end of the source renders an empty (zero-duration) slice', () => {
   // The original fabricated a reversed echo here (a confirmed defect); the
   // fixed semantics produce a clean zero-duration slice, which encodes as a
   // valid 44-byte header-only WAV.
@@ -167,7 +174,7 @@ test("a cut at the end of the source renders an empty (zero-duration) slice", ()
   assert.equal(bytes[0], 0x52); // 'R'
 });
 
-test("a tail overrunning the source end stops at the material (no fabricated echo)", () => {
+test('a tail overrunning the source end stops at the material (no fabricated echo)', () => {
   // end == source length with a long fadeout: the tail wants 12000 frames
   // but no material exists past the end. The fixed tail simply stops
   // producing audio there (no foldback, no phase-inverted echo); the
@@ -179,11 +186,11 @@ test("a tail overrunning the source end stops at the material (no fabricated ech
   assert.equal(rendered.length, 9599);
   const ch = rendered.channelsData[0];
   // The inverted echo would show up as negative frames: none may exist.
-  assert.ok(!Array.from(ch).some((v) => v < 0), "no phase-inverted echo frames");
+  assert.ok(!Array.from(ch).some((v) => v < 0), 'no phase-inverted echo frames');
   assert.equal(ch[9598], 1000);
 });
 
-test("encodeWav16 reproduces the original 32678 overflow guard and header", () => {
+test('encodeWav16 reproduces the original 32678 overflow guard and header', () => {
   const ch = new Int16Array([0, 1, -1, 32767, 32677, 32678, -32768]);
   const bytes = encodeWav16([ch], 48000, 7);
   const view = new DataView(bytes.buffer);
@@ -201,7 +208,7 @@ test("encodeWav16 reproduces the original 32678 overflow guard and header", () =
   assert.equal(parsed.data[0][6], -32768);
 });
 
-test("rendered slices convert to deterministic canonical WAV bytes", () => {
+test('rendered slices convert to deterministic canonical WAV bytes', () => {
   const src = makeTestSource(48000, 120);
   const a = renderSlice(src, { start: 0, end: 19200, fadeoutMs: 0, noisegateDb: -48 });
   const bytesA = encodeWav16(a.channelsData, a.sampleRate, a.length);
@@ -210,7 +217,7 @@ test("rendered slices convert to deterministic canonical WAV bytes", () => {
   assert.equal(bytesA.byteLength, 44 + a.length * 2 * 2);
 });
 
-test("stereo render keeps channels independent", () => {
+test('stereo render keeps channels independent', () => {
   const src = makeTestSource(48000, 120);
   const rendered = renderSlice(src, {
     start: 0,
@@ -230,7 +237,7 @@ test("stereo render keeps channels independent", () => {
   assert.ok(differ);
 });
 
-test("applyCut returns 4 for a silent slice and length for a short-tail slice", () => {
+test('applyCut returns 4 for a silent slice and length for a short-tail slice', () => {
   const silent = [new Int16Array(500)];
   assert.equal(applyCut(silent, 500, -48, 11025), 4);
   const loud = [new Int16Array(500).fill(900)];

@@ -4,34 +4,25 @@
       "id": "en",
       "label": "EN",
       "docLang": "en",
-      "chromiumLocales": [
-        "en-US"
-      ]
+      "chromiumLocales": ["en-US"]
     },
     {
       "id": "zh",
       "label": "中文",
       "docLang": "zh-CN",
-      "chromiumLocales": [
-        "zh-CN",
-        "zh-TW"
-      ]
+      "chromiumLocales": ["zh-CN", "zh-TW"]
     },
     {
       "id": "ja",
       "label": "日本語",
       "docLang": "ja",
-      "chromiumLocales": [
-        "ja"
-      ]
+      "chromiumLocales": ["ja"]
     },
     {
       "id": "ko",
       "label": "한국어",
       "docLang": "ko",
-      "chromiumLocales": [
-        "ko"
-      ]
+      "chromiumLocales": ["ko"]
     }
   ]
 }

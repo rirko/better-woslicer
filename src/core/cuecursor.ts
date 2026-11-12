@@ -5,7 +5,7 @@
  * resets the cursor index so the same marker can fire again on the next pass.
  */
 
-import { MAX_TICKS } from "./timebase.js";
+import { MAX_TICKS } from './timebase.js';
 
 /**
  * Returns the index of the last marker crossed between `prevTick` and
@@ -19,7 +19,7 @@ export function findCueCrossing(
   ticks: readonly number[],
   prevTick: number,
   currTick: number,
-  lastIndex: number
+  lastIndex: number,
 ): number {
   if (!ticks.length) return -1;
   if (!(currTick > prevTick)) return -1; // paused or seeking backwards

@@ -16,7 +16,8 @@ export interface ProjectDraft {
 
 function clone(document: ProjectDocument): ProjectFileV1 {
   const parsed = parseProject(document);
-  if (parsed.kind !== 'supported') throw new ProjectFormatError('cannot clone an unsupported project version');
+  if (parsed.kind !== 'supported')
+    throw new ProjectFormatError('cannot clone an unsupported project version');
   return parsed.project;
 }
 
@@ -45,25 +46,40 @@ export class ProjectEditor {
 
   constructor(document: ProjectDocument) {
     const parsed = parseProject(document);
-    if (parsed.kind !== 'supported') throw new ProjectFormatError('cannot edit an unsupported project version');
+    if (parsed.kind !== 'supported')
+      throw new ProjectFormatError('cannot edit an unsupported project version');
     this.documentValue = freeze(parsed.project);
     this.savedValue = this.documentValue;
   }
 
-  get document(): ProjectDocument { return this.documentValue; }
-  get revision(): number { return this.revisionValue; }
-  get savedRevision(): number { return this.savedRevisionValue; }
-  get isDirty(): boolean { return !equal(this.documentValue, this.savedValue); }
-  get canUndo(): boolean { return this.undoHistory.length > 0; }
-  get canRedo(): boolean { return this.redoHistory.length > 0; }
+  get document(): ProjectDocument {
+    return this.documentValue;
+  }
+  get revision(): number {
+    return this.revisionValue;
+  }
+  get savedRevision(): number {
+    return this.savedRevisionValue;
+  }
+  get isDirty(): boolean {
+    return !equal(this.documentValue, this.savedValue);
+  }
+  get canUndo(): boolean {
+    return this.undoHistory.length > 0;
+  }
+  get canRedo(): boolean {
+    return this.redoHistory.length > 0;
+  }
 
   transact<T>(edit: (draft: ProjectFileV1) => T): ProjectTransactionResult<T> {
     const before = this.documentValue;
     const draft = clone(before);
     const value = edit(draft);
     const parsed = parseProject(draft);
-    if (parsed.kind !== 'supported') throw new ProjectFormatError('cannot commit an unsupported project version');
-    if (equal(before, parsed.project)) return { changed: false, value, revision: this.revisionValue };
+    if (parsed.kind !== 'supported')
+      throw new ProjectFormatError('cannot commit an unsupported project version');
+    if (equal(before, parsed.project))
+      return { changed: false, value, revision: this.revisionValue };
     this.undoHistory.push(before);
     if (this.undoHistory.length > HISTORY_LIMIT) this.undoHistory.shift();
     this.redoHistory = [];
@@ -77,17 +93,22 @@ export class ProjectEditor {
   }
 
   updateDraft(draft: ProjectDraft, edit: (value: ProjectFileV1) => void): void {
-    if (draft.baseRevision !== this.revisionValue) throw new ProjectFormatError('project changed during the edit gesture');
+    if (draft.baseRevision !== this.revisionValue)
+      throw new ProjectFormatError('project changed during the edit gesture');
     const next = clone(draft.document);
     edit(next);
     const parsed = parseProject(next);
-    if (parsed.kind !== 'supported') throw new ProjectFormatError('draft has an unsupported project version');
+    if (parsed.kind !== 'supported')
+      throw new ProjectFormatError('draft has an unsupported project version');
     Object.assign(draft.document, parsed.project);
   }
 
   commitDraft(draft: ProjectDraft): ProjectTransactionResult<void> {
-    if (draft.baseRevision !== this.revisionValue) throw new ProjectFormatError('project changed during the edit gesture');
-    return this.transact(next => { Object.assign(next, clone(draft.document)); });
+    if (draft.baseRevision !== this.revisionValue)
+      throw new ProjectFormatError('project changed during the edit gesture');
+    return this.transact((next) => {
+      Object.assign(next, clone(draft.document));
+    });
   }
 
   undo(): boolean {
@@ -117,7 +138,8 @@ export class ProjectEditor {
 
   replace(document: ProjectDocument, options: { saved?: boolean } = {}): void {
     const parsed = parseProject(document);
-    if (parsed.kind !== 'supported') throw new ProjectFormatError('cannot open an unsupported project version');
+    if (parsed.kind !== 'supported')
+      throw new ProjectFormatError('cannot open an unsupported project version');
     this.documentValue = freeze(parsed.project);
     if (options.saved !== false) this.savedValue = this.documentValue;
     this.undoHistory = [];

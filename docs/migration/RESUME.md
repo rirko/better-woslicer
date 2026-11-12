@@ -1,9 +1,23 @@
 # 从这里恢复 Vue / Tauri 移植
 
-最后核对：2026-11-10 JST。本文是跨聊天、工具、机器和额度恢复入口，不依赖任何会话服务。
+2026-11-11 续做批次（T0+R0+T1 已提交）：**T0 lint/fmt 工具链落地 `8e601e6`**——ESLint 10 flat config（typed+Vue）+ Oxfmt 0.78.0 + 命令合同（lint/lint:fix/fmt/fmt:check/check:quality），lint 基线 301 problems/45 files、正反例 fixture、140 文件格式化两遍哈希一致、`npm ci` 重建验证；未装 hook/未动 CI（T3 范围）。**R0 视觉/行为基线落地 `c4b4970`**——typecheck/202 组件/build/双 profile UI/10 场景基线截图+computed style 全过（`test-artifacts/ui-baseline/`、`test-artifacts/lint-baseline/`），进度见 [UI_READABILITY_PROGRESS.md](../refactoring/UI_READABILITY_PROGRESS.md) 与 [LINT_FORMAT_PROGRESS.md](../refactoring/LINT_FORMAT_PROGRESS.md)。发现并已记录：web CSP 拦 build-info（web lane About body 为空、状态栏 Load failed 属预期）；Playwright `toBeVisible` 在对话框 opacity=0 即通过（spec 用 expect.poll 等 opacity 1）；Chromium fullPage 截图丢 fixed 对话框（用视口截图）。**T1 格式基线完成（5 个格式专用提交 `4cc9fd9`/`b204047`/`4c660df`/`914a3e2`/`33c5358`）**——fmt:check 全绿、二遍 fmt 零 diff、lint 计数 301 不变、202 组件/typecheck/build 复验过、UI 22 产物重采对照（10 个逐字节同、12 个仅 ≤0.28% 像素抖动）；`ui-baseline/` 已轮换为 post-T1 基线，pre-T1 归档保留。**下一卡：R1a–R1d**（审查格式化输出+少量语义分组），随后 T2 lint 清理（301 条）与 R2–R10。
+
+2026-11-11 恢复批次（覆盖下文旧 CI/离线安装要求）：设计书先独立提交为 `a6728d4`。迁移后 CI 恢复 Web 与 Windows x64 必过、Windows ARM64/Linux x64/ARM64 可选；Rust cache 固定官方 v2.9.3 SHA；tag 直接公开 prerelease，按配置恢复 Pages。详见 [CI.md](../CI.md)。托管首跑与 native UI 双 profile 仍待验证，未执行 push/tag/发布。
+
+用户明确：只有应用内部要离线；外部、安装器、依赖和系统运行时独立联网不属于应用责任。保持 Tauri 默认 WebView 安装行为，不捆绑运行时、不禁止下载、不支持缺少 WebView 引擎的系统。离线 WebView 分发不再是验收项。
+
+恢复批次本地验证：Node 24 typecheck、组件 202/core 180（4 oracle 因缺 fixture 跳过）、Web build、独立 low/high UI 各 1/1、Web ZIP 内容往返校验均通过；actionlint 与 22 段 Bash 语法检查通过。Windows MSI 版本查询逻辑用现存 1.0.0 产物只读验证，未重新构建桌面包。UI 首次在沙箱内启动/清理受阻，清理本次进程树后在沙箱外通过；超时包装器已修正为清理失败也会报告超时。紧急备份标签 `backup/truncated-ci-batch-20261111` 保留；未恢复其复杂自写产物/发布脚本。
+
+最后核对：2026-11-11 JST（T0+R0 续做批次后更新）。本文是跨聊天、工具、机器和额度恢复入口，不依赖任何会话服务。
 仓库相对路径可直接使用；下方 Windows 绝对路径仅是这次环境记录。
 
 ## 1. 当前任务与检查点
+
+- 2026-11-11 **T0 完成（`8e601e6`，Node 24.22.2 实测）**：devDeps eslint 10.14.0 / @eslint/js 10.0.1 / typescript-eslint 8.72.2 / eslint-plugin-vue 10.12.1 / eslint-config-prettier 10.1.8 / oxfmt 0.78.0（精确钉版）/ globals 16.5.0；`eslint.config.mjs`（typed 块显式 map 限定 TS 家族——8.72 预设默认作用于全部文件会伤 JS；`.vue` 顶层 vue parser + script 经 parserOptions.parser 获 typed）+ `tsconfig.lint.json`（显式含组件测试/根 .mts——现有 tsconfig 不覆盖它们）+ `.oxfmtrc.json`（100 列/单引号/逐行属性/关 sortPackageJson——它默认开）。试跑证据全部在 LINT_FORMAT_PROGRESS.md：lint 301 problems（tests 271/生产 src 30/SFC 1，清单 `test-artifacts/lint-baseline/eslint-baseline.json`）、fixture 正反例、oxfmt 幂等（140 文件两遍哈希同）、真实树 121 文件待格式化（`fmt-baseline.txt`=T1 输入，未格式化）、npm ci 重建一致。
+- 2026-11-11 **R0 完成（`c4b4970`）**：`tests/app/ui-readability.spec.ts`（5 场景，`WOSLICER_UI_BASELINE` 门控——默认 `test:app-ui` 不跑它们，保持 30s/profile 预算）+ `scripts/verify-ui-readability.mjs`（场景×profile 独立进程+30s watchdog+进程树清理）。基线：typecheck/202 组件/build:app/test:app-ui 双 profile/10 场景截图+computed-styles.json 全过；`.timeline` min-height 160px、`.workspace` grid 896/384（high 1344/576）、`.side-panel` border-left 1px+overflow auto。四条现场发现已写进 UI_READABILITY_PROGRESS.md（CSP 拦 identity、对话框 opacity 等待、fullPage 丢 fixed、Light 主题）。
+- 2026-11-11 **重构方案追加 lint/fmt 与 pre-commit**：见 [LINT_FORMAT_PLAN.md](../refactoring/LINT_FORMAT_PLAN.md)。Oxfmt + ESLint flat config（TS 类型感知/Vue template）+ Husky/lint-staged；T0 工具配置 → T1 格式基线 → T2 lint 清理 → T3 hook/CI 上线，之后继续局部重构。只检查、不在 hook 自动改写；T0 已落地（见上条），**T1 格式基线未开始**。
+
+- 2026-11-11 **界面等价重构方案已编写，尚未实施**：用户要求结合已有 smell-check 与人工可读性问题，为 flash 级 agent 编写可执行小任务。入口为 [UI_READABILITY_PLAN.md](../refactoring/UI_READABILITY_PLAN.md)，核对基准 HEAD `44a8192`、最新报告 `.smell-check/20261110-180802Z`（57 active / 5 dismissed）。先 R0 固定行为/视觉基线，再按卡实施；本轮仅文档，不表示发现已修复或测试通过。F-7 关闭流程锁范围与其余确认不同，禁止机械五合一；Node 现场为 26，实施验证前须切 Node 24。W6 原生验证等剩余项继续保留。
 
 - 2026-11-10 本轮：**W1 恢复写可靠性已完成。** W1a `618d445`（写 ACK/失败可见/重试/dispose 上抛）、W1b `5a40e7b`（恢复结果区分 absent/restored/invalid/future/read-failed，坏/future/read-failed 原输入保留，恢复写暂停，打开内容需显式确认丢弃，`reset` 显式清档）。
 - 2026-11-10 续做：**W2a.2 受限打开与保全保存已完成（`5375e68`）**：复杂布局只读打开、editor 层单点拦截、保存原字节、恢复还原保持只读且保存明确不可用。
@@ -28,7 +42,7 @@
 - 工作分支：`feature/tauri`。本轮起点 HEAD `777cf0e`；W2a.1 检查点提交位于其后（用 `git log --oneline -3` 定位）。
 - 恢复时先核对 HEAD/diff；本文记录的是上述检查点，不覆盖后来已经完成的工作。
 - 本轮改动归属：codec/schema、project 测试及三份迁移/格式文档，全部属于 W2a.1；无用户遗留修改。提交后核对工作树干净。
-- **W2–W5 全部完成；W6 主切换落地**。W6 剩余（按序）：①CI 首跑验证（需 push 分支触发，**不 push 需用户明示**）；②native UI 双 profile（tauri-driver 工具链，仍未做；桌面 IPC 传输已有 test:tauri-ipc 探针，web 画面基线 test:app-ui 已就位——新画面测试按 IMPLEMENTATION 第 6 节扩展）；③离线 WebView2 分发方案；④~~归档深度校验~~ 已完成（元数据+载荷尺寸）；⑤Rust cache action（取得官方 SHA 后）。不要先回去美化原生菜单、重构旧打包工具或实现多轨混音。
+- **W2–W5 全部完成；W6 主切换落地**。W6 剩余（按序）：①CI 首跑验证（需 push 分支触发，**不 push 需用户明示**）；②native UI 双 profile（tauri-driver 工具链，仍未做；桌面 IPC 传输已有 test:tauri-ipc 探针，web 画面基线 test:app-ui 已就位——新画面测试按 IMPLEMENTATION 第 6 节扩展）；③归档深度校验已有本机证据；Rust cache 已配置，待 CI 首跑核验。不要先回去美化原生菜单、重构旧打包工具或实现多轨混音。
 
 阅读顺序：本文件 → [实施计划](IMPLEMENTATION.md) → [项目格式](../PROJECT_FORMAT.md)。
 追溯原话时读 [决策时序](THIRD_SESSION_EVIDENCE.md) 和 [获批原文](THIRD_SESSION_APPROVED_PLAN.md)。
@@ -51,14 +65,14 @@
 已落地：主入口/CI/bundle 配置/真实 Windows 产物（见第 1 节 W6 主切换条目）。剩余项按第 1 节顺序执行；native UI 双 profile 起手读 `src-tauri/`（tauri-driver/WebView2 能力）与 `playwright.app.config.mts`（web 侧 profile 参照），WSL 路径仅本机显式。旧 Electron lane 已全部退场（见 2026-11-11 Electron 退场条目）。
 Rust/打包改动加载 Rust skill；跑 Cargo 前先 `node scripts/tauri-build-info.mjs`。
 
-当前现状：Vue/Tauri 已是唯一链路（旧 Electron 生态 2026-11-11 全部退场）；bundle/CI/真实产物均已落地；native Tauri 双 profile、离线 WebView2 方案未做。本机 WSL 可显式跑 Tauri 冒烟（仅本机、显式调用；CI 用真实 Ubuntu，见第 4/6 节）。
+当前现状：Vue/Tauri 已是唯一链路（旧 Electron 生态 2026-11-11 全部退场）；bundle/CI/真实产物均已落地；native Tauri 双 profile、恢复后托管 CI 首跑未做。本机 WSL 可显式跑 Tauri 冒烟（仅本机、显式调用；CI 用真实 Ubuntu，见第 4/6 节）。
 
 先加有意义的失败场景，再用最小设计修复（First Make it Work → Make it Right → Follow Practice）：
 
-1. release.yml 盘点结论：仅在 v* tag 触发——draft Release + Cloudflare Pages（secret 缺省自跳过）；处置=保持休眠、不打 tag、不加 CD，CI 重做批次中一并移除/替换。build.yml 仅分支/PR 无 CD，但整链为旧 Electron——重写与脚本退场同批。
+1. release.yml 已恢复为 v* tag 触发，复用迁移后构建并直接公开 prerelease；Pages 按仓库变量启用。旧 draft 流程不再适用。
 2. dev/typecheck/test 已切（本批）；剩余 build/package 主入口与旧脚本退场：与 CI 重写同批做（scripts 更名会断 build.yml 引用，必须一次成批）。
 3. Tauri 常规目标产物（本机平台先做），bundle 配置按 D10 裁剪；产物做归档校验。
-4. CI：Node24 + npm ci + Rust locked + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action；工作流先在分支 push 上验证，不加 CD。
+4. CI：Node24 + npm ci + Rust locked + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action；工作流待分支 push 验证；发布按 docs/CI.md 的 tag 流程。
 5. native UI 双 profile（1280×720/DPR1、1920×1080/DPR2）用 Tauri 驱动验证；本机 WSL 路径可作为中间证据（标注"本机 WSL"），标准验收以真实平台包为准。
 
 W6 完成后进入 W7（历史 smell findings 处置、许可证、README×4、changelog×2）。
@@ -85,6 +99,7 @@ npm --version
 要求 Node.js 24。此前可用的本机缓存 Node 为：
 `C:\Users\aya\AppData\Local\npm-cache\_npx\387698761821791d\node_modules\node\bin\node.exe`。
 若当前 node 不是 24，先确认该路径存在/版本，再临时将它的 bin 目录前置 PATH；不要依赖旧环境隐式选中。
+2026-11-11 补充（Git Bash 实测）：该缓存 bin 目录下的 `node` 是无执行位的空占位文件，PATH 前置不生效；须以绝对路径直接调 `node.exe`，npm 用 `"<node24>" "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" …`。
 其他机器使用其已安装的 Node24，无需复制这条机器路径。清洁安装用 npm ci；若需清理旧 node_modules，先按下节移动。
 
 原机器 Cargo target 曾使用 `A:\cargo.build`（仓库外）；写该缓存和 `.git` 可能需要工具沙箱提权。
@@ -168,8 +183,8 @@ build:app 前移走需要替换的旧输出；typecheck/build 失败先诊断，
 本机证据包括 `test-artifacts/project-regression.log`、`test-artifacts/app-ui/` 下的截图/trace；它们是忽略缓存。
 构建 metadata 曾带提交前 dirty 信息；不要把旧 dist 当当前 HEAD 的干净发布产物。
 
-未完成：native Tauri 两种 UI profile、真实原生对话框/剪贴板/BMSE 互通、Vue Firefox、标准目标平台包与归档、离线 WebView2 验证。
-Android 明确不在本期验证范围；native Tauri UI 验证与离线 WebView2 未完成前，不将迁移称为完成。
+未完成：native Tauri 两种 UI profile、真实原生对话框/剪贴板/BMSE 互通、Vue Firefox、标准目标平台包与归档。
+Android 明确不在本期验证范围；native Tauri UI 验证未完成前，不将迁移称为完成。
 
 ## 7. 检查、提交、交接
 

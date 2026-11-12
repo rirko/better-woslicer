@@ -1,5 +1,5 @@
-export type FileKind = "audio" | "wos" | "wosdx" | "midi" | "bmh";
-export type ColorMode = "light" | "dark";
+export type FileKind = 'audio' | 'wos' | 'wosdx' | 'midi' | 'bmh';
+export type ColorMode = 'light' | 'dark';
 
 export interface OpenedFile {
   name: string;
@@ -23,10 +23,14 @@ export interface BuildIdentity {
 
 /** System capabilities only. Audio processing and editing belong to the application. */
 export interface Platform {
-  readonly kind: "browser" | "tauri";
+  readonly kind: 'browser' | 'tauri';
   openFile(kind: FileKind): Promise<OpenedFile | null>;
   reopenFile(reference: string): Promise<OpenedFile>;
-  saveFile(kind: Exclude<FileKind, "audio"> | "wav", name: string, bytes: Uint8Array): Promise<boolean>;
+  saveFile(
+    kind: Exclude<FileKind, 'audio'> | 'wav',
+    name: string,
+    bytes: Uint8Array,
+  ): Promise<boolean>;
   /** Select a destination before consuming files. Null means the user cancelled. */
   exportFiles(files: AsyncIterable<OutputFile>, archiveName: string): Promise<number | null>;
   readClipboard(): Promise<string>;
