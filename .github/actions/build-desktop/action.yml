@@ -25,13 +25,14 @@ runs:
     - name: Install locked frontend dependencies
       shell: bash
       run: npm ci
-    - name: Install Rust stable with native checks
+    - name: Install the pinned Rust toolchain with native checks
       shell: bash
       env:
+        CI_RUST_VERSION: 1.100.0
         RUST_TARGET: ${{ inputs.target }}
       run: |
-        rustup toolchain install stable --profile minimal --component rustfmt,clippy
-        rustup default stable
+        rustup toolchain install "$CI_RUST_VERSION" --profile minimal --component rustfmt,clippy
+        rustup default "$CI_RUST_VERSION"
         rustup target add "$RUST_TARGET"
     - name: Install Linux bundler dependencies
       if: runner.os == 'Linux'
@@ -44,6 +45,8 @@ runs:
       with:
         workspaces: src-tauri -> target
         shared-key: tauri-release-${{ runner.os }}-${{ inputs.target }}
+        # Default-branch caches are readable by PRs, dev and release tags.
+        save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Build frontend and generate identity before Cargo
       shell: bash
       run: npm run build:app:tauri
