@@ -85,6 +85,42 @@ describe('editor panels with real Element Plus controls', () => {
     await flushPromises();
     expect(wrapper.findAll('.marker-row')).toHaveLength(0);
   });
+  it('toggles cuts with ctrl and meta, freezes the playhead while playing, and numbers measures at 192 ticks', async () => {
+    const { f, options } = setup();
+    f.editor.setSource({
+      name: 'example',
+      reference: null,
+      sampleRate: 48000,
+      channels: 1,
+      length: 48000,
+      data: [new Int16Array(48000)],
+      floatData: [new Float32Array(48000)],
+    });
+    f.editor.addTicks([191, 192, 383]);
+    const wrapper = mount(MarkerList, options);
+    wrappers.push(wrapper);
+    const rows = wrapper.findAll('.marker-row');
+    // Tick 191 closes measure 1; tick 192 opens measure 2.
+    expect(rows[0].text()).toContain('M1');
+    expect(rows[0].text()).toContain('191');
+    expect(rows[1].text()).toContain('M2');
+    // Plain click replaces; Ctrl adds; Meta removes the already-selected tick.
+    await rows[0].trigger('click');
+    expect(f.editor.selectedTicks).toEqual([191]);
+    await rows[1].trigger('click', { ctrlKey: true });
+    expect(f.editor.selectedTicks).toEqual([191, 192]);
+    await rows[1].trigger('click', { metaKey: true });
+    expect(f.editor.selectedTicks).toEqual([191]);
+    // The playhead only follows clicks while playback is stopped.
+    f.editor.setPlaying(true);
+    f.editor.setPlayheadSample(12345);
+    await rows[2].trigger('click');
+    expect(f.editor.cursorTick).toBe(383);
+    expect(f.editor.playheadSample).toBe(12345);
+    f.editor.setPlaying(false);
+    await rows[2].trigger('click');
+    expect(f.editor.playheadSample).not.toBe(12345);
+  });
   it('disables export without audio and exports real WAV bytes through its button', async () => {
     const { f, options } = setup();
     const wrapper = mount(OutputPanel, options);

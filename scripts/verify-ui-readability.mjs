@@ -13,12 +13,27 @@ const scenarios = [
   'ui readability baseline: bmhelper dialogs',
   'ui readability baseline: about dialog',
   'ui readability baseline: calibration dialog',
+  'ui readability baseline: narrow 900',
+  'ui readability baseline: narrow 680',
 ];
-const profiles = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['low', 'high'];
+// Optional --grep=<substring> narrows the scenario list so a card can capture
+// only the scenarios it touched without rewriting the full baseline.
+const arguments_ = process.argv.slice(2);
+const grepArgument = arguments_.find((value) => value.startsWith('--grep='));
+const scenarioFilter = grepArgument === undefined ? null : grepArgument.slice('--grep='.length);
+if (scenarioFilter !== null && !scenarios.some((name) => name.includes(scenarioFilter))) {
+  throw new Error(`--grep=${scenarioFilter} matches no known scenario`);
+}
+const selectedScenarios =
+  scenarioFilter === null ? scenarios : scenarios.filter((name) => name.includes(scenarioFilter));
+const profiles =
+  arguments_.filter((value) => !value.startsWith('--grep=')).length > 0
+    ? arguments_.filter((value) => !value.startsWith('--grep='))
+    : ['low', 'high'];
 
 const failures = [];
 for (const profile of profiles) {
-  for (const scenario of scenarios) {
+  for (const scenario of selectedScenarios) {
     const label = `[${profile}] ${scenario}`;
     console.log(`Running scenario: ${label}`);
     const started = Date.now();

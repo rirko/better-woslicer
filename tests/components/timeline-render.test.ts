@@ -12,6 +12,7 @@ import TimelineEditor from '../../src/timeline/TimelineEditor.vue';
 import PlaybackControls from '../../src/playback/PlaybackControls.vue';
 import { buildPeakCache } from '../../src/core/peaks';
 import { MAX_TICKS } from '../../src/core/timebase';
+import { dbToAmp, sliderToDb } from '../../src/core/volume';
 import { drawBandEnvelope, drawWaveLane } from '../../src/timeline/waveform';
 import { drawOverview, setupCanvas } from '../../src/timeline/render';
 
@@ -395,5 +396,78 @@ describe('Vue timeline ownership', () => {
     slider?.vm.$emit('update:modelValue', 50);
     slider?.vm.$emit('change', 100);
     expect(editor.volume).toBeCloseTo(Math.pow(10, -30 / 20), 12);
+  });
+  it('drafts each volume slider independently and commits once per release', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+    const { wrapper, editor } = componentFixture();
+    const controls = wrapper.getComponent(PlaybackControls);
+    editor.setSource({
+      name: 'test',
+      reference: null,
+      channels: 1,
+      sampleRate: 48000,
+      length: 48000,
+      data: [new Int16Array(48000)],
+      floatData: [new Float32Array(48000)],
+    });
+    editor.setPhase({ kind: 'ready' });
+    await nextTick();
+    const [master, cue] = controls.findAllComponents(ElSlider);
+    if (!master || !cue) throw new Error('Missing volume sliders');
+    const setVolume = vi.spyOn(editor, 'setVolume');
+    const setCueVolume = vi.spyOn(editor, 'setCueVolume');
+    const cueBefore = editor.cueVolume;
+    const revisionBefore = editor.docRevision;
+    // Master: several drag updates, one stale change payload, one commit.
+    master.vm.$emit('update:modelValue', 50);
+    master.vm.$emit('update:modelValue', 42);
+    master.vm.$emit('change', 100);
+    expect(setVolume).toHaveBeenCalledOnce();
+    expect(editor.volume).toBeCloseTo(dbToAmp(sliderToDb(42)), 12);
+    expect(editor.docRevision).toBe(revisionBefore + 1);
+    expect(editor.cueVolume).toBe(cueBefore);
+    // Cue: its own draft, stale change payload ignored, master untouched.
+    cue.vm.$emit('update:modelValue', 30);
+    cue.vm.$emit('change', 99);
+    expect(setCueVolume).toHaveBeenCalledOnce();
+    expect(editor.cueVolume).toBeCloseTo(dbToAmp(sliderToDb(30)), 12);
+    expect(editor.volume).toBeCloseTo(dbToAmp(sliderToDb(42)), 12);
+    // Range payloads never enter the draft, so the release re-commits the
+    // bound position instead of a stale range value.
+    master.vm.$emit('update:modelValue', [10, 20]);
+    master.vm.$emit('change', 5);
+    expect(setVolume).toHaveBeenCalledTimes(2);
+    expect(editor.volume).toBeCloseTo(dbToAmp(sliderToDb(42)), 12);
+    expect(setCueVolume).toHaveBeenCalledOnce();
+  });
+  it('returns sliders to the bound value after undo clears the draft', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+    const { wrapper, editor } = componentFixture();
+    const controls = wrapper.getComponent(PlaybackControls);
+    editor.setSource({
+      name: 'test',
+      reference: null,
+      channels: 1,
+      sampleRate: 48000,
+      length: 48000,
+      data: [new Int16Array(48000)],
+      floatData: [new Float32Array(48000)],
+    });
+    editor.setPhase({ kind: 'ready' });
+    await nextTick();
+    const [master] = controls.findAllComponents(ElSlider);
+    if (!master) throw new Error('Missing volume sliders');
+    const boundBefore = Number(master.props('modelValue'));
+    master.vm.$emit('update:modelValue', 80);
+    master.vm.$emit('change', 1);
+    await nextTick();
+    expect(editor.volume).toBeCloseTo(dbToAmp(sliderToDb(80)), 12);
+    expect(Number(master.props('modelValue'))).toBe(80);
+    editor.undo();
+    await nextTick();
+    expect(editor.volume).toBeCloseTo(dbToAmp(sliderToDb(boundBefore)), 12);
+    expect(Number(master.props('modelValue'))).toBe(boundBefore);
   });
 });

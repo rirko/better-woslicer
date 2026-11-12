@@ -63,6 +63,62 @@ async function awaitDialogPainted(page: Page): Promise<void> {
     .toBe('1');
 }
 
+// Narrow-window captures need the same computed-style facts as the main
+// window plus flex direction, so the media-query layout is comparable.
+async function writeLayoutStyles(page: Page, project: string, name: string): Promise<void> {
+  const styles = await page.evaluate(() => {
+    const pick = (selector: string): Record<string, unknown> | null => {
+      const element = document.querySelector(selector);
+      if (!element) return null;
+      const css = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return {
+        display: css.display,
+        gridTemplateColumns: css.gridTemplateColumns,
+        flexDirection: css.flexDirection,
+        minHeight: css.minHeight,
+        height: css.height,
+        borderTopWidth: css.borderTopWidth,
+        borderRightWidth: css.borderRightWidth,
+        borderBottomWidth: css.borderBottomWidth,
+        borderLeftWidth: css.borderLeftWidth,
+        overflow: css.overflow,
+        overflowX: css.overflowX,
+        overflowY: css.overflowY,
+        boundingBox: { x: box.x, y: box.y, width: box.width, height: box.height },
+      };
+    };
+    return {
+      dpr: devicePixelRatio,
+      horizontalOverflow: document.documentElement.scrollWidth - innerWidth,
+      appShell: pick('.app-shell'),
+      workspace: pick('.workspace'),
+      editorColumn: pick('.editor-column'),
+      timeline: pick('.timeline'),
+      sidePanel: pick('.side-panel'),
+    };
+  });
+  await writeFile(artifactPath(project, name), JSON.stringify(styles, null, 2));
+}
+
+// The theme toggle writes the dark class onto the html element; wait for it
+// instead of sleeping so the dark capture shows the applied theme.
+async function awaitDarkApplied(page: Page): Promise<void> {
+  await expect
+    .poll(async () => page.evaluate(() => document.documentElement.classList.contains('dark')))
+    .toBe(true);
+}
+
+// Themed components keep running color transitions after the dark class lands;
+// wait until they settle so a capture cannot land mid-transition.
+async function awaitTransitionsSettled(page: Page): Promise<void> {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length),
+    )
+    .toBe(0);
+}
+
 test('ui readability baseline: main window', async ({ page }, info) => {
   const errors = guardErrors(page);
   await page.goto('/');
@@ -170,5 +226,48 @@ test('ui readability baseline: calibration dialog', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Calibrate', exact: true }).click();
   await awaitDialogPainted(page);
   await saveShot(page, info.project.name, 'calibration-dialog.png');
+  expect(errors).toEqual([]);
+});
+
+test('ui readability baseline: narrow 900', async ({ page }, info) => {
+  const errors = guardErrors(page);
+  await page.setViewportSize({ width: 900, height: 720 });
+  await page.goto('/');
+  await expect(page.getByRole('menubar')).toBeVisible();
+  await openAudio(page);
+  await expect(page.locator('.timeline-viewport')).toBeVisible();
+  await saveShot(page, info.project.name, 'narrow-900.png');
+  await writeLayoutStyles(page, info.project.name, 'computed-styles-narrow-900.json');
+  // Pin the fixed 310px panel column that the 900px media query owns.
+  const columns = await page
+    .locator('.workspace')
+    .evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+  expect(columns.endsWith('310px')).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('ui readability baseline: narrow 680', async ({ page }, info) => {
+  const errors = guardErrors(page);
+  await page.setViewportSize({ width: 680, height: 720 });
+  await page.goto('/');
+  await expect(page.getByRole('menubar')).toBeVisible();
+  await openAudio(page);
+  await expect(page.locator('.timeline-viewport')).toBeVisible();
+  await saveShot(page, info.project.name, 'narrow-680.png');
+  await writeLayoutStyles(page, info.project.name, 'computed-styles-narrow-680.json');
+  // Pin the stacked layout and top border that the 680px media query owns.
+  const workspace = await page
+    .locator('.workspace')
+    .evaluate((element) => getComputedStyle(element).display);
+  const sidePanelBorderTop = await page
+    .locator('.side-panel')
+    .evaluate((element) => getComputedStyle(element).borderTopWidth);
+  expect(workspace).toBe('flex');
+  expect(sidePanelBorderTop).toBe('1px');
+  // Dark capture proves the moved layout rules stay theme independent.
+  await page.getByText('Dark', { exact: true }).click();
+  await awaitDarkApplied(page);
+  await awaitTransitionsSettled(page);
+  await saveShot(page, info.project.name, 'narrow-680-dark.png');
   expect(errors).toEqual([]);
 });

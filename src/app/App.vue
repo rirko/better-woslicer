@@ -79,14 +79,20 @@ async function execute(command: AppCommand): Promise<void> {
   }
 }
 // Confirmation dialogs; the shared closing lock rejects reentry.
-async function confirmProjectReplacement(): Promise<boolean> {
-  if (!editor.isDirty) return true;
+// Shared boolean-confirmation protocol: one closing lock, one MessageBox call,
+// cancellation filtered from error reporting. Callers pass pre-translated text.
+async function confirmAction(options: {
+  body: string;
+  title: string;
+  confirmButtonText: string;
+  cancelButtonText: string;
+}): Promise<boolean> {
   if (closing.value) return false;
   closing.value = true;
   try {
-    await ElMessageBox.confirm(t('chrome.replaceProjectBody'), t('chrome.replaceProjectTitle'), {
-      confirmButtonText: t('chrome.replaceProjectOk'),
-      cancelButtonText: t('chrome.closeCancel'),
+    await ElMessageBox.confirm(options.body, options.title, {
+      confirmButtonText: options.confirmButtonText,
+      cancelButtonText: options.cancelButtonText,
       type: 'warning',
     });
     return !disposed;
@@ -97,46 +103,33 @@ async function confirmProjectReplacement(): Promise<boolean> {
     closing.value = false;
   }
 }
+async function confirmProjectReplacement(): Promise<boolean> {
+  if (!editor.isDirty) return true;
+  return confirmAction({
+    body: t('chrome.replaceProjectBody'),
+    title: t('chrome.replaceProjectTitle'),
+    confirmButtonText: t('chrome.replaceProjectOk'),
+    cancelButtonText: t('chrome.closeCancel'),
+  });
+}
 async function confirmDiscardRecovery(): Promise<boolean> {
-  if (closing.value) return false;
-  closing.value = true;
-  try {
-    await ElMessageBox.confirm(t('chrome.discardRecoveryBody'), t('chrome.discardRecoveryTitle'), {
-      confirmButtonText: t('chrome.discardRecoveryOk'),
-      cancelButtonText: t('chrome.discardRecoveryCancel'),
-      type: 'warning',
-    });
-    return !disposed;
-  } catch (error: unknown) {
-    if (error !== 'cancel' && error !== 'close') report(error);
-    return false;
-  } finally {
-    closing.value = false;
-  }
+  return confirmAction({
+    body: t('chrome.discardRecoveryBody'),
+    title: t('chrome.discardRecoveryTitle'),
+    confirmButtonText: t('chrome.discardRecoveryOk'),
+    cancelButtonText: t('chrome.discardRecoveryCancel'),
+  });
 }
 async function confirmRelinkDifference(difference: {
   current: string;
   selected: string;
 }): Promise<boolean> {
-  if (closing.value) return false;
-  closing.value = true;
-  try {
-    await ElMessageBox.confirm(
-      t('chrome.relinkDifferenceBody', difference),
-      t('chrome.relinkDifferenceTitle'),
-      {
-        confirmButtonText: t('chrome.relinkDifferenceOk'),
-        cancelButtonText: t('chrome.relinkDifferenceCancel'),
-        type: 'warning',
-      },
-    );
-    return !disposed;
-  } catch (error: unknown) {
-    if (error !== 'cancel' && error !== 'close') report(error);
-    return false;
-  } finally {
-    closing.value = false;
-  }
+  return confirmAction({
+    body: t('chrome.relinkDifferenceBody', difference),
+    title: t('chrome.relinkDifferenceTitle'),
+    confirmButtonText: t('chrome.relinkDifferenceOk'),
+    cancelButtonText: t('chrome.relinkDifferenceCancel'),
+  });
 }
 async function confirmLegacyImport(summary: {
   name: string;
@@ -144,25 +137,12 @@ async function confirmLegacyImport(summary: {
   shift: number;
   markers: number;
 }): Promise<boolean> {
-  if (closing.value) return false;
-  closing.value = true;
-  try {
-    await ElMessageBox.confirm(
-      t('chrome.legacyImportBody', summary),
-      t('chrome.legacyImportTitle'),
-      {
-        confirmButtonText: t('chrome.legacyImportOk'),
-        cancelButtonText: t('chrome.legacyImportCancel'),
-        type: 'warning',
-      },
-    );
-    return !disposed;
-  } catch (error: unknown) {
-    if (error !== 'cancel' && error !== 'close') report(error);
-    return false;
-  } finally {
-    closing.value = false;
-  }
+  return confirmAction({
+    body: t('chrome.legacyImportBody', summary),
+    title: t('chrome.legacyImportTitle'),
+    confirmButtonText: t('chrome.legacyImportOk'),
+    cancelButtonText: t('chrome.legacyImportCancel'),
+  });
 }
 // Project open and import commands that require confirmation.
 async function openProject(): Promise<void> {
@@ -310,4 +290,85 @@ onUnmounted(() => {
 @import 'element-plus/dist/index.css';
 @import 'element-plus/theme-chalk/dark/css-vars.css';
 @import './styles.css';
+
+/*
+ * App-owned, intentionally unscoped layout rules moved verbatim from src/app/styles.css.
+ * Unscoped on purpose: `.workspace > .side-panel` is a cascade contract crossing the
+ * App/WorkspacePanels parent-child boundary and must beat the child's equal-specificity
+ * scoped CSS by source order; this position (after every child's scoped CSS) is
+ * equivalent to the original styles.css position.
+ */
+
+/* App shell: full-height column that hosts menu, toolbar, workspace and status bar. */
+.app-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+}
+
+/* Workspace split: editor column (playback strip + timeline) beside the side panel. */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 30%);
+  flex: 1;
+  min-height: 0;
+}
+.editor-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.playback-strip {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--el-border-color);
+}
+.timeline {
+  flex: 1;
+  min-height: 180px;
+}
+
+/* Drop overlay shown while dragging files onto the window. */
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  border: 3px dashed var(--el-color-primary);
+  background: color-mix(in srgb, var(--el-bg-color) 88%, transparent);
+  color: var(--el-color-primary);
+  font-size: 22px;
+  pointer-events: none;
+}
+
+/* Narrow window: the side panel becomes a fixed-width column. */
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) 310px;
+  }
+}
+
+/* Very narrow window: workspace stacks vertically; .side-panel is owned by WorkspacePanels.vue. */
+@media (max-width: 680px) {
+  .app-shell {
+    height: auto;
+    min-height: 100%;
+  }
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .editor-column {
+    min-height: 360px;
+  }
+  .workspace > .side-panel {
+    min-height: 250px;
+    border-left: 0;
+    border-top: 1px solid var(--el-border-color);
+  }
+}
 </style>

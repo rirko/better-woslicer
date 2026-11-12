@@ -34,6 +34,22 @@ export function createEditorActions(editor: EditorStore) {
     editor.cancelDraft();
     editor.setTicks(editor.ticks.filter((t) => !editor.selectedTicks.includes(t)));
   }
+  function applyBmhelperCuts(ticks: readonly number[]): void {
+    const accepted = [...new Set(ticks.filter((tick) => editor.legalTick(tick)))];
+    const dropped = ticks.filter((tick) => !editor.legalTick(tick)).length;
+    if (!accepted.length) {
+      editor.setStatus('bmhNoDivision', true);
+      return;
+    }
+    editor.setTicks(accepted);
+    editor.setSelectedTicks([]);
+    editor.setSelection(null, null);
+    // MIDI has no reliable source tempo here. Preserve the current document BPM.
+    editor.setStatus(dropped ? 'bmhAppliedDropped' : 'bmhApplied', {
+      count: accepted.length,
+      dropped,
+    });
+  }
   function copySelection(): void {
     editor.cancelDraft();
     const selected = editor.selectedTicks.filter((t) => editor.ticks.includes(t));
@@ -155,6 +171,7 @@ export function createEditorActions(editor: EditorStore) {
     setMarker,
     toggleMarker,
     removeSelected,
+    applyBmhelperCuts,
     copySelection,
     cutSelection,
     pasteSelection,

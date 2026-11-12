@@ -28,8 +28,7 @@ import type { SmfTrackInfo } from '../core/smf';
 import { useBmhelperStore } from './store';
 import PianoRoll from './PianoRoll.vue';
 
-const props = withDefaults(defineProps<{ bpm?: number }>(), { bpm: 120 });
-const emit = defineEmits<{ applyCuts: [value: { bpm: number; ticks: number[] }] }>();
+const emit = defineEmits<{ applyCuts: [value: { ticks: number[] }] }>();
 const { t } = useI18n();
 const store = useBmhelperStore();
 // The workspace service is injected once by the app shell and stays stable
@@ -49,7 +48,10 @@ const track = ref(0);
 const channels = ref<number[]>(Array.from({ length: 16 }, (_, index) => index));
 const filename = ref('');
 const startNumber = ref('01');
-// Draft values for the settings dialog; beat-level numbers are converted to ticks on create.
+// Settings dialog draft. Its fields use three units: headMargin, minInterval,
+// gateThreshold and mlThreshold are beat-level values, velocityThreshold is a
+// plain note count, and startDefinition is base-36 number text. Beat values
+// convert to ticks at the project quantize in create().
 // Typed reference keeps the reactive draft's sortType from widening to string.
 const defaultSort: SortType = 'nn_gate_vel';
 const settings = reactive({
@@ -79,7 +81,12 @@ const sorts: SortType[] = [
 const definitionText = computed(() =>
   store.selectedDivision ? wavDefinitionText(store.selectedDivision, filename.value) : '',
 );
+// Definition numbers of the selected division as two-digit base-36 texts.
+const selectedDefinitionNumbers = computed(() =>
+  (store.selectedDivision?.definitions ?? []).map((definition) => zzToString(definition.zz)),
+);
 // Numeric dialog fields iterated in the settings grid, each with its step size.
+// All are beat-level except velocityThreshold, which counts notes.
 const numericSettings = [
   { field: 'headMargin', key: 'bmhHeadMargin', step: 0.125 },
   { field: 'minInterval', key: 'bmhMinInterval', step: 0.125 },
@@ -102,18 +109,22 @@ async function run(action: () => void | Promise<void>): Promise<void> {
     busy.value = false;
   }
 }
-// Defaults use a 480-tick TPQN reference; tick-based defaults are divided by 480 into
-// beat-level values and re-truncated at the project quantize in create().
+// Reference TPQN used only to turn the original dialog's tick defaults into
+// the beat-level values shown in the settings dialog (create() re-multiplies
+// with the project's own quantize). Unrelated to the BMH clipboard's 48 units
+// per quarter or the 0..1295 ZZ id range.
+const DEFAULT_SETTINGS_TPQN = 480;
+// Reset the dialog to the original defaults, expressed in beats.
 function resetSettings(): void {
   const defaults = defaultDivisionSetting(
     `division ${(store.project?.divisions.length ?? 0) + 1}`,
-    480,
+    DEFAULT_SETTINGS_TPQN,
   );
   Object.assign(settings, defaults, {
-    headMargin: defaults.headMargin / 480,
-    minInterval: defaults.minInterval / 480,
-    gateThreshold: defaults.gateThreshold / 480,
-    mlThreshold: defaults.mlThreshold / 480,
+    headMargin: defaults.headMargin / DEFAULT_SETTINGS_TPQN,
+    minInterval: defaults.minInterval / DEFAULT_SETTINGS_TPQN,
+    gateThreshold: defaults.gateThreshold / DEFAULT_SETTINGS_TPQN,
+    mlThreshold: defaults.mlThreshold / DEFAULT_SETTINGS_TPQN,
     startDefinition: zzToString(defaults.startDefinition),
   });
 }
@@ -142,8 +153,9 @@ function parseStart(value: string): number {
   if (!/^[0-9a-z]{1,2}$/i.test(value.trim())) throw new Error('invalid-start');
   return parseInt(value.trim(), 36);
 }
-// Confirm the settings dialog: validate fields, import the pending MIDI if present,
-// then add the division; beat-level values are truncated to ticks at the project quantize.
+// Confirm the settings dialog: validate fields in order, import the pending MIDI
+// if present, then add the division; Math.trunc floors each beat-level value to
+// whole ticks at the project quantize (velocityThreshold stays a plain count).
 async function create(): Promise<void> {
   await run(() => {
     const start = parseStart(settings.startDefinition);
@@ -201,18 +213,15 @@ async function exportMidi(): Promise<void> {
   });
 }
 // Clipboard variants: cut positions, BMS sequence, or the definition text.
+// The division/source guard runs for all three kinds, as before.
 async function copy(kind: 'cuts' | 'bms' | 'definitions'): Promise<void> {
   await run(async () => {
     const division = store.selectedDivision;
     const source = store.project?.source;
     if (!division || !source) return;
-    await platform.writeClipboard(
-      kind === 'cuts'
-        ? cutPositionsClipboard(division)
-        : kind === 'bms'
-          ? bmsSequenceClipboard(division, source)
-          : definitionText.value,
-    );
+    if (kind === 'cuts') await platform.writeClipboard(cutPositionsClipboard(division));
+    else if (kind === 'bms') await platform.writeClipboard(bmsSequenceClipboard(division, source));
+    else await platform.writeClipboard(definitionText.value);
   });
 }
 // Definitions dialog: seed the file-name draft with the current project name.
@@ -228,7 +237,7 @@ function showDefinitions(): void {
     :aria-label="t('chrome.tabBmhelper')"
   >
     <!-- panel actions: open MIDI, open/save project, new division -->
-    <div class="actions">
+    <div class="actions project-actions">
       <ElButton
         :disabled="busy"
         @click="openMidi"
@@ -263,7 +272,7 @@ function showDefinitions(): void {
         {{ t('chrome.bmhSourceLabel') }}: {{ store.name }} · {{ store.project.source.notes.length }}
         <span v-if="store.dirty">*</span>
       </p>
-      <div class="actions">
+      <div class="actions division-actions">
         <ElSelect
           :model-value="store.selectedIndex"
           :aria-label="t('chrome.bmhNameLabel')"
@@ -288,7 +297,7 @@ function showDefinitions(): void {
           :notes="store.selectedDivision.recording"
           :quantize="store.selectedDivision.quantize"
         />
-        <div class="actions">
+        <div class="actions recording-actions">
           <ElButton
             :disabled="busy"
             @click="exportMidi"
@@ -296,7 +305,7 @@ function showDefinitions(): void {
           >
           <ElButton
             :disabled="busy"
-            @click="emit('applyCuts', { bpm: props.bpm, ticks: store.cutTicks() })"
+            @click="emit('applyCuts', { ticks: store.cutTicks() })"
             >{{ t('chrome.bmhApply') }}</ElButton
           >
           <ElButton
@@ -311,7 +320,7 @@ function showDefinitions(): void {
           >
           <ElButton @click="showDefinitions">{{ t('chrome.bmhCopyDefs') }}</ElButton>
         </div>
-        <div class="actions">
+        <div class="actions transpose-actions">
           <ElButton
             aria-label="−1"
             @click="store.transpose(-1)"
@@ -331,9 +340,7 @@ function showDefinitions(): void {
           <ElButton @click="run(() => store.setStart(parseStart(startNumber)))">{{
             t('chrome.bmhStartNumber')
           }}</ElButton>
-          <span class="definitions">{{
-            store.selectedDivision.definitions.map((def) => zzToString(def.zz)).join(' · ')
-          }}</span>
+          <span class="definitions">{{ selectedDefinitionNumbers.join(' · ') }}</span>
         </div>
       </template>
     </template>

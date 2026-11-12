@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { ElButton, ElCheckbox, ElOption, ElSelect, ElSlider } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { useEditorStore, type CueMode } from '../slicing/editor-store';
 import { PLAYBACK_RATES, formatRate } from '../core/rate';
 import { ampToDb, dbToAmp, dbToSlider, sliderToDb } from '../core/volume';
 import { usePlayback } from './index';
+import { useSliderDraft } from './use-slider-draft';
 
 const editor = useEditorStore();
 const playback = usePlayback();
@@ -17,8 +18,28 @@ const volume = computed(() => dbToSlider(ampToDb(editor.volume)));
 const cueVolume = computed(() => dbToSlider(ampToDb(editor.cueVolume)));
 // ElSlider re-emits the stale modelValue with its change event under a one-way
 // binding, so drags are tracked locally and committed once on release.
-const volumeDrag = ref<number | null>(null);
-const cueDrag = ref<number | null>(null);
+// The shared draft helper manages slider positions only; dB/amp conversion
+// stays here, and each call below keeps an independent draft per slider.
+const {
+  displayValue: volumeDisplay,
+  onUpdate: onVolumeUpdate,
+  commit: commitVolume,
+} = useSliderDraft(
+  () => volume.value,
+  (position) => {
+    editor.setVolume(dbToAmp(sliderToDb(position)));
+  },
+);
+const {
+  displayValue: cueDisplay,
+  onUpdate: onCueVolumeUpdate,
+  commit: commitCueVolume,
+} = useSliderDraft(
+  () => cueVolume.value,
+  (position) => {
+    editor.setCueVolume(dbToAmp(sliderToDb(position)));
+  },
+);
 // Cue monitor modes offered by the select.
 const cues: { value: CueMode; label: string }[] = [
   { value: 'off', label: 'chrome.cueOff' },
@@ -26,25 +47,6 @@ const cues: { value: CueMode; label: string }[] = [
   { value: 'triangle', label: 'chrome.cueTriangle' },
   { value: 'metronome', label: 'chrome.cueMetronome' },
 ];
-// Draft tracking: each update accepts only the number branch of the payload.
-function onVolumeUpdate(value: number | number[]): void {
-  if (typeof value === 'number') volumeDrag.value = value;
-}
-function onCueVolumeUpdate(value: number | number[]): void {
-  if (typeof value === 'number') cueDrag.value = value;
-}
-// Commit on release: fall back to the bound value when no drag happened, clear the draft,
-// then write the converted amplitude to the store exactly once.
-function commitVolume(): void {
-  const target = volumeDrag.value ?? volume.value;
-  volumeDrag.value = null;
-  editor.setVolume(dbToAmp(sliderToDb(target)));
-}
-function commitCueVolume(): void {
-  const target = cueDrag.value ?? cueVolume.value;
-  cueDrag.value = null;
-  editor.setCueVolume(dbToAmp(sliderToDb(target)));
-}
 // Select payloads are narrowed before they reach playback or the store.
 function setRate(value: unknown): void {
   if (typeof value === 'number') playback.setRate(value);
@@ -80,7 +82,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
     <!-- master volume: drag drafts locally, commits once on release -->
     <ElSlider
       class="volume-slider"
-      :model-value="volumeDrag ?? volume"
+      :model-value="volumeDisplay"
       :format-tooltip="formatVolume"
       :aria-label="t('chrome.titleVolume')"
       :title="t('chrome.titleVolume')"
@@ -124,7 +126,7 @@ const formatVolume = (position: number) => `${sliderToDb(position).toFixed(1)} d
     <!-- cue volume: same draft protocol as the master slider, independent draft -->
     <ElSlider
       class="volume-slider"
-      :model-value="cueDrag ?? cueVolume"
+      :model-value="cueDisplay"
       :format-tooltip="formatVolume"
       :aria-label="t('chrome.titleCueVolume')"
       :title="t('chrome.titleCueVolume')"

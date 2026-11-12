@@ -1,36 +1,19 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { ElTabPane, ElTabs } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { useEditorStore } from '../../slicing/editor-store';
+import { useWorkspace } from '../../workspace/workspace';
 import MarkerList from '../../slicing/MarkerList.vue';
 import DetectionPanel from '../../detection/DetectionPanel.vue';
 import OutputPanel from '../../export/OutputPanel.vue';
 import BMHelperPanel from '../../bmhelper/BMHelperPanel.vue';
 import SourceInfo from './SourceInfo.vue';
-const editor = useEditorStore();
+const workspace = useWorkspace();
 const { t } = useI18n();
 // Local tab state; inactive panes are unmounted through their v-if guards.
 const activeTab = ref('source');
-const bpm = computed(() => {
-  void editor.docRevision;
-  return editor.doc.bpm;
-});
-function applyCuts(payload: { bpm: number; ticks: number[] }): void {
-  const accepted = [...new Set(payload.ticks.filter(editor.legalTick))];
-  const dropped = payload.ticks.filter((tick) => !editor.legalTick(tick)).length;
-  if (!accepted.length) {
-    editor.setStatus('bmhNoDivision', true);
-    return;
-  }
-  editor.setTicks(accepted);
-  editor.setSelectedTicks([]);
-  editor.setSelection(null, null);
-  // MIDI has no reliable source tempo here. Preserve the current document BPM.
-  editor.setStatus(dropped ? 'bmhAppliedDropped' : 'bmhApplied', {
-    count: accepted.length,
-    dropped,
-  });
+function applyBmhelperCuts(payload: { ticks: number[] }): void {
+  workspace.actions.applyBmhelperCuts(payload.ticks);
 }
 </script>
 <template>
@@ -65,8 +48,7 @@ function applyCuts(payload: { bpm: number; ticks: number[] }): void {
         :label="t('chrome.tabBmhelper')"
         ><BMHelperPanel
           v-if="activeTab === 'bmhelper'"
-          :bpm="bpm"
-          @apply-cuts="applyCuts"
+          @apply-cuts="applyBmhelperCuts"
       /></ElTabPane>
     </ElTabs>
   </aside>

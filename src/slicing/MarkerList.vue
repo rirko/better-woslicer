@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { tickToSampleExport } from '../core/timebase';
+import { MEASURE_TICKS, tickToSampleExport } from '../core/timebase';
 import { useWorkspace } from '../workspace/workspace';
 const { t } = useI18n();
 const workspace = useWorkspace();
@@ -21,13 +21,7 @@ function scroll(event: Event): void {
 // Afterwards: cursor, scroll keep-alive, and playhead update only while playback is stopped.
 function choose(tick: number, event: MouseEvent): void {
   editor.setCursorTick(tick);
-  editor.setSelectedTicks(
-    event.ctrlKey || event.metaKey
-      ? selected.value.has(tick)
-        ? editor.selectedTicks.filter((t) => t !== tick)
-        : [...editor.selectedTicks, tick]
-      : [tick],
-  );
+  editor.setSelectedTicks(nextSelection(tick, event));
   editor.setScrollTick(Math.max(0, tick - 24));
   if (editor.source && !editor.playing)
     editor.setPlayheadSample(
@@ -37,6 +31,12 @@ function choose(tick: number, event: MouseEvent): void {
         sampleRate: editor.source.sampleRate,
       }),
     );
+}
+// Selection branch of the click protocol.
+function nextSelection(tick: number, event: MouseEvent): number[] {
+  if (!event.ctrlKey && !event.metaKey) return [tick];
+  if (!selected.value.has(tick)) return [...editor.selectedTicks, tick];
+  return editor.selectedTicks.filter((t) => t !== tick);
 }
 // Reset the scroll window when the tick list shrinks below the current offset.
 watch(
@@ -93,7 +93,7 @@ watch(
             :aria-pressed="selected.has(tick)"
             @click="choose(tick, $event)"
           >
-            {{ t('chrome.readoutTick', { measure: Math.floor(tick / 192) + 1, tick }) }}
+            {{ t('chrome.readoutTick', { measure: Math.floor(tick / MEASURE_TICKS) + 1, tick }) }}
           </el-button>
         </div>
       </div>

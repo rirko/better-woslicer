@@ -16,6 +16,10 @@ import { useUiPreferencesStore } from '../../src/ui/preferences';
 import { GRID_DENSITIES } from '../../src/core/gridlines';
 import { MAX_TICKS } from '../../src/core/timebase';
 import { APP_COMMANDS, isMenuCommand } from '../../src/app/command-types';
+import { createI18n } from 'vue-i18n';
+import en from '../../src/i18n/en.json';
+import { workspaceKey } from '../../src/workspace/workspace';
+import { fixture } from '../app/workspace-fixture';
 import BMHelperPanel from '../../src/bmhelper/BMHelperPanel.vue';
 
 function setup() {
@@ -158,10 +162,14 @@ describe('application controls', () => {
     }
   });
   it('filters BMHelper cuts with one undo entry and preserves BPM and project across tabs', async () => {
-    const instance = setup();
+    // WorkspacePanels reads the workspace through injection, so this test
+    // mounts against the real workspace fixture instead of a bare pinia.
+    const f = fixture();
+    const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } });
     const wrapper = mount(WorkspacePanels, {
       global: {
-        ...instance.global,
+        plugins: [f.pinia, i18n],
+        provide: { [workspaceKey]: f.workspace },
         stubs: {
           BMHelperPanel: true,
           SourceInfo: true,
@@ -172,24 +180,24 @@ describe('application controls', () => {
       },
     });
     try {
-      instance.editor.setDocumentOptions({ bpm: 120 });
-      instance.editor.setTicks([24]);
-      instance.editor.setSource(source);
+      f.editor.setDocumentOptions({ bpm: 120 });
+      f.editor.setTicks([24]);
+      f.editor.setSource(source);
       wrapper.findComponent(ElTabs).vm.$emit('update:modelValue', 'bmhelper');
       await nextTick();
       wrapper
         .findComponent(BMHelperPanel)
-        .vm.$emit('applyCuts', { bpm: 999, ticks: [-1, 0, 48, 1000, MAX_TICKS, 0.5] });
+        .vm.$emit('applyCuts', { ticks: [-1, 0, 48, 1000, MAX_TICKS, 0.5] });
       await nextTick();
-      expect(instance.editor.ticks).toEqual([0, 48]);
-      expect(instance.editor.doc.bpm).toBe(120);
-      expect(instance.editor.status.segments[0]).toMatchObject({
+      expect(f.editor.ticks).toEqual([0, 48]);
+      expect(f.editor.doc.bpm).toBe(120);
+      expect(f.editor.status.segments[0]).toMatchObject({
         key: 'bmhAppliedDropped',
         params: { count: 2, dropped: 4 },
       });
-      instance.editor.undo();
-      expect(instance.editor.ticks).toEqual([24]);
-      const bmh = useBmhelperStore(instance.pinia);
+      f.editor.undo();
+      expect(f.editor.ticks).toEqual([24]);
+      const bmh = useBmhelperStore(f.pinia);
       bmh.name = 'retained';
       wrapper.findComponent(ElTabs).vm.$emit('update:modelValue', 'source');
       await nextTick();
@@ -201,7 +209,7 @@ describe('application controls', () => {
       expect(bmh.project).toBeNull();
     } finally {
       wrapper.unmount();
-      instance.dispose();
+      await f.dispose();
     }
   });
   it('shows the full bundled build identity in About', () => {

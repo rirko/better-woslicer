@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorkspace } from '../workspace/workspace';
+import { FADE_INPUT_LIMITS, GATE_INPUT_LIMITS } from '../slicing/control-limits';
 const { t } = useI18n();
 const workspace = useWorkspace();
 const editor = workspace.editor;
@@ -66,16 +67,16 @@ const gate = computed({
       <el-form-item :label="t('chrome.fadeLabel')"
         ><el-input-number
           v-model="fade"
-          :min="0"
-          :max="60000"
+          :min="FADE_INPUT_LIMITS.min"
+          :max="FADE_INPUT_LIMITS.max"
           :precision="0"
           :aria-label="t('chrome.fadeLabel')"
       /></el-form-item>
       <el-form-item :label="t('chrome.gateLabel')"
         ><el-input-number
           v-model="gate"
-          :min="-200"
-          :max="0"
+          :min="GATE_INPUT_LIMITS.min"
+          :max="GATE_INPUT_LIMITS.max"
           :step="1"
           :aria-label="t('chrome.gateLabel')"
         /><el-checkbox v-model="gateEnabled">{{
