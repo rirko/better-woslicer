@@ -29,11 +29,10 @@ macOS CI 빌드는 공증되지 않았습니다. 이 앱은 파일을 로컬에�
 
 웹 버전은 브라우저에서 직접 실행됩니다: [woslicer-dx app](https://woslicer-dx.pages.dev/) (설치 불필요).
 
-소스에서 실행하려면 Node.js 24, npm, Git이 필요합니다.
+소스에서 실행하려면 Node.js 24, npm, Git, Rust stable 툴체인이 필요합니다. Tauri 패키징에는 플랫폼별 도구(Linux는 WebKit/GTK, Windows는 WebView2)도 필요합니다.
 
 ```sh
 npm ci
-node node_modules/electron/install.js
 npm start
 ```
 
@@ -62,9 +61,9 @@ npm start
 npm run typecheck
 npm test
 npm run build
-npm run test:ui
+npm run test:app-ui
 npm run package
-npm run test:ui:packaged
+
 ```
 
 오디오는 내부적으로 16-bit로 변환되며 내보내기는 16-bit PCM을 사용합니다. 원본 프로그램과의 비교 테스트에는 외부 픽스처가 필요하며, 없으면 건너뜁니다.

@@ -160,7 +160,8 @@
     "legacyImportTitle": "이 복원 데이터를 가져올까요?",
     "legacyImportBody": "이전 버전 복원 \"{name}\"에는 BPM {bpm}(시프트 {shift})의 절단 위치 {markers}개가 있습니다. 가져오면 현재 작업 공간을 대체합니다.",
     "legacyImportOk": "복원 데이터 가져오기",
-    "legacyImportCancel": "취소"
+    "legacyImportCancel": "취소",
+    "aboutDetail": "woslicerIII를 재구현한 오프라인 BMS wav 슬라이서입니다.\n슬라이스 DSP와 .wos 형식은 원본과 바이트 호환입니다."
   },
   "status": {
     "projectOpened": "프로젝트 열기 완료: {name}",
@@ -309,7 +310,6 @@
     "cutMeasure": "마디 잘라내기 (레거시)",
     "pasteMeasure": "마디 붙여넣기 (레거시, Ctrl+F)",
     "help": "도움말",
-    "aboutDetail": "woslicerIII의 Electron + TypeScript 재구현입니다.\n슬라이스 DSP와 .wos 형식은 원본과 바이트 호환입니다.",
     "openProject": ".wosdx 열기…",
     "saveProject": ".wosdx 저장…",
     "relinkAudio": "오디오 다시 연결…",

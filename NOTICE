@@ -10,6 +10,6 @@ The supplied original readme states:
 【権利】金銭が絡まない＋作者の明示　を条件に二次使用を許可します。
 (Secondary use is permitted on condition that no money is involved and the author is identified.)
 
-Electron and other bundled dependencies retain their own licenses and notices.
+Bundled dependencies retain their own licenses and notices.
 
 MIT text source: https://raw.githubusercontent.com/spdx/license-list-data/main/json/details/MIT.json

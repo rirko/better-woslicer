@@ -1,8 +1,8 @@
 /**
- * Slice export pipeline shared by the Electron main process (which writes the
- * files to disk) and the browser host (which packs them into a ZIP): sorts the
- * marker ticks, checks the timeline bounds, renders every slice with the exact
- * export DSP and encodes it as a canonical 16-bit WAV file.
+ * Slice export pipeline shared by the workspace exporters (which write the
+ * files to disk) and the browser host (which packs them into a ZIP): sorts
+ * the marker ticks, checks the timeline bounds, renders every slice with the
+ * exact export DSP and encodes it as a canonical 16-bit WAV file.
  */
 
 import { renderSlice, type SourceAudio } from "./slicer.js";

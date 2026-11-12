@@ -1,6 +1,6 @@
 /**
- * Audio decode dispatch shared by the Electron main process and the browser
- * host: picks WAV or OGG parsing by file extension (only the extension is
+ * Audio decode dispatch shared by the workspace and the platform hosts:
+ * picks WAV or OGG parsing by file extension (only the extension is
  * trusted), mirroring the original tool's behaviour of trying the WAV parser
  * first and rejecting unsupported names afterwards.
  */

@@ -2,14 +2,14 @@
  * Marker document model and editing operations: place/remove, selection,
  * group-preserving multi-select drag, selection copy/cut/paste, quantize,
  * measure copy/paste (legacy compatibility), whole-map shift and bounded
- * undo/redo. Pure module — no Electron, no DOM.
+ * undo/redo. Pure module — no host APIs, no DOM.
  *
  * The document is the 49152-entry marker bitmap (Uint8Array), matching the
  * .wos representation 1:1 so save/load never reinterprets data.
  *
  * Two independent clipboards exist by design:
  *  - the internal selection clipboard (relative tick offsets, this module),
- *  - the BMSE system clipboard (core/bmse.ts, written via Electron IPC).
+ *  - the BMSE system clipboard (core/bmse.ts, written through the platform host).
  * They never share state.
  */
 

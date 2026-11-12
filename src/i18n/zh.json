@@ -160,7 +160,8 @@
     "legacyImportTitle": "导入这份旧版恢复记录？",
     "legacyImportBody": "旧版恢复“{name}”包含 {markers} 个切点（BPM {bpm}，偏移 {shift}）。导入将替换当前工作区内容。",
     "legacyImportOk": "导入恢复记录",
-    "legacyImportCancel": "取消"
+    "legacyImportCancel": "取消",
+    "aboutDetail": "离线桌面 BMS wav 切分工具，重写自 woslicerIII。\n切片 DSP 与 .wos 格式与原版字节兼容。"
   },
   "status": {
     "projectOpened": "已打开项目：{name}",
@@ -309,7 +310,6 @@
     "cutMeasure": "剪切小节（旧版）",
     "pasteMeasure": "粘贴小节（旧版，Ctrl+F）",
     "help": "帮助",
-    "aboutDetail": "woslicerIII 的 Electron + TypeScript 重写版。\n切片 DSP 与 .wos 格式与原版字节兼容。",
     "openProject": "打开 .wosdx…",
     "saveProject": "保存 .wosdx…",
     "relinkAudio": "重新关联音频…",

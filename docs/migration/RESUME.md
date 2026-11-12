@@ -8,6 +8,15 @@
 - 2026-11-10 本轮：**W1 恢复写可靠性已完成。** W1a `618d445`（写 ACK/失败可见/重试/dispose 上抛）、W1b `5a40e7b`（恢复结果区分 absent/restored/invalid/future/read-failed，坏/future/read-failed 原输入保留，恢复写暂停，打开内容需显式确认丢弃，`reset` 显式清档）。
 - 2026-11-10 续做：**W2a.2 受限打开与保全保存已完成（`5375e68`）**：复杂布局只读打开、editor 层单点拦截、保存原字节、恢复还原保持只读且保存明确不可用。
 - 2026-11-10 W5 起步：**G10 部分完成（本次提交）**：`menuCommandEnabled` 成为菜单禁用与命令执行的同一规则函数（穷举 switch），规则表测试 33 例覆盖全部 18 个菜单命令的状态矩阵（空/带源/受限/带历史）；`MENU_COMMANDS` 导出供测试。W5 剩余：模态/busy 绕过核对、手势跨入口验证、生命周期释放清单、undo 容量测量。
+- 2026-11-10 W6 产物校验（本机 Windows 真实证据）：①启动冒烟——直接运行构建的 woslicer-dx.exe，主窗口 "woslicer-dx" 出现且 responding=true，进程树清理干净；②MSI 元数据经 WindowsInstaller COM 查询：ProductName=woslicer-dx、ProductVersion=0.3.0（root version 贯通链路验证）、Manufacturer=woslicer；③MSI 载荷 11,128,320 字节与构建的 woslicer-dx.exe 精确一致。归档深度校验（本批范围）完成；抽取临时目录按规则移入 .pending-delete。
+- 2026-11-10 W6 显式 WSL 冒烟（本机证据，按第 9 条约束显式调用）：WSL 内 webkit2gtk-4.1/Rust 1.99 在位；`cargo check --locked --all-features` 通过（17s，注意 WSL 侧也要先跑 `node scripts/tauri-build-info.mjs`，且 Cargo.toml 需 --manifest-path）；`cargo test --locked` 12/12 通过（CARGO_TARGET_DIR=/tmp/woslicer-wsl-target 独立缓存）。Linux 编译+测试证据落地；native UI 双 profile 仍待 tauri-driver 级工具。
+- 2026-11-11 ACL 修复（用户运行时报 "command begin_read not allowed by ACL"）：根因是 build.rs 的 `AppManifest.commands` 显式清单没有 begin_read——tauri ACL 生成本地命令权限，capability 与生成清单都要显式列出，编译/旧测试均不会发现。修复：build.rs 清单 + capabilities/main.json 各加 begin_read；新增 **三链一致性测试**（invoke_handler ↔ build.rs 清单 ↔ 生成 allow-* ↔ capability，kebab/snake 归一化），13 Rust 测试全绿；重打 MSI/NSIS + 启动冒烟通过。**请重新安装新包后再试音频打开**（旧安装包内 ACL 仍是缺 granted 的版本）。
+- 2026-11-11 **Electron 生态全面退场 + 机器路径清除（用户指令）**：①移出 src/main、src/renderer、src/web、旧打包/发布/UI 脚本 15 个、playwright.config.ts、tsconfig.main/renderer、5 个 Electron 绑定测试（build-info/ipc-security/keys/menu/timebase）→ .pending-delete/20261111-012400-820/electron-lane；tests/web（旧 web spec）另移。②17 个 core 测试改由新 tsconfig.tests.json 编译（node --test dist/tests；test 脚本先清 dist/tests 防陈旧产物假绿）；i18n.test 的 data-i18n 旧 HTML 测试删除、menu/dialog lockstep 改读 generated。③package.json：13 个旧脚本删除，electron/esbuild/7zip-bin/html-minifier-terser/resedit 依赖移除；typecheck = vue-tsc app + tsc tests。④机器路径：tauri-ipc-probe 改为 CARGO_TARGET_DIR/src-tauri/target 解析 + 非 Windows 优雅跳过；活动代码零机器绝对路径（docs/migration 的环境记录按其自身定位保留）。⑤static 服务器恢复为 scripts/serve-static.mjs（playwright.app.config 引用）。⑥文案：README×4（命令区+源码构建）、VERSIONING 重写（Tauri 链）、NOTICE 依赖句、package description、src/core 注释（decode/language/markers/slices）、AGENTS 三行（Tauri 隔离/版本/UI 测试表述）、About 文案 4 语言去 Electron、死键 menu.aboutDetail 删除。⑦CI verify job 增加 playwright chromium + test:app-ui（跨平台 web 画面）。验证：组件 202 + core 180/4 skipped + cargo 13 + fmt/clippy + build/package（MSI/NSIS 1.0.0）+ UI 双 profile 2/2 + 探针通过。许可证署名（woslicer-electron contributors）按 preserve 原则保留。
+- 2026-11-11 **版本 1.0.0 + identifier 定稿（用户决定）**：root version 1.0.0（`npm version` 流程：双语 changelog 1.0.0 段先行，check:version 通过；changelog 仅 UX 断言，Fixed 两项以旧 lane 静默吞错的源码为据）；identifier → io.github.rirko.woslicer-dx（应用数据目录更换：本机已迁移 file-grants 与窗口状态；旧存档在用户关闭流程中已清空，无需迁移）；MSI/NSIS 重产为 woslicer-dx_1.0.0_*（COM 元数据验证 ProductVersion=1.0.0）；`test:tauri-ipc` 探针路径同步；web 双 profile 2/2、组件+旧 lane 全绿。tauri-ipc-probe 需在新目录下重新打开一次音频以生成 grant。
+- 2026-11-11 **音量滑杆修复**：Element Plus 在单向绑定下 change 事件重发**旧 modelValue**（use-slide.mjs emitChange 实证），原 `@change`-only 提交写回旧值导致滑杆弹回"无法调整音量"。修复：本地 drag ref 接 update:model-value（拖动预览），change 提交预览目标（一次拖动一个事务）；音量/Cue 双滑杆同修；单测钉住真实发射序列（update(50)+change(旧值)→store=50 的目标值）。真机 CDP 点击验证：值改至 19 并持久，无异常。G07 遗留的"滑杆手势草稿化"打磨由本修复覆盖。
+- 2026-11-11 **IPC 传输修复（b3c98a7）+ 双发行/画面测试约束落地**。根因链：`src/app/index.html` 的 CSP meta `connect-src 'none'`（web 版严格策略）对 Tauri 版同样生效 → `fetch('http://ipc.localhost')` 被 CSP 拦截（CDP 实测 "Failed to fetch" + console 警告）→ tauri `customProtocolIpcFailed` 永久回退 postMessage → `Response::new(bytes)` Raw 响应被 JSON 序列化为数字数组 → 前端 `instanceof ArrayBuffer` 失败报 "incomplete binary file transfer"。修复：vite 按 `WOSLICER_TAURI_FRONTEND` 出双变体（`dist/app` web 严格 CSP；`dist/app-tauri` connect-src 放行 'self' ipc: http://ipc.localhost），`tauri.conf.frontendDist` 指向 app-tauri，`build:app:tauri`/`dev:tauri`/`beforeDevCommand` 就绪（runner scripts/build-app-frontend.mjs，Windows cmd 无 env 前缀语法）。验证：CDP 探针 raw chunk = ArrayBuffer(1MiB)、零回退警告；固化 `test:tauri-ipc`（scripts/tauri-ipc-probe.mjs）；web 版 `test:app-ui` 双 profile 2/2；组件 202。**用户需重装新包后再试音频打开**。
+- 2026-11-11 MSRV/tauri 升级（用户决定：MSRV 跟随最新 stable）：rust-version 1.85→1.99；tauri 家族 crate 升 2.12.5（build 2.7.4、window-state 2.5.0、wry 0.57.2）；npm api/cli 回对齐 2.12。验证：Windows cargo test 12/12 + fmt/clippy、WSL Linux cargo test 12/12、双链 202 组件 + 旧 lane、真实 MSI(4.78MiB)/NSIS(3.80MiB) 重产。此前「勿升 2.12」备注已被本决定取代。
+- 2026-11-10 W6 主切换（`886e388`）：`dev`/`build`/`package`/`typecheck`/`test` 为产品主入口（typecheck/test 双链）；旧 lane 显式 `:*electron`；bundle.active=true + 图标集；**真实产物本地实测通过**：`npm run package` 产出 woslicer-dx_0.3.0_x64_en-US.msi（4.9MB）与 -setup.exe（3.9MB）（A:cargo.buildeleaseundle，WiX/NSIS 构建期下载）；tauri npm↔crate minor 对齐（2026-11-11 起为 2.12，MSRV 跟随最新 stable 政策见下条）；build.yml 重写为真实 Ubuntu verify + windows/linux 打包（无 WSL、无 cache action——固定 SHA 不可凭记忆写，暂缓并记录）；release.yml+旧矩阵退场至 .pending-delete；docs/CI.md 重写。
 - 2026-11-10 W4 起步：**G08 已完成（本次提交，W4 收官）**：BMHelper store `bindEditor` 后每次编辑以一个事务写通 `bmhelper` payload（undo/dirty 参与、上限预检）；projectId 切换经 watcher 自动重载/清空工作副本；`saveBmhProject` 版本守卫使保存期新编辑保持 dirty；面板改用注入 workspace（platform 稳定），面板测试迁移到 provide。已知边界：同一 projectId 的重恢复不会触发重载（已记录接受）。
 - 2026-11-10 W4 起步：**G07 已完成（本次提交）**：volume/cue/rate/cueMode/rms/bands 从 session ref 改为 document.global 可写投影（一次意图一次事务、参与 undo/dirty、limited 下只读静默）；`masterAmp` 路由 = global master 增益（masterMuted 置 0；track 投影为 schema 预留，非中性 track 仍判受限）；视图有效值 = track.views 覆盖 ?? global；会话快照不再携带已迁移键，旧归档 options 迁移进 global；音量滑杆改 change 提交（一次拖动一个事务）。旧断言「监控不入文档历史」按获批模型反转。
 - 2026-11-10 W4 起步：**G11 已完成（`de46b1f`）**：cue 交叉重置监听从整个 docRevision 收窄到 markers/bpm/shift 值键；无关文档编辑（输出配方/噪声门）不再吞掉越过的 cue；时间基准变化仍恰好重锚一次；行为由 `timeline-playback.test.ts` 的 AudioContext 假体证明（含 flush 时序注意：编辑后需微任务 flush 才能观察 watch）。
@@ -19,7 +28,7 @@
 - 工作分支：`feature/tauri`。本轮起点 HEAD `777cf0e`；W2a.1 检查点提交位于其后（用 `git log --oneline -3` 定位）。
 - 恢复时先核对 HEAD/diff；本文记录的是上述检查点，不覆盖后来已经完成的工作。
 - 本轮改动归属：codec/schema、project 测试及三份迁移/格式文档，全部属于 W2a.1；无用户遗留修改。提交后核对工作树干净。
-- **W2–W5 全部完成**（含 WSL 本机 Tauri 策略入档）；下一包 **W6 产品入口与常规构建（G14）**。不要先回去美化原生菜单、重构旧打包工具或实现多轨混音。
+- **W2–W5 全部完成；W6 主切换落地**。W6 剩余（按序）：①CI 首跑验证（需 push 分支触发，**不 push 需用户明示**）；②native UI 双 profile（tauri-driver 工具链，仍未做；桌面 IPC 传输已有 test:tauri-ipc 探针，web 画面基线 test:app-ui 已就位——新画面测试按 IMPLEMENTATION 第 6 节扩展）；③离线 WebView2 分发方案；④~~归档深度校验~~ 已完成（元数据+载荷尺寸）；⑤Rust cache action（取得官方 SHA 后）。不要先回去美化原生菜单、重构旧打包工具或实现多轨混音。
 
 阅读顺序：本文件 → [实施计划](IMPLEMENTATION.md) → [项目格式](../PROJECT_FORMAT.md)。
 追溯原话时读 [决策时序](THIRD_SESSION_EVIDENCE.md) 和 [获批原文](THIRD_SESSION_APPROVED_PLAN.md)。
@@ -39,15 +48,15 @@
 
 ## 3. W6 的直接起手步骤
 
-先读 `package.json` scripts、`vite.config.mts`、`src-tauri/tauri.conf.json`、`scripts/test-ui.js`/`playwright.app.config.mts`、`.github/workflows/`（release.yml 的发布耦合盘点后单独评估），及 docs/CI.md。
+已落地：主入口/CI/bundle 配置/真实 Windows 产物（见第 1 节 W6 主切换条目）。剩余项按第 1 节顺序执行；native UI 双 profile 起手读 `src-tauri/`（tauri-driver/WebView2 能力）与 `playwright.app.config.mts`（web 侧 profile 参照），WSL 路径仅本机显式。旧 Electron lane 已全部退场（见 2026-11-11 Electron 退场条目）。
 Rust/打包改动加载 Rust skill；跑 Cargo 前先 `node scripts/tauri-build-info.mjs`。
 
-当前现状：Vue/Tauri 应用代码可构建可测（`:app` 系列为过渡入口）；默认 build/CI/打包仍是旧 Electron 链；bundle.active=false；native Tauri 双 profile、各目标平台包/归档、离线 WebView2 方案未做。本机 WSL 可显式跑 Tauri 冒烟（仅本机、显式调用；CI 用真实 Ubuntu，见第 4/6 节）。
+当前现状：Vue/Tauri 已是唯一链路（旧 Electron 生态 2026-11-11 全部退场）；bundle/CI/真实产物均已落地；native Tauri 双 profile、离线 WebView2 方案未做。本机 WSL 可显式跑 Tauri 冒烟（仅本机、显式调用；CI 用真实 Ubuntu，见第 4/6 节）。
 
 先加有意义的失败场景，再用最小设计修复（First Make it Work → Make it Right → Follow Practice）：
 
-1. 盘点 release.yml 的发布/部署耦合，写清 disposition（不触发、不加 CD），再做有依据的本地调整。
-2. dev/build/test/package 主入口切换到 Vue/Tauri：typecheck/test/build 默认跑新链，旧链保留命名或退场（移动至 .pending-delete 的规则不变）。
+1. release.yml 盘点结论：仅在 v* tag 触发——draft Release + Cloudflare Pages（secret 缺省自跳过）；处置=保持休眠、不打 tag、不加 CD，CI 重做批次中一并移除/替换。build.yml 仅分支/PR 无 CD，但整链为旧 Electron——重写与脚本退场同批。
+2. dev/typecheck/test 已切（本批）；剩余 build/package 主入口与旧脚本退场：与 CI 重写同批做（scripts 更名会断 build.yml 引用，必须一次成批）。
 3. Tauri 常规目标产物（本机平台先做），bundle 配置按 D10 裁剪；产物做归档校验。
 4. CI：Node24 + npm ci + Rust locked + 目标系统依赖 + 固定 SHA 的维护中 Rust cache action；工作流先在分支 push 上验证，不加 CD。
 5. native UI 双 profile（1280×720/DPR1、1920×1080/DPR2）用 Tauri 驱动验证；本机 WSL 路径可作为中间证据（标注"本机 WSL"），标准验收以真实平台包为准。
@@ -160,7 +169,7 @@ build:app 前移走需要替换的旧输出；typecheck/build 失败先诊断，
 构建 metadata 曾带提交前 dirty 信息；不要把旧 dist 当当前 HEAD 的干净发布产物。
 
 未完成：native Tauri 两种 UI profile、真实原生对话框/剪贴板/BMSE 互通、Vue Firefox、标准目标平台包与归档、离线 WebView2 验证。
-Android 明确不在本期验证范围；旧 Electron 默认构建/CI 仍在，不能将迁移称为完成。
+Android 明确不在本期验证范围；native Tauri UI 验证与离线 WebView2 未完成前，不将迁移称为完成。
 
 ## 7. 检查、提交、交接
 
@@ -170,6 +179,14 @@ Android 明确不在本期验证范围；旧 Electron 默认构建/CI 仍在，�
 本轮文档验证（2026-11-10 JST）：7 份文档的本地 Markdown 链接与代码围栏检查通过；获批计划正文与原提取逐字一致并记录 SHA-256；`git diff --check` 通过。没有重跑应用测试。
 W1 轮代码验证（同日）：`test:components` 17 files / 144 passed；`typecheck:app` 通过；`build:app` 通过。本轮未重跑 `test:app-ui`（App.vue 新增的确认对话框仅有逻辑级覆盖）、旧 lane `npm test`（改动不触及旧 lane，`src/renderer/session.ts` 为独立实现）与 Cargo（无 Rust 改动）；这些列入后续验收。
 W2a.2 轮代码验证（同日）：`test:components` 17 files / 150 passed；`typecheck:app` 通过；`build:app` 通过。未重跑 `test:app-ui`、旧 lane `npm test`（不触及）与 Cargo（无 Rust 改动）。
+ACL 修复批（2026-11-11）：见第 1 节 ACL 修复条目；cargo 13 测试/fmt/clippy、npm run package、启动冒烟均过。
+滑杆修复批（2026-11-11）：真机 CDP 点击 20%→值 19 持久保持；组件 202 全绿。
+IPC 修复批（2026-11-11）：见第 1 节 IPC 传输修复条目；双发行与画面测试约束已写入 IMPLEMENTATION 第 6 节。
+W6 升级批（2026-11-11）：见第 1 节 MSRV/tauri 升级条目；全部验证通过后本批提交。
+W6 产物校验批（同日）：原生启动冒烟 + MSI COM 元数据 + 载荷尺寸比对全过（临时目录已移入 .pending-delete）。
+W6 WSL 批（同日）：显式 wsl bash -lc 路径，Linux check+test 全过（标注"本机 WSL"）；CI 仍以真实 Ubuntu runner 为准。
+W6 主切换批（同日）：npm run build（新链）+ npm test（202 组件 + 224 旧）+ cargo fmt/clippy/test --offline 全过；npm run package 实测 MSI/NSIS 产物；tauri info 环境核查通过。
+W6 第一批（同日）：`dev` 直接跑 Vite（`dev:app` 移除）；`typecheck`/`test` 双链覆盖（新 Vue 165 + 旧 224/4 skipped 全过）；旧 ja 术语校验抓到 2 处「開く」漂移并修正（読み込む）——双链并跑的价值实证。`build`/package/CI 大切换（Rust CI 步骤设计 + 旧脚本退场 + release.yml disposition 落地）为下一批，需一次成批完成保持一致性。
 W5 收官（同日）：typecheck:app、build:app 通过；无手柄运行时（grep gamepad 无命中）；未跑 UI profiles/旧 lane（本轮改动不触及，如实跳过）。
 W5 第三批（同日）：项目替换打断活动手势（revision 守卫取消）与 exportLock/bandBusy 重入护栏有测试；时间轴 pointer capture/lostcapture/unmount 清理经代码核对确认（VueUse scope 管理 observer）。
 W5 第二批（同日）：对话框 [role=dialog] 期间快捷键失效有确定性测试；200 项 × 2000 切点的 undo/redo 成本测量通过（不可变快照模型预算护栏）；ElMessageBox role=dialog 已核实。

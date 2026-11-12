@@ -8,7 +8,7 @@
  * scripts/gen-i18n.js re-exports it as src/i18n/generated.ts with literal
  * types, so the Language union below is derived from that data. This module
  * keeps the behavior: validation and OS-locale matching. It lives in core/ so
- * neither side imports the other: the renderer must never pull in Electron
+ * neither side imports the other: pure UI code must stay free of host APIs
  * modules, and the main process must never import the DOM-facing renderer
  * i18n module.
  */
@@ -50,7 +50,7 @@ export function isLanguage(value: unknown): value is Language {
 }
 
 /**
- * Maps an OS/Electron locale ("zh-CN", "ja-JP", "ko-KR", "en-US", ...) to a UI
+ * Maps an OS locale ("zh-CN", "ja-JP", "ko-KR", "en-US", ...) to a UI
  * language: the locale tag matches its language id exactly or as a BCP-47
  * prefix ("zh" -> "zh-CN"), in manifest order; anything else falls back to
  * English (declared in the manifest — gen-i18n enforces its presence). Used
@@ -66,7 +66,7 @@ export function languageFromLocale(locale: string): Language {
 }
 
 /**
- * Picks the UI language from an ordered list of user locales (Electron:
+ * Picks the UI language from an ordered list of user locales (host-provided:
  * navigator.language mirrors the system display language; the browser: the
  * same preference that produces the Accept-Language header). The first
  * locale that resolves to a shipped language wins — unlike

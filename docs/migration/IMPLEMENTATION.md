@@ -1,6 +1,6 @@
 # Vue / Tauri 实施计划与差异台账
 
-状态核对基准：`feature/tauri`，**W2–W5 已完成**（W2：`6c57457`/`5375e68`/`fa1b652`/`53a5f57`；W3：`7c4a975`/`6828d6f`/`b6bad62`/`9e4e9fc`；W4：`de46b1f`/`9b81076`/BMH 提交），2026-11-10 JST。
+状态核对基准：`feature/tauri`，**W2–W5 已完成；W6 主切换已落地**（W2：`6c57457`/`5375e68`/`fa1b652`/`53a5f57`；W3：`7c4a975`/`6828d6f`/`b6bad62`/`9e4e9fc`；W4：`de46b1f`/`9b81076`/BMH 提交），2026-11-10 JST。
 此文描述目标和尚需实施的工作，不表示功能已全部实现。下一次工作从 [RESUME.md](RESUME.md) 开始。
 证据见 [时序](THIRD_SESSION_EVIDENCE.md) 和 [最终批准原文](THIRD_SESSION_APPROVED_PLAN.md)。
 
@@ -92,7 +92,7 @@
 | G11 | **已完成**（de46b1f）：cue 交叉重置仅随 markers/bpm/shift 值键；播放行为测试证明无关编辑不吞 crossing | 无未决项 |
 | G12 | Tauri bounded chunk/final close 已有；reader 按 reference/grant 区分 | 不同引用并行已测，同一引用双读取仍需独立 transfer ID；grant 生命周期上限/取消清理需验证 |
 | G13 | **已完成**（fa1b652）：拆为 `importWosSettings`（原地单事务导入时序/切点，保留 projectId/media/output，一步可撤销，无音频时不虚构媒体）与 `newProjectFromWos`（整体替换为新工程，走替换确认，清空 source）；`savedWos` 文案明确仅时序与切点 | 无未决项；BMSE/MIDI 互通验收仍属 W5 |
-| G14 | `src-tauri/src/lib.rs` + 薄 main 已有；bundle.active=false；默认 npm/CI 仍为 Electron | 新入口、常规打包、真实 Tauri profiles、各目标平台包/归档未完成；不得宣称已迁完 |
+| G14 | 版本/标识符（2026-11-11 用户决定）：root version **1.0.0**（npm version 流程 + 双语 changelog 1.0.0 段，仅 UX 断言；Fixed 两项以旧 lane 静默吞错源码为据）；identifier **io.github.rirko.woslicer-dx**（应用数据目录随之更换，旧目录数据已迁移本机；tauri-ipc-probe 同步更新）。主入口已切（886e388）：`dev`/`build`/`package`/`typecheck`/`test` 跑 Vue/Tauri 链（typecheck/test 双链覆盖）；旧 Electron lane 改显式 `:*electron` 名；`tauri.conf.json` bundle.active=true（msi/nsis/deb/appimage + 图标集）；**真实 Windows 产物本地实测**（woslicer-dx_0.3.0_x64_en-US.msi + -setup.exe）；tauri npm 包对齐 crate minor（2.11）；build.yml 重写（真实 Ubuntu verify + windows/linux 打包 job，Rust 用 runner rustup，无 WSL）；release.yml/旧矩阵退场至 .pending-delete；docs/CI.md 重写 | native UI 双 profile、离线 WebView2 验证、CI 真实跑通（未 push，待分支验证）、Rust cache action（需固定 SHA，暂缓） |
 
 保留旧 i18n key 以让旧测试通过是临时回归桥梁，不意味着以后继续维护旧菜单或旧 DOM 翻译体系。
 对未知版本/扩展字段，“JSON 重新编码”不等于原始字节无损；详见 [格式文档](../PROJECT_FORMAT.md)。
@@ -124,6 +124,10 @@ W2 的具体起手用例及命令见 [恢复指南](RESUME.md)。每包可以拆
 - root package.json version 是唯一可编辑版本；构建期 commit/dirty/固定 UTC 时间；按现有 VERSIONING 规则检查。
 - 盘点现存 `release.yml` 的发布/部署耦合，再做有依据的本地调整；不触发或新加发布/CD。源码退出通过移动归档实现，不因旧工作流仍存在就盲目 push/tag。
 - Native UI 独立 low 1280×720/DPR1、high 1920×1080/DPR2，真实缩放/菜单可见、隔离用户数据、每 profile 独立 30 秒硬超时、完整清理本次进程树、动态 loopback DevTools 端口。浏览器模拟 DPR 不能代替原生。
+- **双发行约束（2026-11-11 用户决定）**：web（浏览器版）与 desktop（Tauri 版）同为发行目标。平台通信改动只允许落在 `platform/tauri.ts` 与 Tauri 前端变体，web 变体保持最严 CSP；每次发行需两版各自验证（web：`test:app-ui` 双 profile；desktop：`test:tauri-ipc` 传输探针 + native 冒烟）。
+- **新架构画面测试（2026-11-11 用户要求）**：`test:app-ui`（Playwright，Chromium 1280×720/DPR1 与 1920×1080/DPR2，dist/app 生产目录）为 web 版画面基线；`test:tauri-ipc`（scripts/tauri-ipc-probe.mjs，CDP 直连产物 WebView2）为桌面 IPC 传输健康测试；native 窗口级画面测试待 tauri-driver 工具链（W6 剩余）。
+- Rust MSRV 政策（2026-11-11 用户决定）：`rust-version` 跟随最新 stable 工具链（当前 1.99），tauri 家族随 minor 最新对齐（crate 2.12.5 ↔ npm api/cli 2.12）；升 minor 时同步抬 MSRV 并双端（Windows/WSL Linux）实测。
+- Rust cache action 暂缓：仓库内没有可核验的固定 SHA（不凭记忆写第三方 action 指向）；首次引入时以发布页 SHA 落笔。缓存不是验收必需（fmt/clippy/test 照跑）。
 - 本机 WSL 已可运行 Tauri（WSLg）：native Tauri 冒烟可作为**本机的显式验证路径**——仅限本机、必须显式调用；不得写进默认脚本，不得在其他人的机器上隐式启动 WSL。CI 的 Linux 目标一律交给真实 Ubuntu runner，不接受 WSL 代替；WSL 产生的证据标注为"本机验证"，不等同标准目标平台验收（后者仍属 W6 常规打包）。
 - 完整构建报告必须含类型检查、业务/组件测试、UI profiles、归档检查；必需步骤失败先诊断，不继续打包。只对实际测过的平台作声明。
 

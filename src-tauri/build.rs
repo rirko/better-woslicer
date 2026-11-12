@@ -32,6 +32,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "open_file",
             "reopen_file",
+            "begin_read",
             "close_reader",
             "read_file_chunk",
             "prepare_save",

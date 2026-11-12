@@ -4,7 +4,7 @@ version = "0.0.0"
 # This private host crate has no independently editable application version.
 # Tauri reads the application version directly from ../package.json.
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.99"
 publish = false
 build = "build.rs"
 

@@ -2,6 +2,23 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
+## 1.0.0 — 2026-11-11
+
+### Added
+
+- The installer shrinks to about 5 MB while the workspace inside stays the same. The browser version continues to work as before.
+- Projects can now be saved as a file and reopened: your cuts, timing, processing settings, output names, playback settings and BMHelper divisions all live in one .wosdx file. If the audio has moved, the project still opens and asks you to pick the audio again.
+- Project files that contain several tracks open for viewing, with a note about what is not available; saving keeps the file exactly as it was opened.
+- Importing a .wos file is now two separate menu actions: start a new project from it, or bring only its timing and cuts into the project you have. Exporting a .wos file makes clear that it contains timing and cuts only.
+- Playback settings — monitor and cue volume, playback speed, cue sound, the RMS and band overlays — are saved with the project and come back with it; undo covers them too.
+- If a project file contains parts this version cannot read, the app says so when opening; saving keeps the parts it understands.
+- A menu entry can import a saved session from an older version, showing what it contains before anything is replaced.
+
+### Fixed
+
+- If the session archive is damaged, the app now keeps the original file and explains the problem instead of silently starting over; it is only discarded after you agree.
+- If the session archive cannot be written, the app says so in the status bar and keeps your latest work ready to retry instead of quietly losing it.
+
 ## 0.3.0 — 2026-11-08
 
 ### Added

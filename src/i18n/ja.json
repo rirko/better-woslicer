@@ -150,7 +150,7 @@
     "closeOk": "閉じて消去",
     "closeCancel": "キャンセル",
     "discardRecoveryTitle": "セッション保存データを破棄しますか？",
-    "discardRecoveryBody": "このセッション保存データは復元できません。他のコンテンツを開くと上書きされます。破棄して続行しますか？",
+    "discardRecoveryBody": "このセッション保存データは復元できません。他のコンテンツを読み込むと上書きされます。破棄して続行しますか？",
     "discardRecoveryOk": "破棄して続行",
     "discardRecoveryCancel": "キャンセル",
     "relinkDifferenceTitle": "この音声をそのまま使いますか？",
@@ -160,7 +160,8 @@
     "legacyImportTitle": "この復元データを読み込みますか？",
     "legacyImportBody": "旧バージョンの復元データ「{name}」には BPM {bpm}（ずらし {shift}）の切断位置 {markers} 個が含まれます。読み込むと現在のワークスペースを置き換えます。",
     "legacyImportOk": "復元データを読み込む",
-    "legacyImportCancel": "キャンセル"
+    "legacyImportCancel": "キャンセル",
+    "aboutDetail": "woslicerIII を再実装したオフライン BMS wav スライサー。\nスライス DSP と .wos 形式はオリジナルとバイト互換です。"
   },
   "status": {
     "projectOpened": "プロジェクトを開きました：{name}",
@@ -294,7 +295,7 @@
     "projectLimitedOpen": "制限付きプロジェクト：{name} — マルチトラック レイアウトは読み取り専用で開き、編集と再生は無効、保存は元のファイルをそのまま保持します",
     "limitedReadOnly": "このプロジェクトは読み取り専用です：編集・再生・WOS 転送は無効です",
     "limitedSaveUnavailable": "このプロジェクトは復元アーカイブからの復元のため保存できません。保存するには元のファイルを開いてください",
-    "sessionRestoredLimited": "復元アーカイブから読み取り専用のマルチトラック プロジェクトを復元しました。編集や保存には元のファイルを開いてください",
+    "sessionRestoredLimited": "復元アーカイブから読み取り専用のマルチトラック プロジェクトを復元しました。編集や保存には元のファイルを読み込んでください",
     "importedWosSettings": ".wos 設定を読み込みました：{file}（BPM {bpm}、ずらし {shift}）— 1 ステップで元に戻せます",
     "projectUnknownFields": "ファイルに未対応のフィールドが {count} 個あります。保存では認識できたプロジェクトデータのみ保持されます",
     "legacyImported": "旧バージョンの復元データを読み込みました：BPM {bpm} の切断位置 {markers} 個"
@@ -309,7 +310,6 @@
     "cutMeasure": "小節を切り取り（旧）",
     "pasteMeasure": "小節を貼り付け（旧, Ctrl+F）",
     "help": "ヘルプ",
-    "aboutDetail": "woslicerIII の Electron + TypeScript 実装。\nスライス DSP と .wos 形式はオリジナルとバイト互換です。",
     "openProject": ".wosdx プロジェクトを開く…",
     "saveProject": ".wosdx を保存…",
     "relinkAudio": "音声を再リンク…",

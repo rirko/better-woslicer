@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 /**
- * Tiny stdlib-only static server for the woslicer-dx offline web build.
+ * Tiny stdlib-only static server for local previews and UI tests.
  *
  * Serves one directory over loopback http (127.0.0.1 is a secure context, so
  * clipboard and WebAssembly work without TLS) and opens the default browser.
- * It ships inside the web-any archive next to index.html; the repository also
- * uses it for previews (npm run web) and the Playwright suite.
  *
- * Usage: node server.mjs [rootDir] [--port N] [--no-open]
- *   rootDir    defaults to the directory containing this file
+ * Usage: node scripts/serve-static.mjs [rootDir] [--port N] [--no-open]
+ *   rootDir    defaults to the directory containing this script
  *   --port N   first port to try (default 8347; the next nine are fallbacks)
  *   --no-open  do not launch the browser (CI / tests)
  */
@@ -29,8 +27,8 @@ for (let i = 0; i < args.length; i++) {
   else root = resolve(args[i]);
 }
 if (!existsSync(join(root, "index.html"))) {
-  console.error(`server.mjs: no index.html in ${root}`);
-  console.error("pass the unpacked web folder (or run npm run bundle first)");
+  console.error(`serve-static.mjs: no index.html in ${root}`);
+  console.error("pass a directory that contains index.html");
   process.exit(1);
 }
 

@@ -15,7 +15,7 @@ export default defineConfig({
     { name: 'high', use: { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 } },
   ],
   webServer: {
-    command: 'node src/web/server.mjs dist/app --port 4184 --no-open',
+    command: 'node scripts/serve-static.mjs dist/app --port 4184 --no-open',
     url: 'http://127.0.0.1:4184',
     reuseExistingServer: false,
     timeout: 10_000,

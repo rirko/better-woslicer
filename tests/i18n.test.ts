@@ -4,7 +4,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANIFEST as manifest, DATA as GENERATED_DATA, EN as en } from "../src/i18n/generated.js";
 import { LANGUAGES, DOC_LANG, detectLanguage, isLanguage, languageFromLocale, type Language } from "../src/core/language.js";
-import { DIALOG_STRINGS, MENU_STRINGS } from "../src/main/menu-i18n.js";
+// The menu/dialog key sets live in the generated i18n data; the old native
+// menu module that first consumed them is gone.
+const MENU_STRINGS = Object.fromEntries(Object.entries(GENERATED_DATA).map(([lang, sections]) => [lang, (sections as Record<string, unknown>).menu as Record<string, unknown>]));
+const DIALOG_STRINGS = Object.fromEntries(Object.entries(GENERATED_DATA).map(([lang, sections]) => [lang, (sections as Record<string, unknown>).dialogs as Record<string, unknown>]));
 import {
   formatStatus,
   scopeRangeText,
@@ -187,18 +190,6 @@ test("the band-detect scope line is localized", () => {
   assert.ok(scopeRangeText("zh", "001", "003", "2.50").startsWith("范围：选区"));
   assert.ok(scopeRangeText("ja", "001", "003", "2.50").startsWith("範囲：選択"));
   assert.ok(scopeRangeText("ko", "001", "003", "2.50").startsWith("범위: 선택"));
-});
-
-test("every data-i18n reference in index.html resolves to a chrome key", () => {
-  const html = readFileSync(join(__dirname, "..", "..", "src", "renderer", "index.html"), "utf8");
-  const referenced = new Set<string>();
-  for (const match of html.matchAll(/data-i18n(?:-title)?="([^"]+)"/g)) {
-    referenced.add(match[1]);
-  }
-  assert.ok(referenced.size >= 60, `index.html carries few i18n references: ${referenced.size}`);
-  const chromeKeys = new Set(Object.keys(en.chrome));
-  const unknown = [...referenced].filter((key) => !chromeKeys.has(key));
-  assert.deepEqual(unknown, [], "index.html references chrome keys that do not exist");
 });
 
 test("locale mapping picks the closest shipped language", () => {

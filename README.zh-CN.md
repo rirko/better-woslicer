@@ -29,11 +29,10 @@ macOS CI 构建未公证。应用在本地处理文件，运行时无需联网�
 
 网页版在浏览器中直接运行：[woslicer-dx app](https://woslicer-dx.pages.dev/) ，无需安装。
 
-源码运行需要 Node.js 24、npm 和 Git：
+源码运行需要 Node.js 24、npm、Git 和 Rust stable 工具链；Tauri 打包还需各平台配套工具（Linux 的 WebKit/GTK 包、Windows 的 WebView2）：
 
 ```sh
 npm ci
-node node_modules/electron/install.js
 npm start
 ```
 
@@ -62,9 +61,9 @@ npm start
 npm run typecheck
 npm test
 npm run build
-npm run test:ui
+npm run test:app-ui
 npm run package
-npm run test:ui:packaged
+
 ```
 
 音频在内部转换为 16-bit，导出使用 16-bit PCM。与原版输出的对比测试需要额外样本，缺少样本时会跳过。

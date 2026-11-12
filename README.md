@@ -29,11 +29,10 @@ macOS CI builds are not notarized. The application processes files locally and d
 
 The web version runs directly in the browser: [woslicer-dx app](https://woslicer-dx.pages.dev/) — no installation needed.
 
-For source builds, use Node.js 24, npm and Git:
+For source builds, use Node.js 24, npm, Git and the Rust stable toolchain; the Tauri bundler also needs its per-platform tooling (WebKit/GTK packages on Linux, WebView2 on Windows):
 
 ```sh
 npm ci
-node node_modules/electron/install.js
 npm start
 ```
 
@@ -62,9 +61,9 @@ Left-drag paints cuts, right-drag erases, Shift/Ctrl+drag selects, and dragging 
 npm run typecheck
 npm test
 npm run build
-npm run test:ui
+npm run test:app-ui
 npm run package
-npm run test:ui:packaged
+
 ```
 
 Audio is converted to 16-bit internally and exports use 16-bit PCM. Original-program comparison tests require external fixtures and are skipped when those are absent.

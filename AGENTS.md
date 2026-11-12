@@ -20,7 +20,7 @@ These rules apply to all work in this repository. Keep this file in English.
 ## Product security
 
 - This is an offline desktop audio editor. Do not add application features or runtime dependencies that access the public Internet or other external networks, including telemetry, crash uploads, update checks, cloud services, remote assets, or links that launch an external browser.
-- Keep user audio, projects, preferences, and other user data local. Preserve Electron isolation and the restrictive Content Security Policy.
+- Keep user audio, projects, preferences, and other user data local. Preserve the Tauri isolation boundary (no shell/open, no broad IPC) and the restrictive Content Security Policy of both release variants.
 - Build-time downloads, CI artifact uploads, and test-only loopback connections are allowed; they must not become application runtime behavior. Test DevTools must bind to loopback.
 - If a request conflicts with this policy, explain the conflict and suggest an offline alternative.
 
@@ -42,14 +42,14 @@ These rules apply to all work in this repository. Keep this file in English.
 
 ## Version and About
 
-- The root package.json version is the only editable application version. Derive About text, package metadata, platform version resources, and archive names from it. Keep Electron's runtime version separate.
+- The root package.json version is the only editable application version. Derive About text, the Tauri bundle metadata, and installer/archive names from it. Third-party library versions are not application versions.
 - To change the version, run npm version <major.minor.patch> --no-git-tag-version --ignore-scripts, update both changelogs, then run npm run check:version. This does not create a commit or tag.
 - About displays the application version, full source commit, and fixed UTC build time. Generate and bundle this metadata at build time; do not query Git or the network at runtime. Mark builds made from a modified working tree. See docs/VERSIONING.md.
 
 ## Validation and CI
 
 - Use Node.js 24 and npm. Use npm ci for a clean dependency install; do not rely on stale build output.
-- UI tests independently launch low (1280×720, DPR 1) and high (1920×1080, DPR 2) profiles. Verify native scale and menu visibility, isolate temporary user data, enforce a separate 30-second hard timeout per profile, and clean up the full Electron process tree before the next profile. Use an OS-assigned loopback DevTools port. Compare fractional DPR values with a numeric tolerance while checking canvas sizes.
+- UI tests independently launch low (1280×720, DPR 1) and high (1920×1080, DPR 2) profiles against the production web output. Verify native scale and menu visibility, isolate temporary user data, enforce a separate 30-second hard timeout per profile, and clean up spawned processes before the next profile. Use a loopback server. Compare fractional DPR values with a numeric tolerance while checking canvas sizes. Native Tauri window testing additionally requires the real bundles and must not be claimed from browser profiles alone.
 - Run checks appropriate to the change. Before reporting a complete application build, run typecheck, unit tests, UI profiles, and archive validation. If a required build or test fails, stop downstream packaging and diagnose it. Never claim an untested platform passed.
 - CI covers branch pushes and pull requests. Follow the current workflow and docs/CI.md for platform details and archive formats. Upload build archives and failure diagnostics as workflow artifacts. Do not add CD, deployment, or GitHub Release publishing unless requested.
 

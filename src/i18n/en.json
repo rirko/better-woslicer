@@ -160,7 +160,8 @@
     "legacyImportTitle": "Import this legacy recovery?",
     "legacyImportBody": "The legacy recovery \"{name}\" holds {markers} cuts at BPM {bpm} (shift {shift}). Importing replaces the current workspace content.",
     "legacyImportOk": "Import recovery",
-    "legacyImportCancel": "Cancel"
+    "legacyImportCancel": "Cancel",
+    "aboutDetail": "Offline desktop BMS wav slicer reimplementing woslicerIII.\nSlice DSP and .wos format are byte-compatible with the original."
   },
   "status": {
     "projectOpened": "Opened project: {name}",
@@ -309,7 +310,6 @@
     "cutMeasure": "Cut measure (legacy)",
     "pasteMeasure": "Paste measure (legacy, Ctrl+F)",
     "help": "Help",
-    "aboutDetail": "Electron + TypeScript reimplementation of woslicerIII.\nSlice DSP and .wos format are byte-compatible with the original.",
     "openProject": "Open .wosdx...",
     "saveProject": "Save .wosdx...",
     "relinkAudio": "Relink audio...",
