@@ -89,6 +89,8 @@ class ByteReader {
   }
 
   u32(): number {
+    // Same truncation boundary and big-endian assembly as bmh.ts's ByteReader;
+    // the two format readers must stay in step.
     if (this.pos + 4 > this.bytes.length) throw new SmfFormatError('unexpected end of MIDI data');
     const value =
       this.bytes[this.pos] * 0x1000000 +

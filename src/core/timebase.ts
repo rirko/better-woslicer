@@ -42,22 +42,6 @@ export function tickToSampleView(tick: number, base: TimeBase): number {
   return toInt32(scaled / base.bpm);
 }
 
-/** Samples contained in one measure under the export conversion. */
-export function measureSamples(base: TimeBase): number {
-  return tickToSampleExport(MEASURE_TICKS, base) - tickToSampleExport(0, base);
-}
-
-/** Inverse of tickToSampleExport: nearest tick whose sample position is >= sample. */
-export function sampleToTickFloor(sample: number, base: TimeBase): number {
-  // tick = sample * bpm * 4 / (sampleRate * 5) - shift, evaluated in double.
-  const approx = (sample * base.bpm * 4) / (base.sampleRate * 5) - base.shift;
-  const tick = Math.floor(approx);
-  // Guard against double rounding at boundaries by nudging one tick.
-  if (tick > 0 && tickToSampleExport(tick, base) > sample) return tick - 1;
-  if (tick + 1 < MAX_TICKS && tickToSampleExport(tick + 1, base) <= sample) return tick + 1;
-  return tick;
-}
-
 /**
  * Nearest tick to a playhead sample position (Math.round of the inverse
  * conversion, clamped to the 49152-tick map). This is the break-point
@@ -91,19 +75,4 @@ export function resolveBreakpointTick(
   const snapUsable = snap && !bypass && Number.isInteger(grid) && grid > 0;
   if (!snapUsable) return Math.max(0, Math.min(MAX_TICKS - 1, Math.round(tick)));
   return Math.max(0, Math.min(MAX_TICKS - 1, Math.round(tick / grid) * grid));
-}
-
-/**
- * End sample of the slice starting at `tick`: the next marker's start sample,
- * or the source length when `tick` has no successor (DoPrev prevTick == 0).
- */
-export function sliceEndSample(
-  markers: readonly number[],
-  index: number,
-  sourceLength: number,
-  base: TimeBase,
-): number {
-  const next = index + 1 < markers.length ? markers[index + 1] : -1;
-  if (next < 0) return sourceLength;
-  return tickToSampleExport(next, base);
 }

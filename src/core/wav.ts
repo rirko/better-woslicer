@@ -32,6 +32,16 @@ export interface DecodedWav {
 
 export class WavParseError extends Error {}
 
+/**
+ * The internal int16 scale: round(x * 32768) clamped to [-32768, 32767].
+ * Single conversion contract shared by OGG decode, float WAV parsing and the
+ * band analyzer — a change here must move all three together.
+ */
+export function floatToInternal(x: number): number {
+  const v = Math.round(x * 32768);
+  return v < -32768 ? -32768 : v > 32767 ? 32767 : v;
+}
+
 function fourCC(view: DataView, offset: number): string {
   return String.fromCharCode(
     view.getUint8(offset),
@@ -79,21 +89,36 @@ function readS24(view: DataView, offset: number, le: boolean): number {
   return raw & 0x800000 ? raw - 0x1000000 : raw;
 }
 
-/** Parses a RIFF/WAVE byte buffer. Throws WavParseError on malformed input. */
-export function parseWav(buffer: ArrayBuffer): DecodedWav {
+/** Format facts and data-chunk location recovered from the RIFF chunk walk. */
+interface WavLayout {
+  formatTag: number;
+  channels: number;
+  sampleRate: number;
+  bits: number;
+  dataOffset: number;
+  dataSize: number;
+}
+
+/**
+ * RIFF header check and chunk walk: the first data chunk wins, and fmt must
+ * have been seen before it (the original reads audio from the first data
+ * chunk and validates the format afterwards).
+ */
+function scanWavChunks(buffer: ArrayBuffer, view: DataView): WavLayout {
   if (buffer.byteLength < 12) throw new WavParseError('file too small for RIFF');
-  const view = new DataView(buffer);
   if (fourCC(view, 0) !== 'RIFF') throw new WavParseError('missing RIFF header');
   if (fourCC(view, 8) !== 'WAVE') throw new WavParseError('missing WAVE form type');
 
+  const layout: WavLayout = {
+    formatTag: 0,
+    channels: 0,
+    sampleRate: 0,
+    bits: 0,
+    dataOffset: -1,
+    dataSize: 0,
+  };
   let pos = 12;
   let fmtFound = false;
-  let channels = 0;
-  let sampleRate = 0;
-  let bits = 0;
-  let formatTag = 0;
-  let dataOffset = -1;
-  let dataSize = 0;
 
   while (pos + 8 <= buffer.byteLength) {
     const id = fourCC(view, pos);
@@ -101,15 +126,15 @@ export function parseWav(buffer: ArrayBuffer): DecodedWav {
     const body = pos + 8;
     if (id === 'fmt ') {
       if (body + 16 > buffer.byteLength) throw new WavParseError('fmt chunk truncated');
-      formatTag = view.getUint16(body, true);
-      channels = view.getUint16(body + 2, true);
-      sampleRate = view.getUint32(body + 4, true);
-      bits = view.getUint16(body + 14, true);
+      layout.formatTag = view.getUint16(body, true);
+      layout.channels = view.getUint16(body + 2, true);
+      layout.sampleRate = view.getUint32(body + 4, true);
+      layout.bits = view.getUint16(body + 14, true);
       fmtFound = true;
     } else if (id === 'data') {
-      dataOffset = body;
+      layout.dataOffset = body;
       // Clamp to the actual buffer: some writers emit an oversized size field.
-      dataSize = Math.min(size, buffer.byteLength - body);
+      layout.dataSize = Math.min(size, buffer.byteLength - body);
       break; // original reads audio from the first data chunk
     }
     // RIFF chunks are word-aligned.
@@ -118,63 +143,83 @@ export function parseWav(buffer: ArrayBuffer): DecodedWav {
   }
 
   if (!fmtFound) throw new WavParseError('missing fmt chunk');
-  if (dataOffset < 0) throw new WavParseError('missing data chunk');
-  if (channels < 1 || channels > 2) {
-    throw new WavParseError(`unsupported channel count ${channels} (1 or 2 expected)`);
-  }
-  if (formatTag !== 1 && formatTag !== 3) {
-    throw new WavParseError(
-      `unsupported wave format tag ${formatTag} (PCM or IEEE float expected)`,
-    );
-  }
-  if (formatTag === 1 && bits !== 8 && bits !== 16 && bits !== 24 && bits !== 32) {
-    throw new WavParseError(`unsupported PCM bit depth ${bits}`);
-  }
-  if (formatTag === 3 && bits !== 32) {
-    throw new WavParseError(`unsupported float bit depth ${bits}`);
-  }
-  if (sampleRate <= 0) throw new WavParseError('invalid sample rate');
+  if (layout.dataOffset < 0) throw new WavParseError('missing data chunk');
+  return layout;
+}
 
-  const wasFloat = formatTag === 3;
-  const bytesPerSample = bits >> 3;
-  // Original: length = dataSize / channel * 8 / bit (integer ops, same result).
-  const length = Math.floor((Math.floor(dataSize / channels) * 8) / bits);
+/** Decodes the data chunk into per-channel internal int16 buffers. */
+function decodeWavSamples(view: DataView, layout: WavLayout, length: number): Int16Array[] {
+  const wasFloat = layout.formatTag === 3;
+  const bytesPerSample = layout.bits >> 3;
 
   const data: Int16Array[] = [];
-  for (let c = 0; c < channels; c++) data.push(new Int16Array(length));
+  for (let c = 0; c < layout.channels; c++) data.push(new Int16Array(length));
 
-  const dv = view;
   for (let f = 0; f < length; f++) {
-    for (let c = 0; c < channels; c++) {
-      const off = dataOffset + (f * channels + c) * bytesPerSample;
+    for (let c = 0; c < layout.channels; c++) {
+      const off = layout.dataOffset + (f * layout.channels + c) * bytesPerSample;
       if (wasFloat) {
-        const x = dv.getFloat32(off, true);
-        let v = Math.round(x * 32768);
-        v = v < -32768 ? -32768 : v > 32767 ? 32767 : v;
-        data[c][f] = v;
+        data[c][f] = floatToInternal(view.getFloat32(off, true));
       } else {
         let raw = 0;
-        switch (bits) {
+        switch (layout.bits) {
           case 8:
-            raw = dv.getUint8(off);
+            raw = view.getUint8(off);
             data[c][f] = sampleToInternal(raw, 8);
             continue;
           case 16:
-            raw = dv.getInt16(off, true);
+            raw = view.getInt16(off, true);
             break;
           case 24:
-            raw = readS24(dv, off, true);
+            raw = readS24(view, off, true);
             break;
           case 32:
-            raw = dv.getInt32(off, true);
+            raw = view.getInt32(off, true);
             break;
         }
-        data[c][f] = sampleToInternal(raw, bits);
+        data[c][f] = sampleToInternal(raw, layout.bits);
       }
     }
   }
+  return data;
+}
 
-  return { sampleRate, channels, length, data, wasFloat };
+/** Parses a RIFF/WAVE byte buffer. Throws WavParseError on malformed input. */
+export function parseWav(buffer: ArrayBuffer): DecodedWav {
+  const view = new DataView(buffer);
+  const layout = scanWavChunks(buffer, view);
+
+  if (layout.channels < 1 || layout.channels > 2) {
+    throw new WavParseError(`unsupported channel count ${layout.channels} (1 or 2 expected)`);
+  }
+  if (layout.formatTag !== 1 && layout.formatTag !== 3) {
+    throw new WavParseError(
+      `unsupported wave format tag ${layout.formatTag} (PCM or IEEE float expected)`,
+    );
+  }
+  if (
+    layout.formatTag === 1 &&
+    layout.bits !== 8 &&
+    layout.bits !== 16 &&
+    layout.bits !== 24 &&
+    layout.bits !== 32
+  ) {
+    throw new WavParseError(`unsupported PCM bit depth ${layout.bits}`);
+  }
+  if (layout.formatTag === 3 && layout.bits !== 32) {
+    throw new WavParseError(`unsupported float bit depth ${layout.bits}`);
+  }
+  if (layout.sampleRate <= 0) throw new WavParseError('invalid sample rate');
+
+  const length = Math.floor((Math.floor(layout.dataSize / layout.channels) * 8) / layout.bits);
+
+  return {
+    sampleRate: layout.sampleRate,
+    channels: layout.channels,
+    length,
+    data: decodeWavSamples(view, layout, length),
+    wasFloat: layout.formatTag === 3,
+  };
 }
 
 /**

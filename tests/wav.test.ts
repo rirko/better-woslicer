@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseWav, encodeWav16, WavParseError } from '../src/core/wav.js';
-import { wavBytes16, wavBytesDepth, wavWithExtraChunks } from './fixtures.js';
+import { wavBytes16, wavBytesDepth, wavWithExtraChunks, writeWavHeader } from './fixtures.js';
 
 test('parses canonical 16-bit stereo WAV', () => {
   const left = new Int16Array([0, 1000, -1000, 32767]);
@@ -65,22 +65,7 @@ test('32-bit IEEE float WAV decodes exactly (documented extension)', () => {
   const dataSize = samples.length * 4;
   const buf = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buf);
-  const ascii = (off: number, s: string): void => {
-    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
-  };
-  ascii(0, 'RIFF');
-  view.setUint32(4, dataSize + 36, true);
-  ascii(8, 'WAVE');
-  ascii(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 3, true); // IEEE float
-  view.setUint16(22, 1, true);
-  view.setUint32(24, 48000, true);
-  view.setUint32(28, 48000 * 4, true);
-  view.setUint16(32, 4, true);
-  view.setUint16(34, 32, true);
-  ascii(36, 'data');
-  view.setUint32(40, dataSize, true);
+  writeWavHeader(view, dataSize, 3, 1, 48000, 32); // IEEE float
   samples.forEach((s, i) => view.setFloat32(44 + i * 4, s, true));
 
   const wav = parseWav(buf);

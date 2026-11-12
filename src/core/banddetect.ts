@@ -17,26 +17,25 @@
  */
 
 import { BandAnalysis, BandName, BAND_NAMES } from './bands.js';
-import { MAX_TICKS, TimeBase, sampleToTickNearest } from './timebase.js';
+import { TimeBase, resolveBreakpointTick, sampleToTickNearest } from './timebase.js';
 
 export interface RiseParams {
   thresholdDb: number;
-  /** Consecutive frames above the threshold before a hit counts (20 ms). */
-  sustainFrames?: number;
-  /** Frames of history used for the baseline comparison (200 ms). */
-  baselineFrames?: number;
-  /**
-   * Absolute RMS level floor in dBFS. A band that sits below this is treated
-   * as silent: its noise wiggle must not be cut. Default -60 dBFS.
-   */
-  absoluteFloorDb?: number;
 }
 
 const SILENCE_DB = -140;
-const DEFAULT_ABSOLUTE_FLOOR_DB = -60;
+/**
+ * Absolute RMS level floor in dBFS. A band that sits below this is treated
+ * as silent: its noise wiggle must not be cut.
+ */
+const ABSOLUTE_FLOOR_DB = -60;
+/** Consecutive frames above the threshold before a hit counts (20 ms at the default 10 ms hop). */
+const SUSTAIN_FRAMES = 2;
+/** Frames of history used for the baseline comparison (200 ms at the default 10 ms hop). */
+const BASELINE_FRAMES = 20;
 
 /**
- * 20th-percentile of the previous `baselineFrames` dB values. Using a low
+ * 20th-percentile of the previous baseline window's dB values. Using a low
  * percentile (instead of the extreme minimum) keeps the reference stable for
  * noise-like bands: one deep noise dip must not turn every later wiggle into
  * a "rise".
@@ -55,9 +54,9 @@ export function detectRiseOnsets(
   hopSamples: number,
   params: RiseParams,
 ): number[] {
-  const sustain = Math.max(1, Math.floor(params.sustainFrames ?? 2));
-  const baselineFrames = Math.max(2, Math.floor(params.baselineFrames ?? 20));
-  const absoluteFloorDb = params.absoluteFloorDb ?? DEFAULT_ABSOLUTE_FLOOR_DB;
+  const sustain = SUSTAIN_FRAMES;
+  const baselineFrames = BASELINE_FRAMES;
+  const absoluteFloorDb = ABSOLUTE_FLOOR_DB;
   const n = rms.length;
   if (n === 0) return [];
 
@@ -167,10 +166,9 @@ export function detectBandCuts(req: DetectRequest): DetectResult {
 
   for (const sample of sorted) {
     const rawTick = sampleToTickNearest(sample, req.base);
-    const snapped =
-      req.snap === false
-        ? Math.max(0, Math.min(MAX_TICKS - 1, rawTick))
-        : Math.max(0, Math.min(MAX_TICKS - 1, Math.round(rawTick / grid) * grid));
+    // Same snapping decision as manual placement (timebase single source);
+    // band detect has no Alt bypass, and `grid` is pre-clamped to >= 1.
+    const snapped = resolveBreakpointTick(rawTick, req.snap !== false, grid, false);
     if (snapped < req.fromTick || snapped > req.toTick) continue;
     if (req.existing.has(snapped)) {
       existing++;

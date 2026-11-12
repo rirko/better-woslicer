@@ -3,7 +3,7 @@ import type { EditorStore } from '../slicing/editor-store';
 import { renderSlice } from '../core/slicer';
 import { sliceIndexAtOrBefore } from '../core/markers';
 import { tickToSampleExport } from '../core/timebase';
-import { DEFAULT_PLAYBACK_RATE, PLAYBACK_RATES } from '../core/rate';
+import { DEFAULT_PLAYBACK_RATE, PLAYBACK_RATES, advanceSamples } from '../core/rate';
 import { findCueCrossing } from '../core/cuecursor';
 import { createCueSynth } from './cue';
 
@@ -36,7 +36,6 @@ export function createPlayback(editor: EditorStore): Playback {
   let anchorTime = 0;
   let activeRate = editor.playbackRate;
   let lastCueTick = 0;
-  let lastCueIndex = -1;
 
   function sampleToTick(sample: number): number {
     const source = editor.source;
@@ -56,7 +55,12 @@ export function createPlayback(editor: EditorStore): Playback {
     if (!track || !editor.source) return editor.playheadSample;
     return Math.min(
       editor.source.length,
-      anchorSample + (context.currentTime - anchorTime) * activeRate * editor.source.sampleRate,
+      advanceSamples(
+        anchorSample,
+        context.currentTime - anchorTime,
+        activeRate,
+        editor.source.sampleRate,
+      ),
     );
   }
   function stop(): void {
@@ -75,10 +79,9 @@ export function createPlayback(editor: EditorStore): Playback {
     if (disposed || !track || !editor.source) return;
     const sample = currentSample();
     const tickPosition = sampleToTick(sample);
-    const index = findCueCrossing(editor.ticks, lastCueTick, tickPosition, lastCueIndex);
+    const index = findCueCrossing(editor.ticks, lastCueTick, tickPosition);
     lastCueTick = tickPosition;
     if (index >= 0) {
-      lastCueIndex = index;
       cue.trigger(editor.cueMode);
     }
     editor.setPlayheadSample(sample);
@@ -102,7 +105,6 @@ export function createPlayback(editor: EditorStore): Playback {
     anchorSample = editor.playheadSample;
     anchorTime = context.currentTime;
     lastCueTick = sampleToTick(anchorSample);
-    lastCueIndex = -1;
     track = node;
     node.onended = () => {
       if (track !== node) return;
@@ -222,7 +224,6 @@ export function createPlayback(editor: EditorStore): Playback {
       () => `${editor.doc.bpm}|${editor.doc.shift}|${editor.ticks.join(',')}`,
       () => {
         lastCueTick = sampleToTick(currentSample());
-        lastCueIndex = -1;
       },
     );
   });

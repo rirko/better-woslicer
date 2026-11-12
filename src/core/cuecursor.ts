@@ -14,12 +14,13 @@ import { MAX_TICKS } from './timebase.js';
  *
  * Crossing multiple markers in one step yields the LAST crossed index (the
  * listener collapses them into a single hit, matching a metronome feel).
+ * The check is stateless: pausing or seeking backwards yields -1, and the
+ * caller re-arms by reporting the new playhead position through `prevTick`.
  */
 export function findCueCrossing(
   ticks: readonly number[],
   prevTick: number,
   currTick: number,
-  lastIndex: number,
 ): number {
   if (!ticks.length) return -1;
   if (!(currTick > prevTick)) return -1; // paused or seeking backwards
@@ -32,6 +33,5 @@ export function findCueCrossing(
     }
     if (t > currTick) break;
   }
-  void lastIndex;
   return crossed;
 }

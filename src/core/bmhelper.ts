@@ -17,9 +17,13 @@
  *    Format", positions in 48-per-quarter units, decimal fields).
  */
 
+import { BMSE_CLIPBOARD_FORMAT_NAME } from './bmse.js';
 import type { MidiNoteEvent, MidiSequence } from './smf.js';
 
-export const BMSE_CLIPBOARD_HEADER = 'BMSE ClipBoard Object Data Format';
+// One source of truth for the BMSE clipboard header: cutPositionsClipboard's
+// output is the exact input of the BMSE clipboard reader, so the write side
+// re-exports the reader's constant instead of holding its own copy.
+export const BMSE_CLIPBOARD_HEADER = BMSE_CLIPBOARD_FORMAT_NAME;
 /** Clipboard positions per quarter note: 192 ticks per 4/4 measure = 48/beat. */
 const BEAT_UNITS_PER_QUARTER = 48;
 const ZZ_RADIX = 36;

@@ -1,8 +1,8 @@
 /**
  * .bmh project persistence — a byte-compatible port of the original
  * BMHelper project file (serialize.h / project.cpp): a RIFF-like chunk tree,
- * little-endian, no file-level wrapper. A chunk tag whose first byte is an
- * ASCII capital letter is a container (payload = concatenated children);
+ * big-endian integers, no file-level wrapper. A chunk tag whose first byte is
+ * an ASCII capital letter is a container (payload = concatenated children);
  * anything else is a data leaf.
  *
  *   BMHP
@@ -85,6 +85,8 @@ class ByteReader {
   }
 
   u32(): number {
+    // Same truncation boundary and big-endian assembly as smf.ts's ByteReader;
+    // the two format readers must stay in step.
     if (this.pos + 4 > this.bytes.length) throw new BmhFormatError('truncated chunk size');
     const value =
       this.bytes[this.pos] * 0x1000000 +
@@ -150,7 +152,8 @@ function child(children: Chunk[], tag: string): Chunk {
 
 // --- sequence <-> Midi chunk ------------------------------------------------
 
-function i32LePayload(values: number[]): Uint8Array {
+// i32 values are stored big-endian (matching the original's serialize.h).
+function i32BePayload(values: number[]): Uint8Array {
   const writer = new ByteWriter();
   for (const value of values) writer.i32(value);
   return Uint8Array.from(writer.bytes);
@@ -167,10 +170,10 @@ function serializeSequenceChildren(sequence: MidiSequence): Uint8Array[] {
   const controls: number[] = [];
   for (const event of sequence.controls) controls.push(event.position, event.value, event.cc);
   return [
-    chunk('qntz', i32LePayload([sequence.quantize])),
-    chunk('note', i32LePayload(notes)),
-    chunk('ptch', i32LePayload(pitches)),
-    chunk('cchg', i32LePayload(controls)),
+    chunk('qntz', i32BePayload([sequence.quantize])),
+    chunk('note', i32BePayload(notes)),
+    chunk('ptch', i32BePayload(pitches)),
+    chunk('cchg', i32BePayload(controls)),
   ];
 }
 
@@ -225,7 +228,7 @@ function decodeName(bytes: Uint8Array): string {
 // --- division <-> Div chunk -------------------------------------------------
 
 function serializeDivisionChunk(division: Division): Uint8Array {
-  const s2df = i32LePayload(division.src2def);
+  const s2df = i32BePayload(division.src2def);
   const dfntWriter = new ByteWriter();
   for (const definition of division.definitions) {
     const zz = ((definition.zz % 1296) + 1296) % 1296;

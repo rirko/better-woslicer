@@ -1,3 +1,4 @@
+import { DEFAULT_CUE_DB, DEFAULT_PLAYBACK_DB } from '../core/volume';
 import { MAX_TICKS } from '../core/timebase';
 import {
   PROJECT_FILE_MAX_BYTES,
@@ -558,9 +559,9 @@ export function createEmptyProject(
     },
     output: { baseName: 'slice', clipStartNumber: 1, useFfNumbering: false },
     global: {
-      masterGainDb: -10,
+      masterGainDb: DEFAULT_PLAYBACK_DB,
       masterMuted: false,
-      cueGainDb: -6,
+      cueGainDb: DEFAULT_CUE_DB,
       cueMode: 'off',
       playbackRate: 1,
       views: { rms: false, bands: false, spectrum: 'reserved' },

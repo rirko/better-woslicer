@@ -9,7 +9,7 @@
  * instead of crashing the app.
  */
 
-import { DecodedWav } from './wav.js';
+import { DecodedWav, floatToInternal } from './wav.js';
 
 interface VorbisDecodeResult {
   channelData: Float32Array[];
@@ -22,14 +22,6 @@ interface DecoderFactory {
     decode(uint8Array: Uint8Array): Promise<VorbisDecodeResult>;
     free?: () => void;
   };
-}
-
-/** Converts float PCM [-1, 1) to the internal int16 scale (round, clamp). */
-function floatToInternal(x: number): number {
-  let v = Math.round(x * 32768);
-  if (v < -32768) v = -32768;
-  if (v > 32767) v = 32767;
-  return v;
 }
 
 /** Decodes an OGG Vorbis file buffer into the shared DecodedWav shape. */

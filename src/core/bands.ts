@@ -9,6 +9,7 @@
  * (Butterworth Q), so the whole module is deterministic and unit-testable.
  */
 
+import { floatToInternal } from './wav.js';
 import { buildPeakCache, PeakCache } from './peaks.js';
 
 export type BandName = 'low' | 'mid' | 'high';
@@ -38,11 +39,17 @@ interface Biquad {
 
 const Q_BUTTERWORTH = Math.SQRT1_2;
 
-export function lowpassCoeffs(sampleRate: number, cutoff: number, q = Q_BUTTERWORTH): Biquad {
+/** Shared RBJ biquad skeleton: identical intermediate values for both filters. */
+function biquadCommon(sampleRate: number, cutoff: number, q: number) {
   const w0 = (2 * Math.PI * cutoff) / sampleRate;
   const cos = Math.cos(w0);
   const alpha = Math.sin(w0) / (2 * q);
   const a0 = 1 + alpha;
+  return { cos, alpha, a0 };
+}
+
+export function lowpassCoeffs(sampleRate: number, cutoff: number, q = Q_BUTTERWORTH): Biquad {
+  const { cos, alpha, a0 } = biquadCommon(sampleRate, cutoff, q);
   return {
     b0: (1 - cos) / 2 / a0,
     b1: (1 - cos) / a0,
@@ -53,10 +60,7 @@ export function lowpassCoeffs(sampleRate: number, cutoff: number, q = Q_BUTTERWO
 }
 
 export function highpassCoeffs(sampleRate: number, cutoff: number, q = Q_BUTTERWORTH): Biquad {
-  const w0 = (2 * Math.PI * cutoff) / sampleRate;
-  const cos = Math.cos(w0);
-  const alpha = Math.sin(w0) / (2 * q);
-  const a0 = 1 + alpha;
+  const { cos, alpha, a0 } = biquadCommon(sampleRate, cutoff, q);
   return {
     b0: (1 + cos) / 2 / a0,
     b1: -(1 + cos) / a0,
@@ -131,10 +135,7 @@ export interface BandAnalysis {
 
 function toInt16(samples: Float32Array): Int16Array {
   const out = new Int16Array(samples.length);
-  for (let i = 0; i < samples.length; i++) {
-    const v = Math.round(samples[i] * 32768);
-    out[i] = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
-  }
+  for (let i = 0; i < samples.length; i++) out[i] = floatToInternal(samples[i]);
   return out;
 }
 

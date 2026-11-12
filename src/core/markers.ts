@@ -239,12 +239,6 @@ export class MarkerDoc {
   }
 
   /**
-   * Quantizes every marker to the nearest multiple of `grid` ticks.
-   * Collisions after snapping collapse into one marker (first wins) unless
-   * `resolveCollisions` is false, in which case markers may merge implicitly
-   * by sharing a tick.
-   */
-  /**
    * Copies one measure (192 ticks) of markers into a measure clipboard.
    * `measure` is clamped to the 256-measure timeline.
    */

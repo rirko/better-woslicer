@@ -12,6 +12,51 @@ export function makeRng(seed: number): () => number {
   };
 }
 
+/** Writes an ASCII chunk id / fourCC into the view. */
+export function writeAscii(view: DataView, off: number, text: string): void {
+  for (let i = 0; i < text.length; i++) view.setUint8(off + i, text.charCodeAt(i));
+}
+
+/**
+ * Writes the canonical 16-byte `fmt ` chunk body at `off`: byte rate and
+ * block align derive from channels × bytes per sample.
+ */
+export function writeFmtChunk(
+  view: DataView,
+  off: number,
+  formatTag: number,
+  channels: number,
+  sampleRate: number,
+  bits: number,
+): void {
+  writeAscii(view, off, 'fmt ');
+  view.setUint32(off + 4, 16, true);
+  view.setUint16(off + 8, formatTag, true);
+  view.setUint16(off + 10, channels, true);
+  view.setUint32(off + 12, sampleRate, true);
+  const bytesPer = bits >> 3;
+  view.setUint32(off + 16, sampleRate * channels * bytesPer, true);
+  view.setUint16(off + 20, channels * bytesPer, true);
+  view.setUint16(off + 22, bits, true);
+}
+
+/** Writes the 44-byte canonical WAV header (RIFF/WAVE/fmt/data sizes). */
+export function writeWavHeader(
+  view: DataView,
+  dataSize: number,
+  formatTag: number,
+  channels: number,
+  sampleRate: number,
+  bits: number,
+): void {
+  writeAscii(view, 0, 'RIFF');
+  view.setUint32(4, dataSize + 36, true);
+  writeAscii(view, 8, 'WAVE');
+  writeFmtChunk(view, 12, formatTag, channels, sampleRate, bits);
+  writeAscii(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+}
+
 /** Encodes int16 channel data as a canonical PCM16 WAV buffer. */
 export function wavBytes16(channelsData: Int16Array[], sampleRate: number): Uint8Array {
   const channels = channelsData.length;
@@ -19,22 +64,7 @@ export function wavBytes16(channelsData: Int16Array[], sampleRate: number): Uint
   const dataSize = length * channels * 2;
   const buf = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buf);
-  const ascii = (off: number, s: string): void => {
-    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
-  };
-  ascii(0, 'RIFF');
-  view.setUint32(4, dataSize + 36, true);
-  ascii(8, 'WAVE');
-  ascii(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * channels * 2, true);
-  view.setUint16(32, channels * 2, true);
-  view.setUint16(34, 16, true);
-  ascii(36, 'data');
-  view.setUint32(40, dataSize, true);
+  writeWavHeader(view, dataSize, 1, channels, sampleRate, 16);
   let p = 44;
   for (let f = 0; f < length; f++) {
     for (let c = 0; c < channels; c++) {
@@ -56,22 +86,7 @@ export function wavBytesDepth(
   const dataSize = samples.length * bytesPer;
   const buf = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buf);
-  const ascii = (off: number, s: string): void => {
-    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
-  };
-  ascii(0, 'RIFF');
-  view.setUint32(4, dataSize + 36, true);
-  ascii(8, 'WAVE');
-  ascii(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * bytesPer, true);
-  view.setUint16(32, bytesPer, true);
-  view.setUint16(34, bits, true);
-  ascii(36, 'data');
-  view.setUint32(40, dataSize, true);
+  writeWavHeader(view, dataSize, 1, 1, sampleRate, bits);
   let p = 44;
   for (const s of samples) {
     switch (bits) {
@@ -103,7 +118,6 @@ export function wavWithExtraChunks(
   channels = 1,
   sampleRate = 48000,
 ): Uint8Array {
-  const bytesPer = bits >> 3;
   const dataSize = pcm.length;
   const extraSize = extraChunks.reduce(
     (acc, c) => acc + 8 + c.body.length + (c.body.length & 1),
@@ -112,29 +126,19 @@ export function wavWithExtraChunks(
   const total = 12 + extraSize + 24 + 8 + dataSize;
   const buf = new ArrayBuffer(total);
   const view = new DataView(buf);
-  const ascii = (off: number, s: string): void => {
-    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
-  };
-  ascii(0, 'RIFF');
+  writeAscii(view, 0, 'RIFF');
   view.setUint32(4, total - 8, true);
-  ascii(8, 'WAVE');
+  writeAscii(view, 8, 'WAVE');
   let p = 12;
   for (const chunk of extraChunks) {
-    ascii(p, chunk.id);
+    writeAscii(view, p, chunk.id);
     view.setUint32(p + 4, chunk.body.length, true);
     new Uint8Array(buf).set(chunk.body, p + 8);
     p += 8 + chunk.body.length + (chunk.body.length & 1);
   }
-  ascii(p, 'fmt ');
-  view.setUint32(p + 4, 16, true);
-  view.setUint16(p + 8, 1, true);
-  view.setUint16(p + 10, channels, true);
-  view.setUint32(p + 12, sampleRate, true);
-  view.setUint32(p + 16, sampleRate * channels * bytesPer, true);
-  view.setUint16(p + 20, channels * bytesPer, true);
-  view.setUint16(p + 22, bits, true);
+  writeFmtChunk(view, p, 1, channels, sampleRate, bits);
   p += 24;
-  ascii(p, 'data');
+  writeAscii(view, p, 'data');
   view.setUint32(p + 4, dataSize, true);
   new Uint8Array(buf).set(pcm, p + 8);
   return new Uint8Array(buf);
