@@ -106,6 +106,11 @@ The workflow does not use Developer ID signing or Apple notarization.
 The tag must match the root package version. The workflow collects only artifacts from that run.
 The Web ZIP and Windows x64 portable ZIP are mandatory. The release includes checksums. Optional packages ship when their jobs succeed.
 
+`scripts/release-notes.mjs` extracts the current version's entries from both changelogs.
+The release description contains those English and Chinese user-facing changes, without build logs
+or artifact summaries. Missing, duplicate or empty entries fail release preparation before publication.
+Preview the description with `node scripts/release-notes.mjs`.
+
 The workflow creates an immediately public **prerelease**, not a draft.
 Reruns update matching assets and convert an existing draft to a public
 prerelease. It does not mark the prerelease as the latest stable release.

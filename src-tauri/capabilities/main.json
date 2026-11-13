@@ -1,9 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Only the local editor can invoke the selected offline host operations.",
+  "description": "Only the local editor can invoke offline operations and fixed About links.",
   "windows": ["main"],
   "permissions": [
+    "allow-open-about-link",
     "allow-open-file",
     "allow-reopen-file",
     "allow-open-project-media",

@@ -28,12 +28,4 @@ unzip -t "$portable_archive"
 
 printf 'title=%s %s\n' "$name" "$version" >> "$GITHUB_OUTPUT"
 
-cat > release-notes.md <<EOF
-Prerelease of $name $version.
-
-Source commit: $GITHUB_SHA
-
-Web and Windows x64 passed the required build checks.
-Windows ARM64, Linux and macOS packages are included when their optional builds succeed.
-Windows packages are portable ZIPs and require WebView2.
-EOF
+node scripts/release-notes.mjs > release-notes.md

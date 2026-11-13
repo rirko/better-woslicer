@@ -66,6 +66,8 @@ Windows x64가 기본 데스크톱 버전입니다. 다른 Windows 아키텍처�
 
 ## 라이선스와 크레딧
 
-원본 woslicer II/III: **wosderge**. 기여자가 권리를 가진 부분은 [MIT](LICENSE)이며, 원본에서 파생된 부분과 서드파티 의존성은 이 허여에 포함되지 않습니다. 범위와 저작자 표시는 [NOTICE](NOTICE)를 참고하세요.
+원본 woslicer II/III: [wosderge](https://cerebralmuddystream.nekokan.dyndns.info/). 기여자가 권리를 가진 부분은 [MIT](LICENSE)이며, 원본에서 파생된 부분과 서드파티 의존성은 이 허여에 포함되지 않습니다. 범위와 저작자 표시는 [NOTICE](NOTICE)를 참고하세요.
 
-내장 BMHelper는 **exclusion**이 공개한 소스 코드를 바탕으로 Be-Music Helper(beta 4′)의 동작을 재구현했습니다. 원본 README는 금전이 오가지 않고 원작자를 명시하는 조건으로 2차 사용을 허용합니다. [원본 BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
+내장 BMHelper는 [exclusion](https://excln.github.io/)이 공개한 소스 코드를 바탕으로 Be-Music Helper(beta 4′)의 동작을 재구현했습니다. 원본 README는 금전이 오가지 않고 원작자를 명시하는 조건으로 2차 사용을 허용합니다. [원본 BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
+
+파형 디자인 스타일 참고: [Audacity](https://www.audacityteam.org/).

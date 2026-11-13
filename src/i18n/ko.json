@@ -172,7 +172,15 @@
     "legacyImportBody": "이전 버전 복원 \"{name}\"에는 BPM {bpm}(시프트 {shift})의 절단 위치 {markers}개가 있습니다. 가져오면 현재 작업 공간을 대체합니다.",
     "legacyImportOk": "복원 데이터 가져오기",
     "legacyImportCancel": "취소",
-    "aboutDetail": "woslicerIII를 재구현한 오프라인 BMS wav 슬라이서입니다.\n슬라이스 DSP와 .wos 형식은 원본과 바이트 호환입니다."
+    "aboutDetail": "woslicerIII를 재구현한 오프라인 BMS wav 슬라이서입니다.\n슬라이스 DSP와 .wos 형식은 원본과 바이트 호환입니다.",
+    "aboutProjectLink": "GitHub 프로젝트",
+    "aboutProjectUnavailable": "이 로컬 빌드에는 프로젝트 링크가 없습니다.",
+    "aboutCredits": "크레딧",
+    "aboutWoslicerCredit": "원본 애플리케이션.",
+    "aboutBmhelperCredit": "원본 MIDI 분할 도구.",
+    "aboutAudacityCredit": "파형 디자인 스타일 참고.",
+    "aboutExternalLinks": "링크는 외부 브라우저 또는 새 탭에서 열립니다. 앱은 이 사이트에 자동으로 연결하지 않습니다.",
+    "aboutLinkFailed": "링크를 열 수 없습니다."
   },
   "status": {
     "projectOpened": "프로젝트 열기 완료: {name}",

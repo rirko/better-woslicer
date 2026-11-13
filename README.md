@@ -66,6 +66,8 @@ Desktop projects store absolute audio paths and reconnect available files when o
 
 ## License and credits
 
-Original woslicer II/III: **wosderge**. Contributor-owned material uses [MIT](LICENSE). This grant excludes portions derived from the original and third-party dependencies. See [NOTICE](NOTICE) for scope and attribution.
+Original woslicer II/III: [wosderge](https://cerebralmuddystream.nekokan.dyndns.info/). Contributor-owned material uses [MIT](LICENSE). This grant excludes portions derived from the original and third-party dependencies. See [NOTICE](NOTICE) for scope and attribution.
 
-The built-in BMHelper reimplements Be-Music Helper (beta 4′). This implementation uses source code published by its author, **exclusion**. The original README permits secondary use when no money is involved and the author is credited. [Original BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
+The built-in BMHelper reimplements Be-Music Helper (beta 4′). This implementation uses source code published by its author, [exclusion](https://excln.github.io/). The original README permits secondary use when no money is involved and the author is credited. [Original BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
+
+Waveform design style reference: [Audacity](https://www.audacityteam.org/).
