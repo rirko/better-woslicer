@@ -4,6 +4,8 @@
 
 wosderge の woslicerIII をベースにした、BMS 向けのオフライン音声スライサー。
 
+> **[Web 版を開く](https://woslicer-dx.pages.dev/)** · インストール不要。音声は端末内で処理します。
+
 ![メイン画面](docs/screenshots/main-ui.png)
 
 ## 機能
@@ -19,7 +21,7 @@ wosderge の woslicerIII をベースにした、BMS 向けのオフライン音
 
 ## 実行
 
-Releases（プレリリース）または Actions の成果物から、ご利用のシステム向けパッケージをダウンロードします。
+Releases または Actions の成果物から、ご利用のシステム向けパッケージをダウンロードします。
 
 | プラットフォーム | 形式 | 使い方 |
 | --- | --- | --- |
@@ -29,8 +31,6 @@ Releases（プレリリース）または Actions の成果物から、ご利用
 | Web | .zip | 展開して静的サイトとして配信 |
 
 Windows x64 が主要なデスクトップ版です。ほかの Windows アーキテクチャ、Linux、macOS 向けのパッケージは利用可能な場合に提供します。本アプリはファイルをローカルで処理し、オフラインで動作します。
-
-Web 版はブラウザーで直接動作します：[woslicer-dx app](https://woslicer-dx.pages.dev/) （インストール不要）。
 
 ## 操作
 

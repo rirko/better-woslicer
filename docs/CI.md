@@ -5,21 +5,24 @@ See the [development guide](DEVELOPMENT.md) for local commands and test profiles
 ## Build workflow
 
 `.github/workflows/build.yml` runs on pushes to `main` and `dev` and on pull
-requests targeting any branch. It also supports manual runs.
-The tag-based release workflow calls it separately.
+requests targeting any branch. Manual runs offer an `all_platforms` checkbox.
+Main always builds all platforms. On other branches, select this checkbox to validate additional native targets before merging.
+The tag-based release workflow consumes its verified artifacts without rebuilding.
 
 | Target | Runner | Packages | Gate |
 | --- | --- | --- | --- |
 | Web | ubuntu-24.04 | Static site ZIP | Required |
 | Windows x64 | windows-2025 | Portable ZIP | Required |
-| Windows ARM64 | windows-11-arm | Portable ZIP | Optional |
-| Linux x64 | ubuntu-24.04 | deb + AppImage | Optional |
-| Linux ARM64 | ubuntu-24.04-arm | deb + AppImage | Optional |
-| macOS Apple Silicon | macos-15 | DMG | Optional |
-| macOS Intel | macos-15-intel | DMG | Optional |
+| Windows ARM64 | windows-11-arm | Portable ZIP | Required when selected |
+| Linux x64 | ubuntu-24.04 | deb + AppImage | Required when selected |
+| Linux ARM64 | ubuntu-24.04-arm | deb + AppImage | Required when selected |
+| macOS Apple Silicon | macos-15 | DMG | Required when selected |
+| macOS Intel | macos-15-intel | DMG | Required when selected |
 
-CI sets `WOSLICER_BUILD_PROFILE=release`. It does not build or test a debug
-profile. All Node setup steps use Node 26.x.
+CI builds production frontend assets on every branch. Native jobs use debug outside `main`.
+Main builds all release targets and a separate Windows x64 debug job. All Node setup steps use Node 26.x.
+The debug job produces the cache that PR and `dev` checks consume. It does not supply release packages.
+Static debug Tauri builds keep the application isolation and CSP. They do not use a development server.
 
 Web runs lint, format checks, typecheck, both test suites, release build,
 both UI profiles, and ZIP integrity validation. Desktop jobs run after web succeeds. The shared desktop action runs these steps:
@@ -27,22 +30,23 @@ both UI profiles, and ZIP integrity validation. Desktop jobs run after web succe
 1. Install system dependencies and the pinned Rust toolchain.
 2. Generate frontend build identity before Cargo.
 3. Run rustfmt.
-4. Run locked tests and Clippy with `--release --all-features`.
-5. Build release Tauri bundles.
+4. Run locked tests and Clippy with `--all-features` and the selected native profile.
+5. Build static Tauri bundles with that profile.
 6. Check native package metadata.
 
 Swatinem/rust-cache caches Cargo registry and target dependencies per
-OS/target. Tests, Clippy and packaging share the release profile to avoid
-separate debug and release cache trees. The cache does not replace checks.
+OS, target and profile. Debug and release dependencies are not interchangeable.
+Tests, Clippy and packaging use the same profile within each job. The cache does not replace checks.
 Every desktop job can restore a compatible cache. Only successful `main` jobs
-save new Rust cache entries. PR, `dev` and tag builds only read Rust caches.
-Compatible build and release jobs use the same cache key for each target.
+save new Rust cache entries. PR and `dev` builds only read Rust caches. Tags do not compile Rust.
+Main supplies release caches for all native targets and a debug cache for Windows x64.
+Manually selected debug jobs on other platforms can start with cold caches.
 GitHub scopes cache entries by ref, including PR merge refs.
 
 ### Rust cache scope and invalidation
 
-The desktop action pins Rust in `CI_RUST_VERSION`. Update this value explicitly
-when adopting a new compiler. A moving `stable` channel can invalidate caches
+The root `rust-toolchain.toml` pins Rust for local work and CI. Dependabot can propose compiler updates.
+A moving `stable` channel can invalidate caches
 between two runs of the same PR.
 
 The pinned [rust-cache source](https://github.com/Swatinem/rust-cache/blob/d1527c8f67ef9af357290475d4af4b0fab8f12e0/src/config.ts)
@@ -79,6 +83,19 @@ The action's `cache-hit` output reports an exact match only.
 The post-job step can save a cache for later runs.
 GitHub caches are immutable and can expire, so a cache hit is never guaranteed.
 
+### macOS compilation reuse
+
+The action exports `MACOSX_DEPLOYMENT_TARGET` before cache restoration and every Cargo command.
+Its value comes from `bundle.macOS.minimumSystemVersion` in `src-tauri/tauri.conf.json`.
+The explicit value preserves Tauri's previous default, `10.13`. Tauri packaging reads the same configuration.
+The cache key includes this variable. Direct Cargo checks and Tauri builds must use the same value.
+Otherwise, the Objective-C helper build can invalidate dependent crates despite an exact cache hit.
+
+macOS jobs enable Cargo fingerprint diagnostics. After merging, compare two successful main runs at the same commit.
+Check restored keys and Cargo's dirty reasons, especially for `objc2-exception-helper` and its dependents.
+A restored cache alone does not prove compilation reuse. Workspace crate compilation is expected.
+Hosted CI validates compilation and packages. It does not validate native macOS UI behavior.
+
 ### Workflow implementation
 
 Actions use fixed SHAs. The workflows define triggers, runners, permissions
@@ -86,12 +103,17 @@ and artifact transfer. The scripts in [`.github/scripts/`](../.github/scripts/)
 validate and collect native packages, archive the Web build, and prepare or
 publish releases.
 
-The Required release checks job requires web and Windows x64 success.
-Optional platforms run on pushes to `main` and during tag-based release builds.
-Their failures do not block required targets.
+For artifact selection, manifests and checksums, start at [`scripts/release-artifacts.mjs`](../scripts/release-artifacts.mjs).
+Its `resolve`, `record` and `verify` commands own the transfer contract between build and release.
+When adding or removing a platform, update both the build matrix and that script's `targets` list.
+Keep the runner matrix in YAML so maintainers can inspect it directly in the workflow.
+
+The Required release checks job requires web, Windows x64 and every selected additional platform to succeed.
+Additional platforms run on `main` or when a manual run selects `all_platforms`.
+Their failures block the run and publication. PR and `dev` runs normally skip those platforms.
 The workflow uploads successful packages and failure diagnostics as artifacts.
 
-Windows CI builds the release executable with Tauri's `--no-bundle` option and
+Windows CI builds the selected native profile with Tauri's `--no-bundle` option and
 ships it with LICENSE and NOTICE in a portable ZIP. It compares each ZIP entry
 against its source by SHA-256. The ZIP requires an installed WebView2 runtime.
 The app stores settings and recovery data in its usual local app data directory.
@@ -102,9 +124,21 @@ The workflow does not use Developer ID signing or Apple notarization.
 
 ## Release workflow
 
-.github/workflows/release.yml handles v* tags and calls the build workflow.
-The tag must match the root package version. The workflow collects only artifacts from that run.
-The Web ZIP and Windows x64 portable ZIP are mandatory. The release includes checksums. Optional packages ship when their jobs succeed.
+`.github/workflows/release.yml` handles `v*` tags. The tag must match the root package version.
+It selects the latest main build at the exact tag commit, from a push or manual run.
+That run and every job must succeed. All seven release artifacts must exist and must not be expired.
+An incomplete or failed latest run stops publication. The resolver does not fall back to an older successful run.
+It never substitutes a PR build, a debug artifact or another commit.
+
+The source job returns a run ID and exact artifact IDs. Publication and Pages consume that same source run.
+Each artifact includes a manifest with the commit, version, profile, platform, target, run ID, attempt and package checksums.
+The workflow verifies those fields and SHA-256 hashes before publication or deployment.
+Packages must come from a clean checkout and the same run attempt. The release includes manifests and checksums.
+
+Artifacts expire after 14 days. If they are missing, expired or from mixed attempts, the release stops without rebuilding.
+Rerun all jobs in the original main build at the tag commit, then rerun the release workflow.
+A manual main run also works if main still points to that commit.
+Do not move a published tag to compensate for missing artifacts.
 
 `scripts/release-notes.mjs` extracts the current version's entries from both changelogs.
 The release description contains those English and Chinese user-facing changes, without build logs
@@ -127,3 +161,20 @@ If deployment fails, the prerelease remains published and the failed job can be
 rerun without rebuilding or changing the desktop release gate.
 
 Use a workflow run to verify hosted platforms.
+
+## Dependency updates
+
+`.github/dependabot.yml` schedules weekly version-update PRs against `dev` for npm, Cargo, Rust toolchains and GitHub Actions.
+Action scanning covers both workflows and the desktop composite action directory.
+Minor and patch updates are grouped per ecosystem. Major updates and compiler updates remain separate PRs.
+npm and Cargo updates have a seven-day cooldown. No automatic merge is configured.
+Pinned skill submodules remain under manual review.
+
+Dependabot alerts, security-update PRs and scheduled version-update PRs are separate features.
+Repository settings control alerts and security updates. This configuration does not enable those settings.
+Security-update PRs target the default branch, `main`, regardless of the version-update target.
+After a security fix merges into main, merge main into dev. See [Contributing](../CONTRIBUTING.md).
+The configuration takes effect after it reaches the default branch. Referenced manifests must also exist on dev.
+
+See [Dependabot options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)
+and [Rust toolchain updates](https://github.blog/changelog/2025-08-19-dependabot-now-supports-rust-toolchain-updates/).

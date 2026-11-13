@@ -4,6 +4,8 @@
 
 基于 wosderge 的 woslicerIII 开发的离线 BMS 音频切片工具。
 
+> **[打开网页版](https://woslicer-dx.pages.dev/)** · 无需安装，音频在本机处理。
+
 ![主界面](docs/screenshots/main-ui.png)
 
 ## 功能
@@ -19,7 +21,7 @@
 
 ## 运行
 
-从 Releases（预发布）或 Actions 附件下载对应系统的软件包：
+从 Releases 或 Actions 附件下载对应系统的软件包：
 
 | 平台 | 格式 | 使用方式 |
 | --- | --- | --- |
@@ -29,8 +31,6 @@
 | Web | .zip | 解压后作为静态网站托管 |
 
 Windows x64 为主要桌面版本。其他 Windows 架构、Linux 和 macOS 软件包在可用时提供。应用在本地处理文件，运行时无需联网。
-
-网页版在浏览器中直接运行：[woslicer-dx app](https://woslicer-dx.pages.dev/)，无需安装。
 
 ## 操作
 

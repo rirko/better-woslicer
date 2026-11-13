@@ -1,5 +1,7 @@
 # Development guide
 
+See [Contributing](../CONTRIBUTING.md) for branch routes and pull request targets.
+
 ## Repository layout
 
 - `src/` contains the Vue interface, audio processing and project logic.
@@ -55,7 +57,10 @@ window setup (`lib.rs`). It does not implement audio processing or editing rules
 For agent-assisted work, initialize the [project skill submodules](SKILLS.md#initialize-submodules).
 Application builds do not require these submodules.
 
-Install Node.js 26.x, npm and Git. For desktop work, also install stable Rust and the Tauri system dependencies for your platform. Windows uses WebView2 and Linux needs WebKitGTK and the corresponding system development packages. The [desktop build action](../.github/actions/build-desktop/action.yml) lists the Linux packages used by CI.
+Install Node.js 26.x, npm and Git. For desktop work, install rustup and the Tauri system dependencies for your platform.
+The root `rust-toolchain.toml` selects the compiler and components for local work and CI.
+Run `rustup toolchain install` to install them. Run `rustup show` to inspect the active toolchain.
+Windows uses WebView2 and Linux needs WebKitGTK and the corresponding system development packages. The [desktop build action](../.github/actions/build-desktop/action.yml) lists the Linux packages used by CI.
 
 Start the browser development server with:
 

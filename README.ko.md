@@ -4,6 +4,8 @@
 
 wosderge의 woslicerIII를 기반으로 만든 BMS용 오프라인 오디오 슬라이서입니다.
 
+> **[웹 버전 열기](https://woslicer-dx.pages.dev/)** · 설치할 필요가 없습니다. 오디오는 기기에서 처리합니다.
+
 ![메인 화면](docs/screenshots/main-ui.png)
 
 ## 기능
@@ -19,7 +21,7 @@ wosderge의 woslicerIII를 기반으로 만든 BMS용 오프라인 오디오 슬
 
 ## 실행
 
-Releases(사전 릴리스) 또는 Actions 아티팩트에서 시스템에 맞는 패키지를 내려받습니다.
+Releases 또는 Actions 아티팩트에서 시스템에 맞는 패키지를 내려받습니다.
 
 | 플랫폼 | 형식 | 사용 방법 |
 | --- | --- | --- |
@@ -29,8 +31,6 @@ Releases(사전 릴리스) 또는 Actions 아티팩트에서 시스템에 맞는
 | Web | .zip | 압축을 풀고 정적 웹사이트로 호스팅 |
 
 Windows x64가 기본 데스크톱 버전입니다. 다른 Windows 아키텍처와 Linux 및 macOS 패키지는 제공 가능한 경우 포함됩니다. 앱은 파일을 로컬에서 처리하며 오프라인으로 동작합니다.
-
-웹 버전은 브라우저에서 직접 실행됩니다: [woslicer-dx app](https://woslicer-dx.pages.dev/) (설치 불필요).
 
 ## 조작
 

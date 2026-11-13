@@ -16,9 +16,6 @@ export function resolveBuildProfile(args = [], env = process.env) {
   if (profile !== 'debug' && profile !== 'release') {
     throw new Error('WOSLICER_BUILD_PROFILE must be debug or release');
   }
-  if (env.GITHUB_ACTIONS === 'true' && profile !== 'release') {
-    throw new Error('GitHub Actions must use the release profile');
-  }
   return {
     profile,
     args: [...options.filter((arg) => !['--debug', '-d', '--release'].includes(arg)), ...trailing],
