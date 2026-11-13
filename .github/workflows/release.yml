@@ -6,24 +6,44 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build:
-    uses: ./.github/workflows/build.yml
-    with:
-      optional_platforms: true
+  source:
+    name: Select the verified main build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run-id: ${{ steps.source.outputs.run-id }}
+      run-attempt: ${{ steps.source.outputs.run-attempt }}
+      artifact-ids: ${{ steps.source.outputs.artifact-ids }}
+      web-artifact-id: ${{ steps.source.outputs.web-artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Require complete release artifacts from this commit
+        id: source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release-artifacts.mjs resolve
 
   release:
     name: Publish verified web and desktop artifacts
-    needs: build
+    needs: source
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,9 +54,16 @@ jobs:
           package-manager-cache: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: woslicer-*-${{ github.sha }}
+          artifact-ids: ${{ needs.source.outputs.artifact-ids }}
+          run-id: ${{ needs.source.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           path: release-assets
           merge-multiple: true
+      - name: Verify source identities and package checksums
+        env:
+          SOURCE_RUN_ID: ${{ needs.source.outputs.run-id }}
+          SOURCE_RUN_ATTEMPT: ${{ needs.source.outputs.run-attempt }}
+        run: node scripts/release-artifacts.mjs verify release-assets
       - name: Verify release assets and prepare release notes
         id: prepare
         run: bash .github/scripts/prepare-release.sh
@@ -48,7 +75,7 @@ jobs:
 
   deploy-pages:
     name: Deploy the verified web release to Cloudflare Pages
-    needs: release
+    needs: [source, release]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -73,8 +100,16 @@ jobs:
           done
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: woslicer-web-${{ github.sha }}
+          artifact-ids: ${{ needs.source.outputs.web-artifact-id }}
+          run-id: ${{ needs.source.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           path: release-assets
+          merge-multiple: true
+      - name: Verify the web artifact identity and checksum
+        env:
+          SOURCE_RUN_ID: ${{ needs.source.outputs.run-id }}
+          SOURCE_RUN_ATTEMPT: ${{ needs.source.outputs.run-attempt }}
+        run: node scripts/release-artifacts.mjs verify release-assets web
       - name: Unpack the tested static site
         run: |
           mkdir site

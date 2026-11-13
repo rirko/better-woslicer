@@ -2,7 +2,8 @@
 set -euo pipefail
 
 version="$(node -p 'require("./package.json").version')"
-bundle="src-tauri/target/$RUST_TARGET/release/bundle"
+case "$WOSLICER_BUILD_PROFILE" in debug|release) ;; *) exit 1 ;; esac
+bundle="src-tauri/target/$RUST_TARGET/$WOSLICER_BUILD_PROFILE/bundle"
 architecture="$(uname -m)"
 for app in "$bundle"/macos/*.app; do
   plist="$app/Contents/Info.plist"

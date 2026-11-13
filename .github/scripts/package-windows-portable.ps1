@@ -1,7 +1,8 @@
 $ErrorActionPreference = 'Stop'
 
 $package = Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json
-$executable = "src-tauri/target/$env:RUST_TARGET/release/$($package.name).exe"
+if ($env:WOSLICER_BUILD_PROFILE -notin @('debug', 'release')) { throw 'Invalid build profile' }
+$executable = "src-tauri/target/$env:RUST_TARGET/$env:WOSLICER_BUILD_PROFILE/$($package.name).exe"
 if ((Get-Item -LiteralPath $executable).Length -eq 0) { throw "Empty executable: $executable" }
 
 $destination = "release/$env:RELEASE_PLATFORM"

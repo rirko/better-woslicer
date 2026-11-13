@@ -25,15 +25,10 @@ test('invalid or conflicting profiles fail before starting a build', () => {
   assert.throws(() => resolveBuildProfile([], { WOSLICER_BUILD_PROFILE: 'typo' }), /must be/);
 });
 
-test('CI rejects debug and requires an explicit release selection', () => {
-  assert.throws(() => resolveBuildProfile([], { GITHUB_ACTIONS: 'true' }), /release profile/);
-  assert.throws(
-    () =>
-      resolveBuildProfile(['--debug'], {
-        GITHUB_ACTIONS: 'true',
-        WOSLICER_BUILD_PROFILE: 'release',
-      }),
-    /release profile/,
+test('CI can select debug for validation and release for publication', () => {
+  assert.equal(
+    resolveBuildProfile([], { GITHUB_ACTIONS: 'true', WOSLICER_BUILD_PROFILE: 'debug' }).profile,
+    'debug',
   );
   assert.equal(
     resolveBuildProfile([], { GITHUB_ACTIONS: 'true', WOSLICER_BUILD_PROFILE: 'release' }).profile,
