@@ -207,8 +207,6 @@ test('ui readability baseline: about dialog', async ({ page }, info) => {
   const errors = guardErrors(page);
   await page.goto('/');
   await expect(page.getByRole('menubar')).toBeVisible();
-  // The browser lane has no status-bar version button: web CSP blocks the
-  // build-info fetch, so identity stays null and About opens via the View menu.
   // Element Plus renders the group trigger as role=button; items are menuitems.
   await page.getByRole('button', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: 'About', exact: true }).click();

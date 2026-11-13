@@ -21,6 +21,7 @@ export interface BuildIdentity {
   commit: string;
   dirty: boolean;
   builtAt: string;
+  repositoryUrl: string | null;
 }
 
 /** System capabilities only. Audio processing and editing belong to the application. */

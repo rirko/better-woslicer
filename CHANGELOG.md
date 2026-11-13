@@ -2,6 +2,16 @@
 
 **English** · [中文](CHANGELOG.zh-CN.md)
 
+## 1.0.1 — 2026-11-13
+
+### Added
+
+- About includes links to the project and credited tools.
+
+### Fixed
+
+- The web app starts without a build-information loading error. About shows the version, commit and build time offline.
+
 ## 1.0.0 — 2026-11-13
 
 ### Added

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { PROJECT_FILE_MAX_BYTES } from '../project/schema';
 import type { OpenedFile, Platform } from './contracts';
+import type { AboutLink } from './about-links';
 
 const CHUNK_BYTES = 1024 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -133,6 +134,9 @@ export function createTauriPlatform(): Platform {
 
 export async function getTauriBuildIdentity(): Promise<unknown> {
   return invoke<unknown>('build_identity');
+}
+export async function openTauriAboutLink(link: AboutLink): Promise<void> {
+  await invoke('open_about_link', { link });
 }
 export async function importTauriLegacySession(): Promise<unknown> {
   return invoke<unknown>('import_legacy_session');

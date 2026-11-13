@@ -66,6 +66,8 @@ Windows x64 为主要桌面版本。其他 Windows 架构、Linux 和 macOS 软�
 
 ## 许可与署名
 
-原版 woslicer II/III 作者为 **wosderge**。贡献者有权授权的内容采用 [MIT](LICENSE)；原版衍生部分和第三方依赖不包含在此授权内。适用范围与署名见 [NOTICE](NOTICE)。
+原版 woslicer II/III 作者为 [wosderge](https://cerebralmuddystream.nekokan.dyndns.info/)。贡献者有权授权的内容采用 [MIT](LICENSE)；原版衍生部分和第三方依赖不包含在此授权内。适用范围与署名见 [NOTICE](NOTICE)。
 
-内置 BMHelper 参考作者 **exclusion** 公开的源代码，重新实现了 Be-Music Helper（beta 4′）的功能。原版 README 允许二次使用，条件是不涉及金钱并注明作者。[原版 BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
+内置 BMHelper 参考作者 [exclusion](https://excln.github.io/) 公开的源代码，重新实现了 Be-Music Helper（beta 4′）的功能。原版 README 允许二次使用，条件是不涉及金钱并注明作者。[原版 BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
+
+波形设计风格参考：[Audacity](https://www.audacityteam.org/)。

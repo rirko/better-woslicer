@@ -172,7 +172,15 @@
     "legacyImportBody": "旧バージョンの復元データ「{name}」には BPM {bpm}（ずらし {shift}）の切断位置 {markers} 個が含まれます。読み込むと現在のワークスペースを置き換えます。",
     "legacyImportOk": "復元データを読み込む",
     "legacyImportCancel": "キャンセル",
-    "aboutDetail": "woslicerIII を再実装したオフライン BMS wav スライサー。\nスライス DSP と .wos 形式はオリジナルとバイト互換です。"
+    "aboutDetail": "woslicerIII を再実装したオフライン BMS wav スライサー。\nスライス DSP と .wos 形式はオリジナルとバイト互換です。",
+    "aboutProjectLink": "GitHub プロジェクト",
+    "aboutProjectUnavailable": "このローカルビルドにはプロジェクトのリンクがありません。",
+    "aboutCredits": "クレジット",
+    "aboutWoslicerCredit": "原版アプリケーション。",
+    "aboutBmhelperCredit": "原版 MIDI 分割ツール。",
+    "aboutAudacityCredit": "波形のデザインを参考にしました。",
+    "aboutExternalLinks": "リンクは外部ブラウザーまたは新しいタブで開きます。アプリがこれらのサイトに自動で接続することはありません。",
+    "aboutLinkFailed": "リンクを開けませんでした。"
   },
   "status": {
     "projectOpened": "プロジェクトを開きました：{name}",

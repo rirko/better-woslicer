@@ -9,8 +9,8 @@
 
 ## Product boundaries
 
-- Keep the application offline and user data local. Do not add telemetry, uploads, update checks, remote assets or cloud services. Do not add links that open an external browser.
-- Preserve Tauri isolation and the restrictive content security policy (CSP) in both release variants. Do not add shell/open capabilities or broad inter-process communication (IPC) access. Keep the default WebView installation behavior.
+- Keep the application offline and user data local. Do not add telemetry, uploads, update checks, remote assets or cloud services. Only the About dialog's project and credit links may open an external browser after a user click. Bundle their destinations at build time; do not fetch them at runtime.
+- Preserve Tauri isolation and the restrictive content security policy (CSP) in both release variants. About links use a command that accepts fixed link identifiers only. Do not expose arbitrary URL, shell or open capabilities, or broad inter-process communication (IPC) access. Keep the default WebView installation behavior.
 - External installers, build tools and dependencies may use the network. Bind test servers and DevTools to loopback addresses.
 - Preserve LICENSE and NOTICE. MIT applies only to material that contributors have the right to license.
 
@@ -33,6 +33,7 @@
 
 - Maintain the root README in English, Chinese, Japanese and Korean. Keep user-facing content consistent across all four languages.
 - Maintain the changelog in English and Chinese only. Keep release entries consistent across both languages.
+- Release descriptions must use the matching English and Chinese changelog entries. Describe user-visible changes; omit build results, CI details and artifact inventories.
 - Include only changes that end users can see, interact with or hear. Keep entries brief. Describe the effect on everyday use.
 - Omit implementation choices, dependencies, developer tooling, internal refactors, documentation maintenance and minor optimizations. If unsure whether users care about a change, omit it.
 - Use Added and Fixed sections when applicable. Translate these headings in Chinese. Omit empty sections. Use blame and commit history to place changes in the appropriate release. Do not present old behavior as new.

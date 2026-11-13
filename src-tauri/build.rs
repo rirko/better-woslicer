@@ -22,6 +22,7 @@ fn main() {
     println!("cargo:rerun-if-changed=../package.json");
     println!("cargo:rerun-if-changed=generated/build-info.json");
     println!("cargo:rerun-if-changed=../scripts/tauri-build-info.mjs");
+    println!("cargo:rerun-if-changed=../scripts/repository-url.mjs");
     fs::write(
         PathBuf::from(env::var_os("OUT_DIR").expect("cargo output directory"))
             .join("build-info.json"),
@@ -30,6 +31,7 @@ fn main() {
     .expect("bundle build identity");
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "open_about_link",
             "open_file",
             "reopen_file",
             "open_project_media",

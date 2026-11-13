@@ -253,6 +253,7 @@ describe('application controls', () => {
           commit: '0123456789abcdef0123456789abcdef01234567',
           dirty: true,
           builtAt: '2026-01-01T00:00:00Z',
+          repositoryUrl: null,
         },
       },
       global: {
@@ -265,6 +266,12 @@ describe('application controls', () => {
       expect(wrapper.text()).toContain('2026-01-01T00:00:00Z');
       expect(wrapper.text()).toContain('modified working tree');
       expect(wrapper.text()).toContain('v0.3.0');
+      expect(wrapper.text()).toContain('Project link unavailable in this local build.');
+      expect(wrapper.findAll('a').map((link) => link.attributes('href'))).toEqual([
+        'https://cerebralmuddystream.nekokan.dyndns.info/',
+        'https://excln.github.io/bmhelper.html',
+        'https://www.audacityteam.org/',
+      ]);
     } finally {
       wrapper.unmount();
       instance.dispose();

@@ -1,7 +1,7 @@
 {
   "name": "woslicer-dx",
   "productName": "woslicer-dx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Offline desktop BMS wav slicer reimplementing woslicerIII, byte-compatible with the original .wos format and slicer DSP",
   "private": true,
   "engines": {
@@ -12,7 +12,7 @@
     "gen:i18n": "node scripts/gen-i18n.js",
     "build": "node scripts/build-app-frontend.mjs web",
     "test": "npm run test:tooling && npm run test:components && npm run gen:i18n && node -e \"fs.rmSync('dist/tests',{recursive:true,force:true})\" && tsc -p tests/tsconfig.tests.json && node --test dist/tests/*.test.js",
-    "test:tooling": "node --test scripts/build-profile.test.mjs",
+    "test:tooling": "node --test scripts/*.test.mjs",
     "package": "node scripts/tauri.mjs build",
     "prelint": "npm run gen:i18n",
     "lint": "eslint . --max-warnings 0",
