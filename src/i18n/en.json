@@ -172,7 +172,15 @@
     "legacyImportBody": "The legacy recovery \"{name}\" holds {markers} cuts at BPM {bpm} (shift {shift}). Importing replaces the current workspace content.",
     "legacyImportOk": "Import recovery",
     "legacyImportCancel": "Cancel",
-    "aboutDetail": "Offline desktop BMS wav slicer reimplementing woslicerIII.\nSlice DSP and .wos format are byte-compatible with the original."
+    "aboutDetail": "Offline desktop BMS wav slicer reimplementing woslicerIII.\nSlice DSP and .wos format are byte-compatible with the original.",
+    "aboutProjectLink": "Project on GitHub",
+    "aboutProjectUnavailable": "Project link unavailable in this local build.",
+    "aboutCredits": "Credits",
+    "aboutWoslicerCredit": "Original application.",
+    "aboutBmhelperCredit": "Original MIDI division tool.",
+    "aboutAudacityCredit": "Waveform design style reference.",
+    "aboutExternalLinks": "These links open an external browser or tab. The app does not connect to these sites automatically.",
+    "aboutLinkFailed": "Could not open the link."
   },
   "status": {
     "projectOpened": "Opened project: {name}",

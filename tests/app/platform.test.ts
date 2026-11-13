@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { unzipSync } from 'fflate';
 import { createBrowserPlatform, importBrowserLegacySession } from '../../src/platform/browser';
-import { createTauriPlatform } from '../../src/platform/tauri';
+import { createTauriPlatform, openTauriAboutLink } from '../../src/platform/tauri';
 import { getBuildIdentity, getPlatform, platform } from '../../src/platform/index';
 import type { OutputFile } from '../../src/platform/contracts';
 
@@ -80,13 +80,16 @@ describe('browser host capabilities', () => {
       commit: 'a'.repeat(40),
       dirty: true,
       builtAt: '2026-01-01T00:00:00.000Z',
+      repositoryUrl: null,
     };
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(identity)));
+    const fetcher = vi.fn().mockRejectedValue(new Error('Network access is disabled'));
     vi.stubGlobal('fetch', fetcher);
+    vi.stubGlobal('__BUILD_IDENTITY__', identity);
     expect(await getBuildIdentity()).toEqual(identity);
-    const url: unknown = fetcher.mock.calls[0]?.[0];
-    expect(url instanceof URL && url.pathname.endsWith('/build-info.json')).toBe(true);
-    fetcher.mockResolvedValue(new Response(JSON.stringify({ ...identity, commit: 'abbreviated' })));
+    expect(fetcher).not.toHaveBeenCalled();
+    vi.stubGlobal('__BUILD_IDENTITY__', { ...identity, commit: 'abbreviated' });
+    await expect(getBuildIdentity()).rejects.toThrow('Invalid local build identity');
+    vi.stubGlobal('__BUILD_IDENTITY__', { ...identity, repositoryUrl: 'javascript:alert(1)' });
     await expect(getBuildIdentity()).rejects.toThrow('Invalid local build identity');
   });
   it('returns null on native input cancellation and removes the input', async () => {
@@ -215,6 +218,18 @@ describe('browser host capabilities', () => {
 });
 
 describe('Tauri adapter boundary', () => {
+  it('opens an About link by identifier and reports host failures', async () => {
+    const calls: unknown[] = [];
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+    });
+    await openTauriAboutLink('audacity');
+    expect(calls).toEqual([{ command: 'open_about_link', payload: { link: 'audacity' } }]);
+    mockIPC(() => {
+      throw new Error('No browser available');
+    });
+    await expect(openTauriAboutLink('project')).rejects.toThrow('No browser available');
+  });
   it('resolves project media by host reference and media ID, without submitting a path', async () => {
     mockIPC((command, payload) => {
       if (command === 'open_project_media') {

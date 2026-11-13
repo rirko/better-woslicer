@@ -292,13 +292,8 @@ export function createBrowserPlatform(): Platform {
   };
 }
 
-export async function getBrowserBuildIdentity(): Promise<unknown> {
-  const response = await fetch(new URL('./build-info.json', window.location.href), {
-    cache: 'no-store',
-    redirect: 'error',
-  });
-  if (!response.ok) throw new Error('Local build identity is unavailable');
-  return response.json();
+export function getBrowserBuildIdentity(): unknown {
+  return __BUILD_IDENTITY__;
 }
 
 export async function importBrowserLegacySession(): Promise<unknown> {

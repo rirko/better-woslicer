@@ -66,6 +66,8 @@ Web 版はブラウザーで直接動作します：[woslicer-dx app](https://wo
 
 ## ライセンスとクレジット
 
-オリジナルの woslicer II/III: **wosderge**。コントリビューターが権利を持つ部分は [MIT](LICENSE) です。原版由来の部分とサードパーティの依存関係はこの許諾に含まれません。範囲と帰属については [NOTICE](NOTICE) を参照してください。
+オリジナルの woslicer II/III: [wosderge](https://cerebralmuddystream.nekokan.dyndns.info/)。コントリビューターが権利を持つ部分は [MIT](LICENSE) です。原版由来の部分とサードパーティの依存関係はこの許諾に含まれません。範囲と帰属については [NOTICE](NOTICE) を参照してください。
 
-内蔵 BMHelper は、**exclusion** が公開したソースコードをもとに、Be-Music Helper（beta 4′）の動作を再実装したものです。原版の README では、金銭が絡まないことと作者を明示することを条件に二次利用が許可されています。[オリジナルの BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
+内蔵 BMHelper は、[exclusion](https://excln.github.io/) が公開したソースコードをもとに、Be-Music Helper（beta 4′）の動作を再実装したものです。原版の README では、金銭が絡まないことと作者を明示することを条件に二次利用が許可されています。[オリジナルの BMHelper](https://excln.github.io/bmhelper.html) · [NOTICE](NOTICE)
+
+波形のデザインは [Audacity](https://www.audacityteam.org/) を参考にしました。

@@ -26,7 +26,11 @@ function parseBuildIdentity(value: unknown): BuildIdentity {
     !('builtAt' in value) ||
     typeof value.builtAt !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}T.*Z$/.test(value.builtAt) ||
-    !Number.isFinite(Date.parse(value.builtAt))
+    !Number.isFinite(Date.parse(value.builtAt)) ||
+    !('repositoryUrl' in value) ||
+    (value.repositoryUrl !== null &&
+      (typeof value.repositoryUrl !== 'string' ||
+        !/^https:\/\/github\.com\/[\w-]+\/[\w.-]+$/.test(value.repositoryUrl)))
   ) {
     throw new Error('Invalid local build identity');
   }
@@ -36,6 +40,7 @@ function parseBuildIdentity(value: unknown): BuildIdentity {
     commit: value.commit,
     dirty: value.dirty,
     builtAt: value.builtAt,
+    repositoryUrl: value.repositoryUrl,
   };
 }
 

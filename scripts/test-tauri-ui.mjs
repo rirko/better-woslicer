@@ -190,6 +190,42 @@ async function verifyProfile(profile, client, runDir) {
       throw new Error(`canvas ${canvas.w} != css ${canvas.css} × ${profile.dpr}`);
   if (exceptions > 0) throw new Error(`${exceptions} uncaught page exception(s)`);
 
+  const about = await client.send('Runtime.evaluate', {
+    expression: `(async () => {
+      const button = document.querySelector('.statusbar button');
+      if (!button) throw new Error('Missing build identity button');
+      button.click();
+      await new Promise(resolve => setTimeout(resolve, 400));
+      const dialog = Array.from(document.querySelectorAll('[role="dialog"]')).find(element => element.getBoundingClientRect().height > 0);
+      if (!dialog || !/[a-f0-9]{40,64}/.test(dialog.textContent)) {
+        throw new Error('About does not show the full commit');
+      }
+      const close = dialog.querySelector('.el-dialog__footer button');
+      const bounds = close?.getBoundingClientRect();
+      if (!bounds || bounds.bottom > innerHeight || bounds.top < 0) {
+        throw new Error('About close button is outside the native viewport');
+      }
+      const links = Array.from(dialog.querySelectorAll('a')).map(a => a.href);
+      if (!links.includes('https://www.audacityteam.org/') || links.length < 3) {
+        throw new Error('About credit links are missing');
+      }
+      try {
+        await window.__TAURI_INTERNALS__.invoke('open_about_link', { link: 'https://example.org' });
+        throw new Error('The native command accepted an arbitrary URL');
+      } catch (error) {
+        if (!String(error).includes('unknown variant')) throw error;
+      }
+      return { text: dialog.textContent, links };
+    })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  if (about.result.exceptionDetails)
+    throw new Error('native About check failed: ' + JSON.stringify(about.result.exceptionDetails));
+  writeFileSync(join(runDir, 'about.json'), JSON.stringify(about.result.result.value, null, 2));
+  const aboutShot = await client.send('Page.captureScreenshot', { format: 'png' });
+  writeFileSync(join(runDir, 'about.png'), Buffer.from(aboutShot.result.data, 'base64'));
+
   console.log(
     `native UI profile ${profile.name}: viewport ${metrics.innerW}×${metrics.innerH} @DPR${metrics.dpr}, menu visible, ${metrics.canvases.length} canvases ok`,
   );

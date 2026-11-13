@@ -172,7 +172,15 @@
     "legacyImportBody": "旧版恢复“{name}”包含 {markers} 个切点（BPM {bpm}，偏移 {shift}）。导入将替换当前工作区内容。",
     "legacyImportOk": "导入恢复记录",
     "legacyImportCancel": "取消",
-    "aboutDetail": "离线桌面 BMS wav 切分工具，重写自 woslicerIII。\n切片 DSP 与 .wos 格式与原版字节兼容。"
+    "aboutDetail": "离线桌面 BMS wav 切分工具，重写自 woslicerIII。\n切片 DSP 与 .wos 格式与原版字节兼容。",
+    "aboutProjectLink": "项目 GitHub",
+    "aboutProjectUnavailable": "此本地构建未提供项目链接。",
+    "aboutCredits": "致谢",
+    "aboutWoslicerCredit": "原版应用。",
+    "aboutBmhelperCredit": "原版 MIDI 分割工具。",
+    "aboutAudacityCredit": "波形设计风格参考。",
+    "aboutExternalLinks": "这些链接会打开外部浏览器或新标签页。应用不会自动连接这些站点。",
+    "aboutLinkFailed": "无法打开链接。"
   },
   "status": {
     "projectOpened": "已打开项目：{name}",

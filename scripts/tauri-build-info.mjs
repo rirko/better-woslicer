@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { repositoryUrl } from './repository-url.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const target = resolve(root, 'src-tauri/generated/build-info.json');
@@ -24,6 +25,15 @@ const git = (...gitArgs) => execFileSync('git', gitArgs, { cwd: root, encoding: 
 const commit = git('rev-parse', 'HEAD');
 if (!/^[\da-f]{40,64}$/.test(commit)) throw new Error('Expected full source commit');
 const dirty = git('status', '--porcelain', '--untracked-files=normal').length > 0;
+let origin = '';
+if (process.env.GITHUB_ACTIONS !== 'true') {
+  try {
+    origin = git('config', '--get', 'remote.origin.url');
+  } catch {
+    // A local checkout without a standard GitHub remote uses the UI placeholder.
+  }
+}
+const projectUrl = repositoryUrl(process.env, origin);
 if (check) {
   const info = JSON.parse(readFileSync(target, 'utf8'));
   if (
@@ -31,6 +41,7 @@ if (check) {
     info.name !== pkg.name ||
     info.commit !== commit ||
     info.dirty !== dirty ||
+    info.repositoryUrl !== projectUrl ||
     typeof info.builtAt !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}T.*Z$/.test(info.builtAt) ||
     !Number.isFinite(Date.parse(info.builtAt))
@@ -45,7 +56,7 @@ if (check) {
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(
     target,
-    `${JSON.stringify({ name: pkg.name, version: pkg.version, commit, dirty, builtAt }, null, 2)}\n`,
+    `${JSON.stringify({ name: pkg.name, version: pkg.version, commit, dirty, builtAt, repositoryUrl: projectUrl }, null, 2)}\n`,
   );
 }
 if (copy) {
