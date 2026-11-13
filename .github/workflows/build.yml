@@ -5,11 +5,11 @@ on:
     branches: [main, dev]
   pull_request:
   workflow_dispatch:
-  workflow_call:
     inputs:
-      optional_platforms:
+      all_platforms:
+        description: Validate all desktop platforms (always enabled on main)
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -18,7 +18,7 @@ env:
   WOSLICER_BUILD_PROFILE: release
 
 concurrency:
-  # Distinct from release.yml: a called workflow must not cancel its caller.
+  # Build and publication runs have separate concurrency groups.
   group: build-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
@@ -45,10 +45,12 @@ jobs:
       - name: Test the production web output (isolated 30-second profiles)
         run: npm run test:app-ui
       - name: Archive and validate the tested web output
-        run: bash .github/scripts/package-web.sh
+        run: |
+          bash .github/scripts/package-web.sh
+          node scripts/release-artifacts.mjs record release/web web
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: woslicer-web-${{ github.sha }}
+          name: woslicer-web-release-${{ github.sha }}
           path: release/web/*
           if-no-files-found: error
           compression-level: 0
@@ -67,10 +69,15 @@ jobs:
           retention-days: 7
 
   windows-x64:
-    name: Windows x64 (required)
+    # Preserve the required check name while main also warms the debug cache.
+    name: ${{ github.ref == 'refs/heads/main' && matrix.profile == 'debug' && 'Windows x64 (debug cache)' || 'Windows x64 (required)' }}
     needs: web
     runs-on: windows-2025
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(github.ref == 'refs/heads/main' && '["release", "debug"]' || '["debug"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,14 +86,14 @@ jobs:
         with:
           platform: windows-x64
           target: x86_64-pc-windows-msvc
+          profile: ${{ matrix.profile }}
 
-  optional-desktop:
-    name: ${{ matrix.platform }} (optional)
+  additional-desktop:
+    name: ${{ matrix.platform }}
     needs: web
-    if: inputs.optional_platforms || github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || inputs.all_platforms
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -118,17 +125,22 @@ jobs:
         with:
           platform: ${{ matrix.platform }}
           target: ${{ matrix.target }}
+          profile: ${{ github.ref == 'refs/heads/main' && 'release' || 'debug' }}
           bundles: ${{ matrix.bundles || '' }}
 
   required:
     name: Required release checks
     if: always()
-    needs: [web, windows-x64]
+    needs: [web, windows-x64, additional-desktop]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require both release targets to succeed
+      - name: Require all selected targets to succeed
         env:
           WEB_RESULT: ${{ needs.web.result }}
           WINDOWS_RESULT: ${{ needs.windows-x64.result }}
-        run: test "$WEB_RESULT" = success && test "$WINDOWS_RESULT" = success
+          OTHER_RESULT: ${{ needs.additional-desktop.result }}
+        run: |
+          test "$WEB_RESULT" = success
+          test "$WINDOWS_RESULT" = success
+          [[ "$OTHER_RESULT" == success || "$OTHER_RESULT" == skipped ]]

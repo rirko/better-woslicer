@@ -4,6 +4,8 @@
 
 An offline audio slicer for BMS, based on wosderge's woslicerIII.
 
+> **[Open the web app](https://woslicer-dx.pages.dev/)** · No installation. Audio stays on your device.
+
 ![Main workspace](docs/screenshots/main-ui.png)
 
 ## Features
@@ -19,7 +21,7 @@ An offline audio slicer for BMS, based on wosderge's woslicerIII.
 
 ## Run
 
-Download the package for your system from Releases (prereleases) or Actions artifacts:
+Download the package for your system from Releases or Actions artifacts:
 
 | Platform | Package | Usage |
 | --- | --- | --- |
@@ -29,8 +31,6 @@ Download the package for your system from Releases (prereleases) or Actions arti
 | Web | .zip | Extract the ZIP. Serve the files as a static website. |
 
 Windows x64 is the primary desktop package. Other Windows architectures, Linux and macOS packages are included when available. The application processes files locally and works offline.
-
-Use the [web version](https://woslicer-dx.pages.dev/) directly in your browser. No installation is needed.
 
 ## Controls
 

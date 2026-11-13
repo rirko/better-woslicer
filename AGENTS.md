@@ -19,10 +19,20 @@
 - Follow existing module boundaries. Keep changes focused. Preserve unrelated work.
 - Keep TypeScript strict checks enabled. Validate external input at boundaries. Avoid `any`, unchecked assertions, non-null assertions and compiler suppressions.
 - Test observable behavior. Use Node.js 26.x and npm. Use `npm ci` for clean installs. See the [development guide](docs/DEVELOPMENT.md) and [CI guide](docs/CI.md).
-- Default to debug for local builds, Rust tests, Clippy and native UI checks. Prioritize local build speed. Select release explicitly when needed. CI uses release only and prioritizes artifact size.
+- Default to debug for local builds, Rust tests, Clippy and native UI checks. Prioritize local build speed. Select release explicitly when needed.
+- CI uses debug native builds outside `main` and release frontend assets on every branch. Main supplies release packages and shared caches. Tags publish verified main artifacts without rebuilding. See [CI profiles and cache policy](docs/CI.md).
 - Before reporting a complete build, run typecheck, unit tests, both browser UI profiles and archive validation. Diagnose failures before packaging. Report missing oracle fixtures as skipped. State the platform and actual test coverage.
 - Run each browser UI profile separately with isolated user data and a 30-second hard timeout. Check menu visibility, device scale and canvas size. Use a numeric tolerance for fractional device pixel ratios (DPR). Browser checks do not check the native window.
 - CI runs on pushes to `main` and `dev` and on pull requests. Keep changes within existing workflows unless the user requests deployment or publishing. Obtain explicit authorization before pushing, tagging or publishing.
+
+## Branch strategy
+
+- Create `hotfix/*` branches from `main`. Merge the hotfix into `main`, then merge `main` into `dev`.
+- Create `feature/*` branches from `dev`. Merge the feature into `dev`, then merge `dev` into `main` for release.
+- Use the hotfix route for CI and release maintenance that must reach `main` before the next feature release.
+- Target `dev` when opening external contribution PRs, including PRs prepared by agents on behalf of contributors. Contributor branch names are unrestricted.
+- Maintainers manually change existing external PRs to target `dev` when necessary. Do not add automation to retarget those PRs.
+- See [Contributing](CONTRIBUTING.md) for contributor guidance. These routes do not grant permission to push, merge or publish.
 
 ## Commit messages
 
