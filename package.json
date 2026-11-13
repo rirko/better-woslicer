@@ -50,7 +50,7 @@
     "globals": "^17.14.0",
     "happy-dom": "^21.0.4",
     "husky": "^9.1.7",
-    "lint-staged": "^16.4.0",
+    "lint-staged": "^17.6.0",
     "oxfmt": "0.78.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.72.2",
